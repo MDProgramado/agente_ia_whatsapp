@@ -8,8 +8,8 @@ progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 40
 ---
 
 # Estado do Projeto
@@ -24,25 +24,25 @@ Ver: `.planning/PROJECT.md` (atualizado 2026-09-28)
 ## Posição Atual
 
 Fase: 1 de 4 (Fundação, Canal e Gate de Envio)
-Plano: 1 de 5 na fase atual (01-01 concluído)
+Plano: 2 de 5 na fase atual (01-01 e 01-02 concluídos)
 Status: Executing Phase 01
-Última atividade: 2026-09-30 — Wave 1 executada: plano 01-01 (walking skeleton) com 6/6 tasks implementadas e 9 commits. Task 6 (notificação visual) implementada mas **pendente de revalidação** — `WpnUserService` parado nesta máquina impede exibição de toast.
+Última atividade: 2026-10-05 — Wave 2 concluída: plano 01-02 (invariantes no banco + dossie LGPD) com 4/4 tasks e 8 commits. As 15 tabelas estão no PostgreSQL 18.3 com R-043/R-024/LEAD-04 impostas por trigger, `listen_addresses = localhost`, e os 5 documentos LGPD reescritos como procedimento operacional (gate 12/12). Tasks 1–3 aprovadas em checkpoint humano; Task 4 reescrita e aprovada.
 
-Progresso: [██░░░░░░░░] 20% (1 de 5 planos executados; 5 de 5 planejados)
+Progresso: [████░░░░░░] 40% (2 de 5 planos executados; 5 de 5 planejados)
 
 ## Métricas de Desempenho
 
 **Velocidade:**
 
-- Planos concluídos: 1
-- Duração média: 150 min
-- Tempo total de execução: ~150 min
+- Planos concluídos: 2
+- Duração média: ~195 min (01-01: 150 min; 01-02: 240 min)
+- Tempo total de execução: ~390 min
 
 **Por Fase:**
 
 | Fase | Planos | Planejados | Executados | Média/Plano |
 |------|--------|-------------|------------|-------------|
-| 1. Fundação, Canal e Gate | 5 | 5 | 1 | 150 min |
+| 1. Fundação, Canal e Gate | 5 | 5 | 2 | 195 min |
 | 2. IA, Handoff e Shadow | 3 | 0 | 0 | — |
 | 3. Cadência, Operação e Painel | 3 | 0 | 0 | — |
 | 4. Piloto, Calibração e Apuração | 2 | 0 | 0 | — |
@@ -81,6 +81,18 @@ Decisões completas em PROJECT.md (tabela Key Decisions). Recentes que afetam o 
   2. **AR-004 barrava todo link** — `p.kind !== "text"` tratava `link` como mídia, violando R-042.
   3. **`blocked_attempts` perdia todo negativo** — `db.execute` com string solta deixava `$1..$3` sem bind, e nenhuma rejeição do gate ia para a trilha de auditoria (R-022).
 
+### Decisões do Plano 01-02 (2026-10-05, invariantes no banco + dossie LGPD)
+
+- **Compliance de R-043, R-024 e LEAD-04 mora no banco, não no código.** Trigger *e* `REVOKE`, porque um bug de aplicação vira erro de banco, não uma violação silenciosa de LGPD.
+- **`optout_ledger` e `handoff_events` têm retenção INDEFINIDA** — o inverso do resto do documento. Uma prova de opt-out que expira é uma prova que o titular pode exigir que exista, e `leads.opt_out` não tem backfill: se o registro sumir e um importador novo rodar, o bloqueio vai com ele.
+- **O canal de atendimento do titular NUNCA é a conversa de WhatsApp.** Consequência direta de R-043: se o bot confirmasse o recebimento de um pedido de eliminação, o pedido ficaria gravado em `messages`, que é append-only. O sistema não pode guardar para sempre a única prova do que o titular pediu para apagar. O procedimento é escrito para não depender do bot em nenhum passo.
+- **Testes de trigger conectam por `Pool` cru, nunca `openDb`.** `openDb` roda `migrate()` antes de devolver o handle, então o teste confirmaria o trigger por efeito colateral do runner que acabou de aplicar a migration.
+- **`fn_preencher_blocked_attempt` deriva `guard_id` a partir do motivo.** A coluna é NOT NULL porque um negativo sem guard identificado não é auditável, e NOT NULL sem caminho de preenchimento só produz erro.
+- **R-033: o risco maior é a autenticação do Baileys, não a criptografia do banco.** `listen_addresses = localhost` mitiga de verdade e é verificável por `SHOW`, mas a pasta `auth_info_baileys` **é** o número dedicado: perdê-la faz o WhatsApp ver "dispositivo novo", que já é sinal de ban (R-059). Registrado no ADR-002 com 5 condições de reabertura.
+- **BOM UTF-8 em `postgresql.conf` é regra do projeto, não recomendação.** PowerShell prepende `EF BB BF` e o PostgreSQL recusa subir; editar só por Notepad, VSCode ou `System.IO.File::WriteAllText`. Registrado em `AGENTS.md`.
+- **Migration de guards é `0004_guards_and_audit.sql`, não `0001`.** O plano citava `0001`, mas esse número já era `channel_accounts_phone_e164_unique.sql` do plano 01-01; `0002` e `0003` estavam aplicados.
+- **Pendências rastreadas em `docs/pendencias.md`** (P-001 `Register-Aumid` best-effort resolvido por decisão; P-002 `icacls` no Scope 2 de `pg-hba-apply.ps1` aberto).
+
 ### Todos Pendentes
 
 De `.planning/todos/pending/`:
@@ -95,6 +107,9 @@ Nenhum ainda.
   - **Consequência de projeto se o reboot não resolver:** R-013 é load-bearing (handoff, opt-out e mídia recebida dependem de o Admin *saber* que precisa agir). O **som** é o único canal já verificado como independente do WPN (`Hand.Play()` sem exceção, áudio OK) e já toca com `-Urgent`. Decisão pendente: tornar o som o sinal primário de alerta, com o toast como complemento.
 - ⚠️ **`CHANNEL_PHONE_E164` no `.env` está com o placeholder `+5511999999999`.** O número dedicado real precisa entrar **antes do pareamento QR** (Task 3 do plano 01-03). O CHECK do banco aceita o placeholder, então nada quebra até lá — mas número errado no canal é erro sem recuperação barata.
 - ⚠️ **`fetchNewChatMessageCap()` / `fetchAccountReachoutTimelock()`** — precisam ser confirmados nos typings do `@whiskeysockets/baileys@7.0.0-rc14` instalado. Sem eles, WHS-04 e LEAD-03 ficam sem implementação (ADR-001). Verificar no início do plano 01-03.
+- ⚠️ **`icacls.exe` falha no Scope 2 de `scripts/pg-hba-apply.ps1`** (2026-10-01, Task 3 do plano 01-02): o temporário em `%TEMP%` é deletado antes da chamada, o script aborta e a senha do role teve de ser trocada manualmente via `psql`. Bug de ordenação, não de conceito. Rastreado como **P-002** em `docs/pendencias.md`. Não bloqueia nada — o efeito desejado foi alcançado manualmente.
+- ⚠️ **`Restart-Service postgresql-x64-18` exige PowerShell elevado.** Falha silenciosa como não-admin. Qualquer script futuro que reinicie o serviço precisa checar elevação antes de chamar, em vez de tratar o retorno vazio como sucesso.
+- ⚠️ **O gate `<automated>` da Task 4 dependia de conteúdo, não de existência.** Os 5 documentos LGPD passaram a gate em `77bb7df` com apenas 5 de 12 checks. Um gate que só verifica presença de arquivo não detecta um documento que existe e não diz nada — os 7 checks de conteúdo (`optout_ledger`, `erasure_request`, `listen_addresses`, `PREENCHER`, `pg_dump`, hifen) existem exatamente por isso. Considerar o mesmo padrão nos próximos planos com gate.
 
 ### Resolvidos em 2026-09-29 (preflight do plano 01-01, Task 1)
 
@@ -122,11 +137,12 @@ Nenhum ainda.
 
 ## Continuidade de Sessão
 
-Última sessão: 2026-09-30
-Parou em: Fase 1, wave 1 concluída. Plano 01-01 executado (6/6 tasks implementadas, 9 commits, `01-01-SUMMARY.md` escrito) com a **Task 6 pendente de revalidação** — o `WpnUserService` está parado na máquina e a notificação é gravada mas não exibida. Decisão do Admin: reiniciar o Windows e revalidar depois; o plano não fica bloqueado. STATE e ROADMAP sincronizados (`completed_plans: 1`, 20%).
-Próximo passo: `/gsd-execute-phase 1` (wave 2: 01-02 e 01-03, serializados — este runtime não expõe isolamento por worktree)
-Pós-reboot: revalidar com `npm run notify -- -Title "Teste R-013" -Message "Verificacao" -Urgent` e fechar a Task 6
-Arquivo de retomada: `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-01-SUMMARY.md`
+Última sessão: 2026-10-05
+Parou em: Fase 1, wave 2 concluída. Plano 01-02 executado (4/4 tasks, 8 commits, `01-02-SUMMARY.md` movido para `phases/` e reescrito no template completo). Tasks 1–3 aprovadas em checkpoint humano; Task 4 reescrita porque 7 de 12 checks do gate `<automated>` falhavam e o texto tinha mojibake. Estado final: 15 tabelas, 5 migrations aplicadas, `listen_addresses = localhost`, 39/39 testes verdes, tsc e biome limpos, 4 bancos preexistentes intactos.
+Próximo passo: `/gsd-execute-phase 1` (wave 3: 01-03, serializado — este runtime não expõe isolamento por worktree)
+Pendente antes do pareamento QR do 01-03: `CHANNEL_PHONE_E164` ainda tem o placeholder `+5511999999999` e precisa do número real. Confirmar também `fetchNewChatMessageCap()` / `fetchAccountReachoutTimelock()` nos typings do Baileys instalado.
+Pós-reboot: revalidar com `npm run notify -- -Title "Teste R-013" -Message "Verificacao" -Urgent` e fechar a Task 6 do plano 01-01
+Arquivo de retomada: `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-02-SUMMARY.md`
 
 ---
-*Atualizado: 2026-09-30*
+*Atualizado: 2026-10-05*
