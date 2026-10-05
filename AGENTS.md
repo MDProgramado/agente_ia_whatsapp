@@ -39,11 +39,24 @@ Use:
 - [System.IO.File]::WriteAllText(, , (New-Object System.Text.UTF8Encoding False))
 
 ### Qualquer arquivo de configuração do PostgreSQL
-Verificar BOM antes de reiniciar o serviço:
-`powershell
-([System.IO.File]::ReadAllBytes()[0..2] | ForEach-Object { \'{0:X2}\' -f  }) -join \' \'
-`
-Se retornar EF BB BF, o arquivo está corrompido.
+Vale para `postgresql.conf`, `pg_hba.conf` e `pg_ident.conf` — todos são recusados pelo servidor se carregarem BOM.
+
+**Verificar o BOM dos 3 primeiros bytes antes de reiniciar o serviço.** O alvo é o arquivo que vai ser editado; trocar pelo que você realmente está gravando:
+
+```powershell
+$arquivo = 'C:\Program Files\PostgreSQL\18\data\postgresql.conf'
+$bytes = [System.IO.File]::ReadAllBytes($arquivo)
+'{0:X2} {1:X2} {2:X2}' -f $bytes[0], $bytes[1], $bytes[2]
+```
+
+PowerShell 5.1 (o runtime desta máquina) exige os índices `{0:X2} {1:X2} {2:X2}`. A forma `{:X2}` é PowerShell 7 e **lança FormatError** aqui.
+
+Leitura do resultado:
+
+- `23 20 2D` (`# -`, um comentário no início do arquivo) ou qualquer coisa **sem** `EF BB BF` → arquivo íntegro, pode reiniciar o serviço.
+- `EF BB BF` → **corrompido**. Não reinicie: o PostgreSQL vai recusar subir com *erro de sintaxe na linha 1*. Regrave o arquivo por Notepad, VSCode ou `[System.IO.File]::WriteAllText(, , (New-Object System.Text.UTF8Encoding False))` e verifique de novo.
+
+Reiniciar o serviço exige **PowerShell elevado** (Administrador). `Restart-Service postgresql-x64-18` falha silenciosamente sem elevação — não trate a ausência de erro como sucesso.
 
 ## Comandos
 - `npm run dev` — desenvolvimento
