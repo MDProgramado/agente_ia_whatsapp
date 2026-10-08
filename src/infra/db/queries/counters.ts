@@ -31,9 +31,16 @@ export interface Reserva {
 	readonly limit: number;
 }
 
+/**
+ * Os valores têm de ser EXATAMENTE os do `daily_counters_kind_check`
+ * (`CHECK (kind IN ('sent', 'new_contacts'))`, `0000_initial.sql`). Estavam como
+ * `'mensagem'`/`'novo_contato'`, que violam o CHECK: toda reserva morria no
+ * INSERT — e `readQuota` (01-03) lê `kind = 'sent'`. Corrigido como [Rule 1] no
+ * 01-03; ver SUMMARY.
+ */
 const kinds = {
-	mensagem: "mensagem",
-	novo_contato: "novo_contato",
+	mensagem: "sent",
+	novo_contato: "new_contacts",
 } as const;
 
 type Kind = (typeof kinds)[keyof typeof kinds];
