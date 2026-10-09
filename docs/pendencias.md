@@ -117,14 +117,62 @@ vai abortar de novo — e isso precisa ser corrigido antes de depender dele.
 
 ---
 
+## P-004 — Pareamento companion do Baileys falha em silêncio ⚠️ ABERTO
+
+**Status:** Aberto. **Bloqueia a Task 3 do plano 01-03** (checkpoint humano de pareamento do número
+dedicado); **não** bloqueia 01-04/01-05, que não dependem de canal pareado (decisão do Admin,
+2026-10-09). Registrado para não se perder o lastro técnico do diagnóstico.
+
+**Origem:** Task 3 do plano 01-03, 2026-10-08/09. Diagnóstico completo em
+`.planning/phases/01-funda-o-canal-e-gate-de-envio/01-03-DIAG.md`.
+
+**Sintoma:** o Baileys gera o par de 8 dígitos em `C:\whatsapp_prospecao\logs\qr.txt`, mas ao
+digitá-lo no celular (Aparelhos conectados → Conectar com número de telefone) a tela mostra
+"não foi possível conectar" ou fica carregando. **Nada aparece no `app.log`.** Após relançar, o
+boot aborta com `CREDS_INVALID`.
+
+**O que já foi descartado por leitura do código (rc14):**
+
+- `companion_platform_display` **é** enviado (`Socket/socket.js:640-643`); o default do pacote é
+  `Browsers.macOS("Chrome")` → `"Chrome (Mac OS)"`. Não é campo vazio/genérico. **Corrigido:** a
+  aplicação passa a anunciar `Browsers.windows("Chrome")` → `"Chrome (Windows)"` (commit T2).
+- O estágio `companion_finish` **está** implementado (`Socket/messages-recv.js:881-942`).
+- `companion_reg_refresh` **não** é tratado em nenhum arquivo do pacote (sem `default` no
+  `processNotification`) e **não é interceptável** de dentro de `src/` — exigiria patch de vendor.
+
+**Suspeito principal (não verificável sem retry físico):** a **versão de protocolo hardcoded**
+`[2, 3000, 1043857760]` (`lib/Defaults/index.js:5`). `fetchLatestBaileysVersion()` existe
+(`lib/Utils/generics.js`) e **não é usado**, então o socket pode anunciar uma revisão desatualizada
+que o servidor recusa em silêncio no `link_code_companion_reg`.
+
+**Bug nosso confirmado (relacionado):** `requestPairingCode` persiste `creds.json` com
+`registered=false`; no próximo boot `src/channel/baileys/session.ts` vê JSON em disco +
+`registered !== true` e lança `CREDS_INVALID`. Um pareamento abandonado envenena o boot seguinte. A
+guarda precisa distinguir "creds corrompido" de "pareamento em andamento".
+
+**Aplicado como mitigação (commit T3):** `BAILEYS_LOG_LEVEL` (default `warn`) controla o logger do
+socket; `BAILEYS_LOG_LEVEL=debug` no `.env` torna a próxima tentativa auditável no `app.log` em vez
+de silenciosa.
+
+**Como fechar:** (1) retry manual do pareamento com `BAILEYS_LOG_LEVEL=debug` e inspeção do
+`app.log`; (2) se ainda falhar em silêncio, `patch-package`/fork com
+`version: (await fetchLatestBaileysVersion()).version` e um `case 'companion_reg_refresh'` — diff
+mínimo proposto em T4 do DIAG; (3) se nenhum resolver, tratar como risco do canal (R-059). Antes de
+trocar de fork, comparar a API (`makeWASocket`, `useMultiFileAuthState`, `Browsers`,
+`fetchNewChatMessageCap`, `fetchAccountReachoutTimelock`) e revalidar WHS-04/LEAD-03 (ADR-001).
+
+---
+
 ## Como este arquivo é usado
 
 - **Antes de dar um plano por concluído:** ler este arquivo e conferir se alguma pendência mudou
   de estado.
+- **Ao tentar parear o canal (Task 3 do plano 01-03):** esperar a falha silenciosa descrita em
+  P-004; rodar com `BAILEYS_LOG_LEVEL=debug` para capturar a causa.
 - **Ao ver `aumid_registration_skipped` no log:** não é regressão. Ver P-002.
 - **Ao rodar `pg-hba-apply.ps1`:** esperar o Scope 2 abortar. Ver P-003.
 - **Ao fechar uma pendência:** mudar o status para ✅, datar, e registrar a decisão tomada.
 
 ---
 
-*Criado em 2026-10-05 (Task 4 do plano 01-02). P-001, P-002 e P-003.*
+*Criado em 2026-10-05 (Task 4 do plano 01-02). P-001, P-002, P-003 e P-004.*
