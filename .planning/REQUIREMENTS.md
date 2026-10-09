@@ -9,7 +9,7 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 
 ### Operação e Prospecção (OPRE)
 
-- [ ] **OPRE-01**: Admin envia manualmente a primeira mensagem ao lead; o bot NUNCA inicia o primeiro contato (R-001)
+- [x] **OPRE-01**: Admin envia manualmente a primeira mensagem ao lead; o bot NUNCA inicia o primeiro contato (R-001)
 - [ ] **OPRE-02**: Piloto opera apenas com o Admin; sem criação de usuários adicionais nem atribuição de leads (R-049)
 - [ ] **OPRE-03**: A lista de leads do sistema não é compartilhada com a equipe durante o piloto; Admin coordena manualmente quem aborda o quê (R-050)
 - [ ] **OPRE-04**: IA pode mencionar os serviços (sites, sistemas, automações, programação) de forma consultiva, nunca negociando preço, prazo ou escopo (R-053)
@@ -26,10 +26,10 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 
 ### Infraestrutura WhatsApp (WHS)
 
-- [ ] **WHS-01**: Nenhuma mensagem automática fora de dias úteis, 7h–17h (janela operacional) (R-006)
+- [x] **WHS-01**: Nenhuma mensagem automática fora de dias úteis, 7h–17h (janela operacional) (R-006)
 - [ ] **WHS-02**: Follow-up vencido fora da janela é drenado com limite e jitter controlados assim que o app abre — nunca em rajada (misfire `FIRE_ONCE`, ADR) (R-007)
 - [ ] **WHS-03**: Camada de conexão do WhatsApp isolada em interface/adaptador, permitindo trocar Baileys/WPPConnect → API oficial sem quebrar histórico, status ou agendamentos (R-016)
-- [ ] **WHS-04**: Travas duras: 20 leads/dia + N contatos novos/dia via `fetchNewChatMessageCap()` + 20–30 mensagens/dia; ao atingir, para e enfileira para o próximo dia útil; erro 463 jamais é retryado (R-023*)
+- [x] **WHS-04**: Travas duras: 20 leads/dia + N contatos novos/dia via `fetchNewChatMessageCap()` + 20–30 mensagens/dia; ao atingir, para e enfileira para o próximo dia útil; erro 463 jamais é retryado (R-023*)
 - [ ] **WHS-05**: Opera um único número de WhatsApp dedicado e exclusivo para vendas (R-059)
 
 ### Fluxo de Conversa e IA (CONV)
@@ -44,10 +44,10 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 - [ ] **CONV-08**: IA age como o Admin humano, sem revelar automação espontaneamente (R-055)
 - [ ] **CONV-09**: Pergunta direta se é bot/robô/IA → handoff imediato, sem negar, admitir ou desviar (R-056)
 - [ ] **CONV-10**: Suspeita de automação → silêncio total até o Admin assumir; nenhuma mensagem de transição (R-057)
-- [ ] **CONV-11**: Envia apenas texto e links; jamais imagens, PDFs, áudios, vídeos ou documentos (R-037)
+- [x] **CONV-11**: Envia apenas texto e links; jamais imagens, PDFs, áudios, vídeos ou documentos (R-037)
 - [ ] **CONV-12**: Mídia recebida (áudio, imagem, PDF, vídeo) é apenas registrada; notifica e aciona handoff; não finge entendimento (R-038)
 - [ ] **CONV-13**: Humaniza o envio com delays aleatórios, simulação de "digitando…" e quebra de mensagens longas em varias mensagens curtas (R-067)
-- [ ] **CONV-14**: Anti-requisitos (AR-001 a AR-012) impõem-se como invariantes de estado via um único gate de envio mecânico (`evaluatePolicy`), com 1 property test por AR; nenhum caminho de mensagem escapa do gate (derivado da pesquisa — mecânica transversal)
+- [x] **CONV-14**: Anti-requisitos (AR-001 a AR-012) impõem-se como invariantes de estado via um único gate de envio mecânico (`evaluatePolicy`), com 1 property test por AR; nenhum caminho de mensagem escapa do gate (derivado da pesquisa — mecânica transversal)
 
 ### Follow-up, Agendamento e Handoff (FLUP)
 
@@ -76,13 +76,13 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 
 - [ ] **COMP-01**: Detecta opt-out automaticamente; registra base legal/finalidade/consentimento; oferece comando manual de opt-out e exclusão; aplica política de retenção (R-024)
 - [ ] **COMP-02**: Trata base de contato sem opt-in explícito (fontes públicas/terceiros) com risco declarado de MUITO ALTO (R-063)
-- [ ] **COMP-03**: Base legal de legítimo interesse para contato B2B: registra origem, base legal e finalidade; opt-out imediato; exclusão sob solicitação (R-064)
+- [x] **COMP-03**: Base legal de legítimo interesse para contato B2B: registra origem, base legal e finalidade; opt-out imediato; exclusão sob solicitação (R-064)
 - [ ] **COMP-04**: Sem criptografia adicional nesta fase; confiança no controle de acesso do PC (risco aceito e documentado) (R-033)
 - [ ] **COMP-05**: Auth state do WhatsApp e backups fora da árvore OneDrive/git (derivado da pesquisa — protege R-033/LGPD)
 
 ### Requisitos Não Funcionais e Operação Local (NFRQ)
 
-- [ ] **NFRQ-01**: Banco PostgreSQL local com script/migração de criação e atualização de schema; sem servidor externo (R-031)
+- [x] **NFRQ-01**: Banco PostgreSQL local com script/migração de criação e atualização de schema; sem servidor externo (R-031)
 - [ ] **NFRQ-02**: Backup manual para pasta local, versionado por data/hora, com restauração sem serviços externos (R-032)
 - [ ] **NFRQ-03**: Modo automático total após a 1ª mensagem manual; bot conduz sozinho e só chama nos handoffs; após handoff → modo copiloto (R-034)
 - [ ] **NFRQ-04**: Logs em arquivo + painel de erros + notificação local imediata em falhas críticas (WhatsApp desconectado, API de IA fora, PostgreSQL parado, suspeita de banimento) (R-045)
@@ -157,7 +157,7 @@ Atualizado na criação do roadmap (2026-09-28), mapeamento corrigido após audi
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| OPRE-01 | Phase 1 | Pending |
+| OPRE-01 | Phase 1 | Complete |
 | OPRE-02 | Phase 4 | Pending |
 | OPRE-03 | Phase 4 | Pending |
 | OPRE-04 | Phase 2 | Pending |
@@ -168,10 +168,10 @@ Atualizado na criação do roadmap (2026-09-28), mapeamento corrigido após audi
 | LEAD-04 | Phase 1 | Pending |
 | LEAD-05 | Phase 2 | Pending |
 | LEAD-06 | Phase 2 | Pending |
-| WHS-01 | Phase 1 | Pending |
+| WHS-01 | Phase 1 | Complete |
 | WHS-02 | Phase 3 | Pending |
 | WHS-03 | Phase 1 | Pending |
-| WHS-04 | Phase 1 | Pending |
+| WHS-04 | Phase 1 | Complete |
 | WHS-05 | Phase 1 | Pending |
 | CONV-01 | Phase 2 | Pending |
 | CONV-02 | Phase 2 | Pending |
@@ -183,10 +183,10 @@ Atualizado na criação do roadmap (2026-09-28), mapeamento corrigido após audi
 | CONV-08 | Phase 2 | Pending |
 | CONV-09 | Phase 2 | Pending |
 | CONV-10 | Phase 2 | Pending |
-| CONV-11 | Phase 1 | Pending |
+| CONV-11 | Phase 1 | Complete |
 | CONV-12 | Phase 2 | Pending |
 | CONV-13 | Phase 1 | Pending |
-| CONV-14 | Phase 1 | Pending |
+| CONV-14 | Phase 1 | Complete |
 | FLUP-01 | Phase 3 | Pending |
 | FLUP-02 | Phase 3 | Pending |
 | FLUP-03 | Phase 3 | Pending |
@@ -203,10 +203,10 @@ Atualizado na criação do roadmap (2026-09-28), mapeamento corrigido após audi
 | INTR-01 | Phase 1 | Pending |
 | COMP-01 | Phase 2 | Pending |
 | COMP-02 | Phase 1 | Pending |
-| COMP-03 | Phase 1 | Pending |
+| COMP-03 | Phase 1 | Complete |
 | COMP-04 | Phase 1 | Pending |
 | COMP-05 | Phase 1 | Pending |
-| NFRQ-01 | Phase 1 | Pending |
+| NFRQ-01 | Phase 1 | Complete |
 | NFRQ-02 | Phase 1 | Pending |
 | NFRQ-03 | Phase 2 | Pending |
 | NFRQ-04 | Phase 1 | Pending |
@@ -226,4 +226,4 @@ Atualizado na criação do roadmap (2026-09-28), mapeamento corrigido após audi
 
 ---
 *Requirements defined: 2026-09-28*
-*Last updated: 2026-09-28 after roadmap creation (traceability auditado e corrigido: CONV-13/CONV-14 → Fase 1, LEAD-05/06 e handoffs → Fase 2, OPRE-02/03 → Fase 4)*
+*Last updated: 2026-10-09 after plan 01-04 (OPRE-01, WHS-01, WHS-04, CONV-11, CONV-14, COMP-03, NFRQ-01 concluídos)*

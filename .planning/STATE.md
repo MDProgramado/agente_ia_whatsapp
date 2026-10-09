@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-10-01T11:47:39.555Z"
+last_updated: "2026-10-09T19:25:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 5
-  completed_plans: 2
-  percent: 40
+  completed_plans: 3
+  percent: 60
 ---
 
 # Estado do Projeto
@@ -24,25 +24,25 @@ Ver: `.planning/PROJECT.md` (atualizado 2026-09-28)
 ## Posição Atual
 
 Fase: 1 de 4 (Fundação, Canal e Gate de Envio)
-Plano: 2 de 5 na fase atual (01-01 e 01-02 concluídos)
+Plano: 4 de 5 na fase atual (01-01, 01-02 e 01-04 concluídos; 01-03 com checkpoint humano pendente)
 Status: Executing Phase 01
-Última atividade: 2026-10-05 — Wave 2 concluída: plano 01-02 (invariantes no banco + dossie LGPD) com 4/4 tasks e 8 commits. As 15 tabelas estão no PostgreSQL 18.3 com R-043/R-024/LEAD-04 impostas por trigger, `listen_addresses = localhost`, e os 5 documentos LGPD reescritos como procedimento operacional (gate 12/12). Tasks 1–3 aprovadas em checkpoint humano; Task 4 reescrita e aprovada.
+Última atividade: 2026-10-09 — Wave 3: plano 01-04 (Gate de envio: os 12 anti-requisitos) concluído com 4/4 tasks. Os 12 ARs têm property test; a ordem canônica do gate (`GUARD_ORDER` ↔ `GUARD_SLOTS`) é travada por teste; o `outbox` durável reavalia o gate por job; e o choke-point único de `sendText` é provado por grep (só `src/application/dispatcher.ts`). Suíte total 25 arquivos / 101 testes verdes, `tsc` e biome limpos. O plano 01-03 (canal e ingestão) teve a automação commitada, mas o checkpoint humano de pareamento QR (P-004 `CREDS_INVALID`) segue em aberto — não bloqueia 01-04/01-05.
 
-Progresso: [████░░░░░░] 40% (2 de 5 planos executados; 5 de 5 planejados)
+Progresso: [██████░░░░] 60% (3 de 5 planos concluídos; 5 de 5 planejados)
 
 ## Métricas de Desempenho
 
 **Velocidade:**
 
-- Planos concluídos: 2
-- Duração média: ~195 min (01-01: 150 min; 01-02: 240 min)
-- Tempo total de execução: ~390 min
+- Planos concluídos: 3
+- Duração média: ~218 min (01-01: 150 min; 01-02: 240 min; 01-04: 263 min)
+- Tempo total de execução: ~653 min
 
 **Por Fase:**
 
 | Fase | Planos | Planejados | Executados | Média/Plano |
 |------|--------|-------------|------------|-------------|
-| 1. Fundação, Canal e Gate | 5 | 5 | 2 | 195 min |
+| 1. Fundação, Canal e Gate | 5 | 5 | 3 | 218 min |
 | 2. IA, Handoff e Shadow | 3 | 0 | 0 | — |
 | 3. Cadência, Operação e Painel | 3 | 0 | 0 | — |
 | 4. Piloto, Calibração e Apuração | 2 | 0 | 0 | — |
@@ -93,6 +93,19 @@ Decisões completas em PROJECT.md (tabela Key Decisions). Recentes que afetam o 
 - **Migration de guards é `0004_guards_and_audit.sql`, não `0001`.** O plano citava `0001`, mas esse número já era `channel_accounts_phone_e164_unique.sql` do plano 01-01; `0002` e `0003` estavam aplicados.
 - **Pendências rastreadas em `docs/pendencias.md`** (P-001 `Register-Aumid` best-effort resolvido por decisão; P-002 `icacls` no Scope 2 de `pg-hba-apply.ps1` aberto).
 
+### Decisões dos Planos 01-03 e 01-04 (2026-10-09)
+
+- **Plano 01-03 (canal e ingestão) — automação commitada, checkpoint de pareamento aberto.** `session.ts` (`CREDS_INVALID`), `capabilities.ts` (`fetchNewChatMessageCap`/`fetchAccountReachoutTimelock`), `jid-resolver.ts` (LID↔PN), `signals.ts` (463 sem retry), `adapter.ts` (sendText-only), `inbound-handler` (`first_contact_by_human` só por `fromMe`) e `lead-importer` entregues. O pareamento QR real **não** foi concluído: **P-004 `CREDS_INVALID`** (ver `01-03-DIAG.md` e `docs/pendencias.md`).
+- **Plano 01-04 — os 12 anti-requisitos fechados por teste.** 5 guardas restantes (AR-002, AR-005, AR-009, AR-010, AR-012) + `lead-number-invalid` (R-019/LEAD-03); `evaluatePolicy` com **15** invariantes em ordem fixa e `AR_MAP` de 18 entradas.
+- **Ordem do gate é contrato executável:** `GUARD_SLOTS` (execução) e `GUARD_ORDER` (contrato do plano) são comparados por teste; par a par prova-se que o menor índice vence. Um motivo só existe no código se existir na ordem.
+- **Choke-point por varredura de fonte, não por guard de runtime.** "Todo envio passa pelo dispatcher" é uma afirmação sobre *ausência de segundo caminho*; o teste varre `src/**/*.ts` por **chamada** `\.sendText\s*\(` e exige exatamente `src/application/dispatcher.ts`. O AC literal (proibir a *declaração* de `sendText(`) é insatisfatível — a porta declara o método.
+- **AC do dispatcher usa a grafia do schema:** `blocked_attempts.guard = 'R-001'` (grafia do requisito) e `rule_reference = <GateReason>` (`r001_primeiro_contato_nao_humano`); o trigger `fn_preencher_blocked_attempt` deriva `guard` quando nulo.
+- **2 ampliações de padrão (Rule 2):** `CURRENCY_TERM` passou a cobrir moeda em símbolo/sigla/extenso (US$/EUR/dólar) — AR-001; `SCHEDULE_TERM` passou a cobrir conjugações (`agendei`/`agendou`) e dias `*-feira`, sem casar `agenda`/`segunda opção` — AR-003.
+- **Bug corrigido em `snapshot.ts` (Rule 1):** `db.execute` devolve TIMESTAMP como **string**; o helper `paraIso` ancorou strings ingênuas como UTC e o AR-011 passou a comparar corretamente. Teste de deferimento passou a comparar timestamp em texto (`::text`).
+- **`types.ts` congelado neste plano:** TTL de `wa_validation_state = 'desconhecido'` adiado (não há timestamp de validação no `GateInput`); só `"invalido"` bloqueia (`leadNumeroInvalido`).
+- **`outbox` durável:** status `pending|reserved|sent|failed|abandoned`, idempotência por `idempotency_key`, cota reservada na **mesma transação** do branch `send` (bloqueio não consome cota). O dreno reavalia o gate **por job** — teste prova que opt-out ligado após o enqueue faz o job virar `abandoned`.
+- **Comentário enganoso de `ar-009.ts` adiado** (afirma precedência sobre ar-010, mas a ordem real é ar-010 → ar-009): registrado em `.planning/phases/01-funda-o-canal-e-gate-de-envio/deferred-items.md`; doc-only, fora de escopo.
+
 ### Todos Pendentes
 
 De `.planning/todos/pending/`:
@@ -106,7 +119,8 @@ Nenhum ainda.
 - 🔴 **R-013 (notificação local) — `WpnUserService` PARADO nesta máquina (2026-09-30).** A Task 6 do plano 01-01 está implementada e verificada por código, mas a **exibição** não acontece: a gravação passa (`Show()` sem erro, linha criada em `wpndatabase.db`, log `toast_sent`) e a entrega nunca ocorre (`LastNotificationAddedTime` não é atualizado). Evidência de que é do Windows e não do código: **nem o toast com AUMID nativo do PowerShell aparece, nem um balloon via `NotifyIcon`**, que nem passa pela camada WPN. Foco Assistente desligado, nenhuma política, sessão `console` local (não RDP), toggle de Notificações ligado (confirmado pelo Admin), `explorer`/`ShellExperienceHost`/`StartMenuExperienceHost`/`RuntimeBroker` todos rodando. `Start-Service WpnUserService` é recusado — é serviço *template* por usuário. `notify.ps1` está correto; o defeito é do SO. **Decisão do Admin: reiniciar o Windows e revalidar depois.** Comando de revalidação: `npm run notify -- -Title "Teste R-013" -Message "Verificacao" -Urgent`.
   - **Consequência de projeto se o reboot não resolver:** R-013 é load-bearing (handoff, opt-out e mídia recebida dependem de o Admin *saber* que precisa agir). O **som** é o único canal já verificado como independente do WPN (`Hand.Play()` sem exceção, áudio OK) e já toca com `-Urgent`. Decisão pendente: tornar o som o sinal primário de alerta, com o toast como complemento.
 - ⚠️ **`CHANNEL_PHONE_E164` no `.env` está com o placeholder `+5511999999999`.** O número dedicado real precisa entrar **antes do pareamento QR** (Task 3 do plano 01-03). O CHECK do banco aceita o placeholder, então nada quebra até lá — mas número errado no canal é erro sem recuperação barata.
-- ⚠️ **`fetchNewChatMessageCap()` / `fetchAccountReachoutTimelock()`** — precisam ser confirmados nos typings do `@whiskeysockets/baileys@7.0.0-rc14` instalado. Sem eles, WHS-04 e LEAD-03 ficam sem implementação (ADR-001). Verificar no início do plano 01-03.
+- ⚠️ **`fetchNewChatMessageCap()` / `fetchAccountReachoutTimelock()`** — confirmadas nos typings do `@whiskeysockets/baileys@7.0.0-rc14` durante o plano 01-03 (ADR-001); ver `capabilities.ts`.
+- ⚠️ **P-004 — pareamento do 01-03 não concluído (`CREDS_INVALID`).** A automação do canal está commitada, mas o número dedicado ainda não pareou. Diagnóstico em `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-03-DIAG.md`. Não bloqueia 01-04/01-05 (o gate e a fila não dependem do socket vivo para os testes).
 - ⚠️ **`icacls.exe` falha no Scope 2 de `scripts/pg-hba-apply.ps1`** (2026-10-01, Task 3 do plano 01-02): o temporário em `%TEMP%` é deletado antes da chamada, o script aborta e a senha do role teve de ser trocada manualmente via `psql`. Bug de ordenação, não de conceito. Rastreado como **P-002** em `docs/pendencias.md`. Não bloqueia nada — o efeito desejado foi alcançado manualmente.
 - ⚠️ **`Restart-Service postgresql-x64-18` exige PowerShell elevado.** Falha silenciosa como não-admin. Qualquer script futuro que reinicie o serviço precisa checar elevação antes de chamar, em vez de tratar o retorno vazio como sucesso.
 - ⚠️ **O gate `<automated>` da Task 4 dependia de conteúdo, não de existência.** Os 5 documentos LGPD passaram a gate em `77bb7df` com apenas 5 de 12 checks. Um gate que só verifica presença de arquivo não detecta um documento que existe e não diz nada — os 7 checks de conteúdo (`optout_ledger`, `erasure_request`, `listen_addresses`, `PREENCHER`, `pg_dump`, hifen) existem exatamente por isso. Considerar o mesmo padrão nos próximos planos com gate.
@@ -137,12 +151,12 @@ Nenhum ainda.
 
 ## Continuidade de Sessão
 
-Última sessão: 2026-10-05
-Parou em: Fase 1, wave 2 concluída. Plano 01-02 executado (4/4 tasks, 8 commits, `01-02-SUMMARY.md` movido para `phases/` e reescrito no template completo). Tasks 1–3 aprovadas em checkpoint humano; Task 4 reescrita porque 7 de 12 checks do gate `<automated>` falhavam e o texto tinha mojibake. Estado final: 15 tabelas, 5 migrations aplicadas, `listen_addresses = localhost`, 39/39 testes verdes, tsc e biome limpos, 4 bancos preexistentes intactos.
-Próximo passo: `/gsd-execute-phase 1` (wave 3: 01-03, serializado — este runtime não expõe isolamento por worktree)
-Pendente antes do pareamento QR do 01-03: `CHANNEL_PHONE_E164` ainda tem o placeholder `+5511999999999` e precisa do número real. Confirmar também `fetchNewChatMessageCap()` / `fetchAccountReachoutTimelock()` nos typings do Baileys instalado.
+Última sessão: 2026-10-09
+Parou em: Fase 1, wave 3 concluída. Plano 01-04 executado (4/4 tasks, 4 commits: `e56d6e6`, `40208e3`, `542070b`, `03ea113`; `01-04-SUMMARY.md` criado). Os 12 anti-requisitos têm property test; a ordem canônica e o choke-point de `sendText` foram provados por teste; o `outbox` durável reavalia o gate por job. Estado final: 25 arquivos / 101 testes verdes, `tsc` e biome limpos. O plano 01-03 tem a automação commitada, mas o pareamento QR real segue pendente (**P-004 `CREDS_INVALID`** — sem `01-03-SUMMARY.md`).
+Próximo passo: `/gsd-execute-phase 1` (wave 4: plano 01-05 — operação e humanização; serializado)
+Pendente (não bloqueia 01-05): fechar o checkpoint de pareamento do 01-03 — `CHANNEL_PHONE_E164` precisa do número real (hoje `+5511999999999`) e o QR precisa parear (`CREDS_INVALID` em `01-03-DIAG.md` / `docs/pendencias.md`).
 Pós-reboot: revalidar com `npm run notify -- -Title "Teste R-013" -Message "Verificacao" -Urgent` e fechar a Task 6 do plano 01-01
-Arquivo de retomada: `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-02-SUMMARY.md`
+Arquivo de retomada: `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-04-SUMMARY.md`
 
 ---
-*Atualizado: 2026-10-05*
+*Atualizado: 2026-10-09*
