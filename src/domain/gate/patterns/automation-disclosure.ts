@@ -14,9 +14,18 @@
  *    necessário para um termo isolado — só seria para comparação por igualdade.
  */
 
-/** Preço, valor, dinheiro. AR-001. */
+/**
+ * Preço, valor, dinheiro. AR-001.
+ *
+ * Cobre as moedas que o piloto pode encontrar: o real (`R$`, `reais`), o dólar e
+ * o euro em símbolo e em sigla, além das palavras genéricas de valor. `[$€£]`
+ * pega "R$ 3.500", "US$ 1.200" e "€ 500" de uma vez (o símbolo seguido de
+ * dígito); `\b(?:usd|eur|brl)\b` e os nomes por extenso fecham as grafias sem
+ * símbolo. Sem esta cobertura, um preço em dólar passaria pelo AR-001 — a
+ * violação mais grave da lista (01-04, Rule 2).
+ */
 export const CURRENCY_TERM =
-	/\br\$\s*\d|\breais?\b|\bdinheiro\b|\bvalor\b|\bor[çc]amento\b/i;
+	/\br\$\s*\d|[$€£]\s*\d|\breais?\b|\bdinheiro\b|\bvalor\b|\bor[çc]amento\b|\b(?:usd|eur|brl)\b|\bd[óo]lar(?:es)?\b|\beuros?\b/i;
 
 /** Porcentagem e desconto como número — o LM pode produzir "50% off" sem dizer a palavra. */
 export const PERCENT_TERM = /\b\d+\s*%|\bpor\s?cento\b/i;
@@ -42,9 +51,20 @@ export const MEDIA_TERM =
 export const MEDIA_LINK_EXT =
 	/\.(png|jpe?g|gif|webp|mp3|ogg|opus|m4a|mp4|mov|pdf|docx?|xlsx?|pptx?|zip)$/i;
 
-/** Agendamento. AR-003. */
+/**
+ * Agendamento. AR-003.
+ *
+ * Cobre o infinitivo (`agendar`) **e as conjugações** que o verbo assume numa
+ * frase real ("já agendei", "agendou", "agendando"): o `\bagendar\b` original
+ * deixava passar "já agendei amanhã", que é exatamente a intenção proibida. As
+ * formas foram listadas explicitamente, sem `\bagend\w*`, para não casar `agenda`
+ * (o substantivo: "minha agenda") — um falso positivo que calaria conversa
+ * normal. `-feira` entra como dia da semana citado ("quinta-feira"); o sufixo é
+ * obrigatório justamente para não casar "segunda opção". (`horário` já torna o
+ * guard intencionalmente amplo para menções de expediente.)
+ */
 export const SCHEDULE_TERM =
-	/\bagendar\b|\bmarcar\b|\breuni[ãa]o\b|\bchamada\b|\bcall\b|\bhor[áa]rio\b/i;
+	/\bagend(?:ar|ei|ou|ando|em)\b|\bmarcar\b|\breuni[ãa]o\b|\bchamada\b|\bcall\b|\bhor[áa]rio\b|\b(?:segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)-feira\b/i;
 
 /**
  * AR-006. `\bia\b` é o caso perigoso: sem `\b` ele casaria "dia".
