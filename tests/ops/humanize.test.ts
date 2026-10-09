@@ -17,13 +17,14 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
-	FOLLOWUP_MAX_MS,
-	FOLLOWUP_MIN_MS,
 	FIRST_MAX_MS,
 	FIRST_MIN_MS,
+	FOLLOWUP_MAX_MS,
+	FOLLOWUP_MIN_MS,
 	humanDelay,
 	humanDelayMs,
 	LIMITE_WHATSAPP,
+	pausaDePensamentoMs,
 	simulateTyping,
 	splitLongMessage,
 } from "../../src/application/humanize.js";
@@ -37,8 +38,6 @@ const textoDePalavras = (maxPalavras: number) =>
 		.array(palavra, { minLength: 1, maxLength: maxPalavras })
 		.map((palavras) => palavras.join(" "));
 
-const semear = (rotulo: string) => ({ seed: 20260929, path: rotulo });
-
 describe("splitLongMessage (CONV-13)", () => {
 	it("texto curto nao e dividido", () => {
 		expect(splitLongMessage("Boa tarde! Tudo bem?")).toEqual([
@@ -46,13 +45,17 @@ describe("splitLongMessage (CONV-13)", () => {
 		]);
 	});
 
+	it("texto vazio e um pedaco vazio (array nunca vazio)", () => {
+		expect(splitLongMessage("")).toEqual([""]);
+	});
+
 	it("nunca devolve array vazio nem pedaco vazio", () => {
 		fc.assert(
-			fc.property(fc.string(), (texto) => {
+			fc.property(fc.string({ minLength: 1 }), (texto) => {
 				const partes = splitLongMessage(texto);
 				return partes.length >= 1 && partes.every((p) => p.length > 0);
 			}),
-			{ numRuns: 300 },
+			{ numRuns: 300, seed: 20260929 },
 		);
 	});
 
@@ -66,7 +69,8 @@ describe("splitLongMessage (CONV-13)", () => {
 				// assim teria uma letra no offset, nao um espaco).
 				let offset = 0;
 				for (const [i, parte] of partes.entries()) {
-					if (texto.slice(offset, offset + parte.length) !== parte) return false;
+					if (texto.slice(offset, offset + parte.length) !== parte)
+						return false;
 					offset += parte.length;
 					const eUltimo = i === partes.length - 1;
 					if (!eUltimo) {
@@ -76,21 +80,16 @@ describe("splitLongMessage (CONV-13)", () => {
 				}
 				return offset === texto.length;
 			}),
-			{ numRuns: 300, ...semear("split") },
+			{ numRuns: 300, seed: 20260930 },
 		);
 	});
 
 	it("prefere 2 pedacos a 3 (um texto pouco acima do limite vira 2)", () => {
-		const texto = fc.sample(textoDePalavras(600), { numRuns: 1, seed: 7 })[0];
-		// Encontra o primeiro ponto que ultrapassa o limite e corta ali, para
-		// construir um caso determinístico de "pouco acima do limite".
-		const base = (
-			"palavra com dez letras e sempre separada por espaco ".repeat(200)
-		).trimEnd();
+		// ~3.2 mil caracteres: o primeiro corte enche o limite e sobram ~400,
+		// então o resultado tem de ser 2 pedaços — nunca 3.
+		const base = "palavra ".repeat(400).trimEnd();
 		expect(base.length).toBeGreaterThan(LIMITE_WHATSAPP);
-		const partes = splitLongMessage(base);
-		expect(partes).toHaveLength(2);
-		expect(typeof texto).toBe("string");
+		expect(splitLongMessage(base)).toHaveLength(2);
 	});
 });
 
@@ -107,7 +106,7 @@ describe("humanDelayMs (R-067)", () => {
 					followup <= FOLLOWUP_MAX_MS
 				);
 			}),
-			{ numRuns: 300, ...semear("faixas") },
+			{ numRuns: 300, seed: 20260929 },
 		);
 	});
 
@@ -125,10 +124,11 @@ describe("humanDelayMs (R-067)", () => {
 		}
 	});
 
-	it("uma pergunta acrescenta o thinking pause (o valor sobe)", () => {
-		const neutro = humanDelayMs("followup", "mensagem neutra");
-		const pergunta = humanDelayMs("followup", "mensagem neutra?");
-		expect(pergunta).toBeGreaterThan(neutro);
+	it("um texto com pergunta acrescenta o thinking pause (1-3s)", () => {
+		expect(pausaDePensamentoMs("mensagem neutra")).toBe(0);
+		const pausa = pausaDePensamentoMs("mensagem neutra?");
+		expect(pausa).toBeGreaterThanOrEqual(1_000);
+		expect(pausa).toBeLessThanOrEqual(3_000);
 	});
 
 	it("humanDelay espera exatamente humanDelayMs usando o sleep injetado", async () => {
@@ -147,7 +147,8 @@ describe("simulateTyping", () => {
 	it("emite progresso crescente e usa o sleep injetado (40..90ms)", async () => {
 		const esperas: number[] = [];
 		const progresso: number[] = [];
-		const texto = "Humano digitando uma mensagem um pouco mais longa para varios passos";
+		const texto =
+			"Humano digitando uma mensagem um pouco mais longa para varios passos";
 		await simulateTyping(texto, {
 			sleep: async (ms) => {
 				esperas.push(ms);

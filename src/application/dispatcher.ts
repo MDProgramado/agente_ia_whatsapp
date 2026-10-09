@@ -36,11 +36,19 @@ import { loadGateSnapshot } from "../infra/db/queries/snapshot.js";
 import { messages } from "../infra/db/schema.js";
 import { logger } from "../infra/logger.js";
 import {
+	type Humanizer,
+	type HumanKind,
+	humanizadorPadrao,
+	splitLongMessage,
+} from "./humanize.js";
+import {
 	enqueue,
 	markDeferred,
+	markFailed,
 	markSent,
 	type OutboxOrigin,
 } from "./outbox.js";
+import { createPerLeadQueue, type PerLeadQueue } from "./queue-per-lead.js";
 
 /**
  * O resultado do dispatch, discriminado. `action` (e não `status`) porque
@@ -72,7 +80,18 @@ export interface DispatchDeps {
 		readonly dailyMessageCap: number;
 		readonly newContactsToday: number;
 	};
+	/**
+	 * Fila por lead (R-067). O default é um singleton de módulo para que a
+	 * serialização por lead valha mesmo sem injeção — criar uma fila nova a cada
+	 * `dispatch` não serializaria nada.
+	 */
+	readonly queue?: PerLeadQueue;
+	/** Humanização injetável (o default espera de verdade). */
+	readonly humanizer?: Humanizer;
 }
+
+/** Singleton de módulo: uma fila por lead, compartilhada por todas as chamadas. */
+const filaPadrao = createPerLeadQueue();
 
 export interface DispatchInput {
 	readonly conversationId: string;
@@ -214,48 +233,100 @@ export const dispatch = async (
 		return { action: "blocked", reason: motivo, detail: decisao.detail };
 	}
 
-	// (5) humanização (01-05 preenche). Ponto NOMEADO entre o gate e a reserva de
-	// cota: a cota só é consumida por mensagem que de fato vai sair.
-	const humanizar = async (): Promise<void> => {};
-	await humanizar();
+	// (5) humanização (01-05). Ponto NOMEADO entre o gate e a reserva de cota: a
+	// cota só é consumida por mensagem que de fato vai sair. O atraso e o "digitando"
+	// acontecem ANTES de reservar — um atraso que falha não pode queimar cota.
+	const humanizer = deps.humanizer ?? humanizadorPadrao;
+	const fila = deps.queue ?? filaPadrao;
+	const genero: HumanKind =
+		input.origin === "followup" || input.origin === "catchup"
+			? "followup"
+			: "first";
+	await humanizer.delay(genero, text);
+	await humanizer.typing(text);
 
-	const resultado = await db.transaction(async (txBruto) => {
-		const tx = txBruto as unknown as Db;
-		const reserva = await reserveMessageQuota(
-			tx,
-			dia,
-			ctx.dailyMessageLimit,
-			ctx.dailyMessageCap,
+	// Texto longo vira vários pedaços, enviados em ORDEM. Cada pedaço tem sua
+	// própria `idempotency_key` (`chave#n`) para que a unicidade de `messages` não
+	// colapse os pedaços numa linha só.
+	const pedacos = splitLongMessage(text);
+
+	let resultado:
+		| { readonly tipo: "sem_cota" }
+		| { readonly tipo: "enviado"; readonly messageId: string };
+	try {
+		resultado = await db.transaction(async (txBruto) => {
+			const tx = txBruto as unknown as Db;
+			const reserva = await reserveMessageQuota(
+				tx,
+				dia,
+				ctx.dailyMessageLimit,
+				ctx.dailyMessageCap,
+			);
+			if (!reserva.allowed) return { tipo: "sem_cota" as const };
+
+			// Serializa por lead (R-067). Se um pedaço falhar, a exceção sobe, a
+			// transação reverte (nenhum `messages` fica gravado) e os pedaços
+			// seguintes nunca são enviados.
+			const enviarPedacos = async (): Promise<string> => {
+				let primeiroId: string | undefined;
+				for (const [i, pedaco] of pedacos.entries()) {
+					const chavePedaco =
+						pedacos.length === 1 ? chave : `${chave}#${i + 1}`;
+					await channel.sendText(conversationId, pedaco, chavePedaco);
+
+					// `messages` é append-only (R-043): grava-se com o status FINAL. O
+					// envio já aconteceu acima; se este INSERT falhar, a transação
+					// reverte e nada é registrado — nunca um UPDATE posterior.
+					const inseridos = await tx
+						.insert(messages)
+						.values({
+							conversationId,
+							direction: "out",
+							origin: ORIGEM_DA_MENSAGEM[input.origin ?? "bot"],
+							kind: "text",
+							body: pedaco,
+							status: "sent",
+							idempotencyKey: chavePedaco,
+							createdAt: agora,
+						})
+						.onConflictDoNothing({ target: messages.idempotencyKey })
+						.returning({ id: messages.id });
+
+					const id =
+						inseridos[0]?.id ?? (await buscarMensagem(tx, chavePedaco));
+					primeiroId ??= id;
+				}
+				if (primeiroId === undefined) {
+					throw new Error("dispatch: nenhum pedaco para enviar");
+				}
+				return primeiroId;
+			};
+
+			const messageId = await fila.run(snapshot.lead.id, enviarPedacos);
+
+			if (input.outboxJobId) {
+				await markSent(tx, input.outboxJobId, messageId);
+			}
+			return { tipo: "enviado" as const, messageId };
+		});
+	} catch (erro) {
+		// Meia mensagem não existe: com a transação revertida, marca o job como
+		// falho NÃO-retentável (repetir cego é o burst que derruba número) e fica
+		// em silêncio. Nunca um fallback de texto.
+		const motivo = erro instanceof Error ? erro.message : String(erro);
+		logger.error(
+			{ event: "dispatch_envio_falhou", conversation_id: conversationId },
+			`falha no envio: ${motivo}`,
 		);
-		if (!reserva.allowed) return { tipo: "sem_cota" as const };
-
-		await channel.sendText(conversationId, text, chave);
-
-		// `messages` é append-only (R-043): grava-se com o status FINAL. O envio já
-		// aconteceu acima; se este INSERT falhar, a transação reverte e nada é
-		// registrado — nunca um UPDATE posterior, que o trigger barraria.
-		const inseridos = await tx
-			.insert(messages)
-			.values({
-				conversationId,
-				direction: "out",
-				origin: ORIGEM_DA_MENSAGEM[input.origin ?? "bot"],
-				kind: "text",
-				body: text,
-				status: "sent",
-				idempotencyKey: chave,
-				createdAt: agora,
-			})
-			.onConflictDoNothing({ target: messages.idempotencyKey })
-			.returning({ id: messages.id });
-
-		const messageId = inseridos[0]?.id ?? (await buscarMensagem(tx, chave));
-
 		if (input.outboxJobId) {
-			await markSent(tx, input.outboxJobId, messageId);
+			await markFailed(db, input.outboxJobId, motivo, { retryable: false });
 		}
-		return { tipo: "enviado" as const, messageId };
-	});
+		return {
+			action: "silencio",
+			reason: "erro_nao_mapeado",
+			detail: `falha no envio do pedaco: ${motivo}`,
+		};
+	}
 
 	// Corrida rara: o gate viu folga, mas outra transação consumiu a última vaga
 	// de cota entre o snapshot e a reserva. Trata como deferimento, não bloqueio.

@@ -48,7 +48,10 @@ describe("createPerLeadQueue", () => {
 			fila.run("lead-x", () => lento("lead-x")),
 			fila.run("lead-y", () => lento("lead-y")),
 		]);
-		expect(ordem.slice(0, 2).sort()).toEqual(["inicio:lead-x", "inicio:lead-y"]);
+		expect(ordem.slice(0, 2).sort()).toEqual([
+			"inicio:lead-x",
+			"inicio:lead-y",
+		]);
 	});
 
 	it("devolve o resultado da tarefa", async () => {
