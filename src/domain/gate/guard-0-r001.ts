@@ -1,4 +1,3 @@
-import { leadNumeroInvalido } from "../number-validation.js";
 import type { GateInput } from "./types.js";
 
 /**
@@ -17,12 +16,8 @@ export const evaluate = (input: GateInput) =>
 		: ("r001_primeiro_contato_nao_humano" as const);
 
 /**
- * `lead_numero_invalido` (LEAD-03 / R-019) fica entre R-001 e AR-011 na ordem
- * canônica: um número que o WhatsApp rejeitou é estado **terminal**, então não
- * adianta o gate aprovar o resto da conversa. A severidade (`invalido` vs
- * `desconhecido`) é do adaptador; aqui o guard só consulta o snapshot.
+ * O guard nomeado `lead_numero_invalido` (LEAD-03 / R-019) mudou de casa no
+ * 01-04: ele fica ao lado dos demais em `guards/lead-number-invalid.ts`, junto
+ * dos 12 `ar-0NN.ts` mas **fora** da numeração AR. A ordem canônica continua
+ * colocando-o entre R-001 e AR-011.
  */
-export const evaluateNumeroInvalido = (input: GateInput) =>
-	leadNumeroInvalido(input.lead.waValidationState)
-		? ("lead_numero_invalido" as const)
-		: null;

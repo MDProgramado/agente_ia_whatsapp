@@ -19,17 +19,20 @@ export interface GuardSlot {
 	readonly owner: string | null;
 }
 
-import {
-	evaluateNumeroInvalido,
-	evaluate as primeiroContato,
-} from "./guard-0-r001.js";
+import { evaluate as primeiroContato } from "./guard-0-r001.js";
 import { evaluate as preco } from "./guards/ar-001.js";
+import { evaluate as proposta } from "./guards/ar-002.js";
 import { evaluate as agendamento } from "./guards/ar-003.js";
 import { evaluate as midiaSaida } from "./guards/ar-004.js";
+import { evaluate as optOut } from "./guards/ar-005.js";
 import { evaluate as revelacao } from "./guards/ar-006.js";
 import { evaluate as janela } from "./guards/ar-007.js";
 import { evaluate as limiteDiario } from "./guards/ar-008.js";
+import { evaluate as midiaRecebida } from "./guards/ar-009.js";
+import { evaluate as posHandoff } from "./guards/ar-010.js";
 import { evaluate as baseLegal } from "./guards/ar-011.js";
+import { evaluate as precoObjecao } from "./guards/ar-012.js";
+import { evaluate as numeroInvalido } from "./guards/lead-number-invalid.js";
 import { evaluate as killSwitch } from "./kill-switch.js";
 import type { GateInput, GateReason } from "./types.js";
 
@@ -42,26 +45,31 @@ export const GUARD_ORDER: readonly GuardSlot[] = [
 		guard: primeiroContato,
 		owner: "[01-01]",
 	},
-	// LEAD-03: estado terminal, por isso antes dos AR de conteúdo
+	// LEAD-03: estado terminal, por isso antes dos AR de conteúdo. Guard
+	// NOMEADO (fora de ar-*), implementado no 01-04 junto das 5 guardas restantes.
 	{
 		reason: "lead_numero_invalido",
-		guard: evaluateNumeroInvalido,
-		owner: "[01-01]",
+		guard: numeroInvalido,
+		owner: "[01-04]",
 	},
 	// 2
 	{ reason: "ar011_base_legal", guard: baseLegal, owner: "[01-01]" },
-	// 3 — 01-04
-	{ reason: "ar005_opt_out", guard: null, owner: "[01-04]" },
-	// 4 — 01-04
-	{ reason: "ar010_handoff_ativo", guard: null, owner: "[01-04]" },
-	// 5 — 01-04
-	{ reason: "ar009_midia_recebida", guard: null, owner: "[01-04]" },
+	// 3
+	{ reason: "ar005_opt_out", guard: optOut, owner: "[01-04]" },
+	// 4
+	{ reason: "ar010_handoff_ativo", guard: posHandoff, owner: "[01-04]" },
+	// 5
+	{ reason: "ar009_midia_recebida", guard: midiaRecebida, owner: "[01-04]" },
 	// 6a
 	{ reason: "ar001_preco", guard: preco, owner: "[01-01]" },
-	// 6b — 01-04
-	{ reason: "ar002_proposta", guard: null, owner: "[01-04]" },
-	// 6c — 01-04
-	{ reason: "ar012_preco_como_objecao", guard: null, owner: "[01-04]" },
+	// 6b
+	{ reason: "ar002_proposta", guard: proposta, owner: "[01-04]" },
+	// 6c
+	{
+		reason: "ar012_preco_como_objecao",
+		guard: precoObjecao,
+		owner: "[01-04]",
+	},
 	// 7
 	{ reason: "ar003_agendamento", guard: agendamento, owner: "[01-01]" },
 	// 8
