@@ -1,16 +1,22 @@
 /**
  * A ordem canônica de avaliação — docs/10-anti-requisitos.md §"Ordem de Avaliação
- * no Gate", 12 passos, imutável.
+ * no Gate", 15 entradas, imutável.
  *
  * A ordem importa por um motivo concreto: o `reason` gravado em
  * `blocked_attempts.rule_reference` é o primeiro que disparou, e o painel da
  * Fase 04 mostra esse identificador ao Admin. Reordenar a lista muda o que o
  * Admin vê, e o relatório de conformidade passa a citar a regra errada.
  *
- * **Nesta task (01-01) só os guards marcados `[01-01]` existem.** Os demais
- * posições estão declaradas com `guard: null` para fixar o slot — sem isso, o
- * 01-04 teria de adivinhar onde cada um entra, e um `unshift` errado passaria
- * despercebido. A entrada `send` é o único caminho de saída.
+ * O 01-01 declarou as 15 posições com os guards `[01-01]` preenchidos e os demais
+ * como `guard: null`, para fixar o slot. O 01-04 preencheu as 5 posições restantes
+ * e o guard nomeado de número inválido: **não há mais slot nulo**. A entrada `send`
+ * é o único caminho de saída.
+ *
+ * O nome é `GUARD_SLOTS` (e não `GUARD_ORDER`) porque o 01-04 exporta
+ * `GUARD_ORDER` em `evaluate-policy.ts` como o array **plano de `GateReason`** —
+ * a ordem canônica documentada, sem as funções. `GUARD_SLOTS` é a **execução**
+ * (com as funções); `GUARD_ORDER` é o **contrato** (só os motivos). O teste de
+ * ordem (`tests/gate/order.test.ts`) compara os dois, para que não divirjam.
  */
 export interface GuardSlot {
 	readonly reason: GateReason;
@@ -36,7 +42,7 @@ import { evaluate as numeroInvalido } from "./guards/lead-number-invalid.js";
 import { evaluate as killSwitch } from "./kill-switch.js";
 import type { GateInput, GateReason } from "./types.js";
 
-export const GUARD_ORDER: readonly GuardSlot[] = [
+export const GUARD_SLOTS: readonly GuardSlot[] = [
 	// 1 — operação
 	{ reason: "kill_switch_ativo", guard: killSwitch, owner: "[01-01]" },
 	// Guard 0 — R-001, fora da numeração AR
@@ -83,10 +89,11 @@ export const GUARD_ORDER: readonly GuardSlot[] = [
 ] as const;
 
 /**
- * Motivos que esta task reserva para o 01-04, para o relatório de cobertura não os
- * contar como implementados por engano.
+ * Motivos ainda sem guard implementado. Depois do 01-04 deve ser **vazio** — o
+ * teste de ordem falha se houver slot nulo, o que pega a regressão de alguém
+ * adicionar um `reason` à união e esquecer o guard.
  */
-export const REASONS_PENDENTES_01_04 = GUARD_ORDER.filter(
+export const REASONS_PENDENTES_01_04: readonly GateReason[] = GUARD_SLOTS.filter(
 	(s) => s.guard === null,
 ).map((s) => s.reason);
 

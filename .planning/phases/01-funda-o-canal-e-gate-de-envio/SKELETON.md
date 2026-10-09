@@ -98,10 +98,10 @@ kill_switch_ativo → r001_primeiro_contato_nao_humano → lead_numero_invalido 
 ```
 
 `AR_MAP` (18 entradas) traduz cada `GateReason` da união fechada num AR e no requisito de origem:
-`ar001_preco`/AR-001/R-011 (preço), `ar002_proposta`/AR-002/R-012 (proposta), `ar003_agendamento`/AR-003/R-025,
-`ar004_midia_saida`/AR-004/R-037 (mídia de saída), `ar005_opt_out`/AR-005/R-024, `ar006_revelacao_automacao`/AR-006/R-057,
-`ar007_fora_da_janela`/AR-007/R-006, `ar008_limite_diario`/AR-008/R-023, `ar009_midia_recebida`/AR-009/R-038,
-`ar010_handoff_ativo`/AR-010/R-014+R-066, `ar011_base_legal`/AR-011/R-064, `ar012_preco_como_objecao`/AR-012/R-012.
+`ar001_preco`/AR-001/R-012 (preço), `ar002_proposta`/AR-002/R-012 (proposta), `ar003_agendamento`/AR-003/R-012+R-025,
+`ar004_midia_saida`/AR-004/R-037 (mídia de saída), `ar005_opt_out`/AR-005/R-024, `ar006_revelacao_automacao`/AR-006/R-055+R-056+R-057,
+`ar007_fora_da_janela`/AR-007/R-006+R-058, `ar008_limite_diario`/AR-008/R-023, `ar009_midia_recebida`/AR-009/R-038,
+`ar010_handoff_ativo`/AR-010/R-014+R-066, `ar011_base_legal`/AR-011/R-064, `ar012_preco_como_objecao`/AR-012/R-012+R-041.
 Os 6 demais motivos (`kill_switch_ativo`, `r001_primeiro_contato_nao_humano`, `lead_numero_invalido`,
 `envio_sem_gate`, `timeout`, `erro_nao_mapeado`) são **não-AR** com `ar: null` explícito no mapa.
 
