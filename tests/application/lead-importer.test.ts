@@ -1,21 +1,23 @@
 /**
- * TDD RED — Lead Importer
+ * Lead Importer — TDD
  *
  * Padrão de transação (correto): db.transaction(outer, async (tx) => { ... })
  * → fixtures dentro → importLeads(tx as unknown as Db, ...) (inner vira SAVEPOINT)
  * → asserts dentro → throw sentinel para ROLLBACK global.
+ *
+ * Reconciliação com o schema real (01-03 GREEN): namespace `schema`, colunas
+ * camelCase no TS, `openDb(env.DATABASE_URL)`, e a porta com as assinaturas reais
+ * (`Promise<number|null>`/`Promise<Date|null>`).
  */
-import { randomUUID } from "node:crypto";
 import fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { eq, sql } from "drizzle-orm";
 import { env } from "../../src/config/env.js";
 import type { Db } from "../../src/infra/db/client.js";
 import { openDb } from "../../src/infra/db/client.js";
-import { LeadSourcePort } from "../../src/domain/ports/LeadSourcePort.js";
-import type { Lead } from "../../src/domain/ports/LeadSourcePort.js";
-import { importLeads, CotaEsgotada, DadosIncompletos } from "../../src/application/lead-importer.js";
-import { schema } from "../../src/infra/db/schema.js";
-import { and, eq, sql } from "drizzle-orm";
+import type { Lead, LeadSourcePort } from "../../src/domain/ports/LeadSourcePort.js";
+import { importLeads } from "../../src/application/lead-importer.js";
+import * as schema from "../../src/infra/db/schema.js";
 
 const SEMENTE = 20260928;
 const TZ = env.TZ ?? "America/Sao_Paulo";
@@ -39,28 +41,28 @@ const dayLocal = (agora: Date = new Date()): string => {
 
 class FakeLeadSource implements LeadSourcePort {
 	leads: Lead[] = [];
-	cap?: number;
-	timelock?: number;
+	cap: number | null = null;
+	timelock: Date | null = null;
 
 	async fetchNewLeads(): Promise<Lead[]> {
 		return this.leads;
 	}
 	markValidNewLead(_e164: string): void {}
-	fetchNewChatMessageCap?(): Promise<number | undefined> {
-		return Promise.resolve(this.cap);
+	async fetchNewChatMessageCap(): Promise<number | null> {
+		return this.cap;
 	}
-	fetchAccountReachoutTimelock?(): Promise<number | undefined> {
-		return Promise.resolve(this.timelock);
+	async fetchAccountReachoutTimelock(): Promise<Date | null> {
+		return this.timelock;
 	}
 }
 
 const isE164 = (v: string): boolean => /^\+[1-9][0-9]{7,14}$/.test(v);
 
-describe("lead-importer — TDD RED", () => {
+describe("lead-importer", () => {
 	let dbHandle: Awaited<ReturnType<typeof openDb>>;
 
 	beforeAll(async () => {
-		dbHandle = await openDb();
+		dbHandle = await openDb(env.DATABASE_URL);
 	});
 
 	afterAll(async () => {
@@ -72,14 +74,13 @@ describe("lead-importer — TDD RED", () => {
 		try {
 			await dbHandle.db.transaction(async (tx) => {
 				const phone = uniqPhone();
-				const ch = uniqPhone();
 				await tx
-					.insert(schema.channel_accounts)
-					.values({ phone_e164: env.CHANNEL_PHONE_E164 })
+					.insert(schema.channelAccounts)
+					.values({ phoneE164: env.CHANNEL_PHONE_E164 })
 					.onConflictDoNothing();
 				const d = dayLocal();
 				await tx
-					.insert(schema.daily_counters)
+					.insert(schema.dailyCounters)
 					.values({ day: d, kind: "new_contacts", count: 0 })
 					.onConflictDoNothing();
 				const src = new FakeLeadSource();
@@ -105,15 +106,15 @@ describe("lead-importer — TDD RED", () => {
 				expect(res.rejeitados).toBe(0);
 				expect(res.semCota).toBe(false);
 				const l = await tx.query.leads.findFirst({
-					where: eq(schema.leads.phone_number, phone),
+					where: eq(schema.leads.phoneNumber, phone),
 				});
 				expect(l).toBeDefined();
 				const conv = await tx.query.conversations.findFirst({
-					where: eq(schema.conversations.lead_id, l!.id),
+					where: eq(schema.conversations.leadId, l!.id),
 				});
 				expect(conv).toBeDefined();
-				const sh = await tx.query.status_history.findFirst({
-					where: eq(schema.status_history.conversation_id, conv!.id),
+				const sh = await tx.query.statusHistory.findFirst({
+					where: eq(schema.statusHistory.conversationId, conv!.id),
 				});
 				expect(sh).toBeDefined();
 				throw sentinel;
@@ -128,27 +129,26 @@ describe("lead-importer — TDD RED", () => {
 		try {
 			await dbHandle.db.transaction(async (tx) => {
 				await tx
-					.insert(schema.channel_accounts)
-					.values({ phone_e164: env.CHANNEL_PHONE_E164 })
+					.insert(schema.channelAccounts)
+					.values({ phoneE164: env.CHANNEL_PHONE_E164 })
 					.onConflictDoNothing();
 				const d = dayLocal();
 				await tx
-					.insert(schema.daily_counters)
+					.insert(schema.dailyCounters)
 					.values({ day: d, kind: "new_contacts", count: 0 })
 					.onConflictDoNothing();
 				const phone = uniqPhone();
 				const l1 = await tx
 					.insert(schema.leads)
 					.values({
-						phone_number: phone,
-						origin_source: "cacaleads",
+						phoneNumber: phone,
+						originSource: "cacaleads",
 						purpose: "prospecao_b2b_servicos_digitais",
-						legal_registered_at: sql`now()-interval '1 day'`,
-						wa_jid: "123@s.whatsapp.net",
+						legalRegisteredAt: sql`now()-interval '1 day'`,
+						waJid: "123@s.whatsapp.net",
 						name: "A",
 					})
 					.returning({ id: schema.leads.id });
-				await tx.insert(schema.channel_accounts).values({ phone_e164: uniqPhone() }).onConflictDoNothing();
 				const src = new FakeLeadSource();
 				src.leads = [
 					{
@@ -180,23 +180,23 @@ describe("lead-importer — TDD RED", () => {
 		try {
 			await dbHandle.db.transaction(async (tx) => {
 				await tx
-					.insert(schema.channel_accounts)
-					.values({ phone_e164: env.CHANNEL_PHONE_E164 })
+					.insert(schema.channelAccounts)
+					.values({ phoneE164: env.CHANNEL_PHONE_E164 })
 					.onConflictDoNothing();
 				const d = dayLocal();
 				await tx
-					.insert(schema.daily_counters)
+					.insert(schema.dailyCounters)
 					.values({ day: d, kind: "new_contacts", count: 0 })
 					.onConflictDoNothing();
 				const phone = uniqPhone();
 				const l = await tx
 					.insert(schema.leads)
 					.values({
-						phone_number: phone,
-						opt_out: false,
-						origin_source: "cacaleads",
+						phoneNumber: phone,
+						optOut: false,
+						originSource: "cacaleads",
 						purpose: "prospecao_b2b_servicos_digitais",
-						legal_registered_at: sql`now()-interval '1 day'`,
+						legalRegisteredAt: sql`now()-interval '1 day'`,
 					})
 					.returning({ id: schema.leads.id });
 				const src = new FakeLeadSource();
@@ -209,16 +209,16 @@ describe("lead-importer — TDD RED", () => {
 						purpose: "prospecao_b2b_servicos_digitais",
 					},
 				];
-				const res = await importLeads(tx as unknown as Db, src, {
+				await importLeads(tx as unknown as Db, src, {
 					dailyLeadLimit: 10,
 					tz: TZ,
 				});
 				const ld = await tx.query.leads.findFirst({
 					where: eq(schema.leads.id, l[0]!.id),
 				});
-				expect(ld?.opt_out).toBe(true);
-				const ol = await tx.query.optout_ledger.findFirst({
-					where: eq(schema.optout_ledger.lead_id, l[0]!.id),
+				expect(ld?.optOut).toBe(true);
+				const ol = await tx.query.optoutLedger.findFirst({
+					where: eq(schema.optoutLedger.leadId, l[0]!.id),
 				});
 				expect(ol).toBeDefined();
 				throw sentinel;
@@ -233,12 +233,12 @@ describe("lead-importer — TDD RED", () => {
 		try {
 			await dbHandle.db.transaction(async (tx) => {
 				await tx
-					.insert(schema.channel_accounts)
-					.values({ phone_e164: env.CHANNEL_PHONE_E164 })
+					.insert(schema.channelAccounts)
+					.values({ phoneE164: env.CHANNEL_PHONE_E164 })
 					.onConflictDoNothing();
 				const d = dayLocal();
 				await tx
-					.insert(schema.daily_counters)
+					.insert(schema.dailyCounters)
 					.values({ day: d, kind: "new_contacts", count: 1 })
 					.onConflictDoNothing();
 				const src = new FakeLeadSource();
@@ -277,12 +277,12 @@ describe("lead-importer — TDD RED", () => {
 		try {
 			await dbHandle.db.transaction(async (tx) => {
 				await tx
-					.insert(schema.channel_accounts)
-					.values({ phone_e164: env.CHANNEL_PHONE_E164 })
+					.insert(schema.channelAccounts)
+					.values({ phoneE164: env.CHANNEL_PHONE_E164 })
 					.onConflictDoNothing();
 				const d = dayLocal();
 				await tx
-					.insert(schema.daily_counters)
+					.insert(schema.dailyCounters)
 					.values({ day: d, kind: "new_contacts", count: 0 })
 					.onConflictDoNothing();
 				const phone = uniqPhone();
@@ -290,7 +290,7 @@ describe("lead-importer — TDD RED", () => {
 				src.leads = [
 					{
 						e164: phone,
-						originSource: undefined as any,
+						originSource: undefined as unknown as string,
 						legalBasis: "legitimo_interesse",
 						purpose: "prospecao_b2b_servicos_digitais",
 						optOut: false,
@@ -303,7 +303,7 @@ describe("lead-importer — TDD RED", () => {
 				expect(res.rejeitados).toBe(1);
 				expect(res.importados).toBe(0);
 				const l = await tx.query.leads.findFirst({
-					where: eq(schema.leads.phone_number, phone),
+					where: eq(schema.leads.phoneNumber, phone),
 				});
 				expect(l).toBeUndefined();
 				throw sentinel;
@@ -318,12 +318,12 @@ describe("lead-importer — TDD RED", () => {
 		try {
 			await dbHandle.db.transaction(async (tx) => {
 				await tx
-					.insert(schema.channel_accounts)
-					.values({ phone_e164: env.CHANNEL_PHONE_E164 })
+					.insert(schema.channelAccounts)
+					.values({ phoneE164: env.CHANNEL_PHONE_E164 })
 					.onConflictDoNothing();
 				const d = dayLocal();
 				await tx
-					.insert(schema.daily_counters)
+					.insert(schema.dailyCounters)
 					.values({ day: d, kind: "new_contacts", count: 0 })
 					.onConflictDoNothing();
 				const src = new FakeLeadSource();
@@ -354,12 +354,12 @@ describe("lead-importer — TDD RED", () => {
 		try {
 			await dbHandle.db.transaction(async (tx) => {
 				await tx
-					.insert(schema.channel_accounts)
-					.values({ phone_e164: env.CHANNEL_PHONE_E164 })
+					.insert(schema.channelAccounts)
+					.values({ phoneE164: env.CHANNEL_PHONE_E164 })
 					.onConflictDoNothing();
 				const d = dayLocal();
 				await tx
-					.insert(schema.daily_counters)
+					.insert(schema.dailyCounters)
 					.values({ day: d, kind: "new_contacts", count: 0 })
 					.onConflictDoNothing();
 				const phone = uniqPhone();
@@ -379,11 +379,11 @@ describe("lead-importer — TDD RED", () => {
 				});
 				expect(res.importados).toBe(1);
 				const l = await tx.query.leads.findFirst({
-					where: eq(schema.leads.phone_number, phone),
+					where: eq(schema.leads.phoneNumber, phone),
 				});
-				expect(l?.opt_out).toBe(true);
-				const ol = await tx.query.optout_ledger.findFirst({
-					where: eq(schema.optout_ledger.lead_id, l!.id),
+				expect(l?.optOut).toBe(true);
+				const ol = await tx.query.optoutLedger.findFirst({
+					where: eq(schema.optoutLedger.leadId, l!.id),
 				});
 				expect(ol).toBeDefined();
 				throw sentinel;
@@ -396,18 +396,15 @@ describe("lead-importer — TDD RED", () => {
 	describe("property tests (seed 20260928, numRuns 500)", () => {
 		it("validador E.164 puro: apenas +[1-9]{7,14} válidos", () => {
 			fc.assert(
-				fc.property(
-					fc.string(),
-					(s) => {
-						const ok = isE164(s);
-						if (ok) {
-							expect(s.startsWith("+")).toBe(true);
-							expect(s.length).toBeGreaterThanOrEqual(8);
-							expect(s.length).toBeLessThanOrEqual(16);
-						}
-						return true;
-					},
-				),
+				fc.property(fc.string(), (s) => {
+					const ok = isE164(s);
+					if (ok) {
+						expect(s.startsWith("+")).toBe(true);
+						expect(s.length).toBeGreaterThanOrEqual(8);
+						expect(s.length).toBeLessThanOrEqual(16);
+					}
+					return true;
+				}),
 				{ numRuns: 500, seed: SEMENTE },
 			);
 		});
