@@ -90,6 +90,16 @@ export const envSchema = z.object({
 
 	/** D-05: o gate avalia a janela no fuso de São Paulo, não no do processo. */
 	TZ: z.string().min(1).default("America/Sao_Paulo"),
+
+	/**
+	 * Nível do logger do socket Baileys (T3 do 01-03-DIAG). As falhas internas do
+	 * vendor — inclusive do handshake companion — só aparecem neste logger; o
+	 * default `warn` mantém o `app.log` limpo, e `debug`/`trace` tornam uma falha
+	 * silenciosa de pareamento auditável.
+	 */
+	BAILEYS_LOG_LEVEL: z
+		.enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"])
+		.default("warn"),
 });
 
 export type Env = z.infer<typeof envSchema>;

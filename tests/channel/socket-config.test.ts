@@ -9,6 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { socketConfigOverrides } from "../../src/channel/baileys/session.js";
+import { env } from "../../src/config/env.js";
 
 const loggerFake = {} as Parameters<typeof socketConfigOverrides>[0];
 
@@ -23,6 +24,14 @@ describe("socketConfigOverrides — plataforma do pareamento companion", () => {
 	});
 
 	it("mantém emitOwnEvents ligado (R-001/WHS-05)", () => {
-		expect(socketConfigOverrides(loggerFake).emitOwnEvents).toBe(true);
+		expect(socketConfigOverrides({} as typeof loggerFake).emitOwnEvents).toBe(
+			true,
+		);
+	});
+
+	it("aplica BAILEYS_LOG_LEVEL ao logger (T3: falha de handshake auditável)", () => {
+		const logger = {} as typeof loggerFake;
+		socketConfigOverrides(logger);
+		expect(logger.level).toBe(env.BAILEYS_LOG_LEVEL);
 	});
 });

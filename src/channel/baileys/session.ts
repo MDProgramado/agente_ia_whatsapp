@@ -33,7 +33,7 @@ import {
 	type SocketConfig,
 	useMultiFileAuthState,
 } from "@whiskeysockets/baileys";
-import { authDir, ensureDataDirs } from "../../config/env.js";
+import { authDir, ensureDataDirs, env } from "../../config/env.js";
 import { childLogger } from "../../infra/logger.js";
 
 const log = childLogger("session");
@@ -176,14 +176,21 @@ export const createSession = async (): Promise<SessionState> => {
  *   hospedeiro é o valor que o servidor espera no vínculo companion. O
  *   `companion_platform_id` (getCompanionWebClientType) segue CHROME (1) — só o
  *   display muda; a trava de pareamento é o display.
+ * - nível do logger = `BAILEYS_LOG_LEVEL` (T3 do 01-03-DIAG): as falhas internas do
+ *   vendor (`companion_reg_refresh`, 463, recusa de `link_code_companion_reg`) só
+ *   saem neste logger. Com `debug`/`trace`, uma falha de pareamento antes muda de
+ *   "silêncio total no `app.log`" para uma trilha auditável.
  */
 export const socketConfigOverrides = (
 	logger: SocketConfig["logger"],
-): Partial<SocketConfig> => ({
-	emitOwnEvents: true,
-	browser: Browsers.windows("Chrome"),
-	logger,
-	...({
-		messages: { ack: { auto: "all" } },
-	} as unknown as Partial<SocketConfig>),
-});
+): Partial<SocketConfig> => {
+	logger.level = env.BAILEYS_LOG_LEVEL;
+	return {
+		emitOwnEvents: true,
+		browser: Browsers.windows("Chrome"),
+		logger,
+		...({
+			messages: { ack: { auto: "all" } },
+		} as unknown as Partial<SocketConfig>),
+	};
+};
