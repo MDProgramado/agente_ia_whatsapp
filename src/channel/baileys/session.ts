@@ -27,8 +27,9 @@
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
-	BufferJSON,
 	type AuthenticationState,
+	Browsers,
+	BufferJSON,
 	type SocketConfig,
 	useMultiFileAuthState,
 } from "@whiskeysockets/baileys";
@@ -169,11 +170,18 @@ export const createSession = async (): Promise<SessionState> => {
  *   do 01-03: no rc14 `messages` não é chave de `SocketConfig` (`Types/Socket.d.ts`)
  *   e nenhum arquivo do pacote lê `config.messages` — a chave é mantida via cast
  *   único e documentado, inerte em runtime neste pacote.
+ * - `browser: Browsers.windows("Chrome")` (T2 do 01-03-DIAG): o default do pacote é
+ *   `Browsers.macOS("Chrome")`, que anuncia `companion_platform_display` como
+ *   `"Chrome (Mac OS)"` (`Socket/socket.js:640-643`). Em Windows, anunciar o SO
+ *   hospedeiro é o valor que o servidor espera no vínculo companion. O
+ *   `companion_platform_id` (getCompanionWebClientType) segue CHROME (1) — só o
+ *   display muda; a trava de pareamento é o display.
  */
 export const socketConfigOverrides = (
 	logger: SocketConfig["logger"],
 ): Partial<SocketConfig> => ({
 	emitOwnEvents: true,
+	browser: Browsers.windows("Chrome"),
 	logger,
 	...({
 		messages: { ack: { auto: "all" } },
