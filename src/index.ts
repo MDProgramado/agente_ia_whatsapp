@@ -6,10 +6,23 @@
  * vem da config. Banco antes do canal porque o canal é quem decide o que existe
  * para conversar; um socket conectado a um schema incompleto é pior que nenhum socket.
  *
- * Hoje o boot termina em (g): o canal e o dispatcher entram na Task 5.
+ * Hoje o boot termina em (h): o canal está armado; o dispatcher/motor entram numa
+ * fase seguinte.
  */
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import { ensureDataDirs, env } from "./config/env.js";
+import { BarramentoEventos } from "./application/event-bus.js";
+import { processInboundFromMe } from "./application/inbound-handler.js";
+import { readCapabilities } from "./channel/baileys/capabilities.js";
+import {
+	abrirSocketDoCanal,
+	criarHandlersDoCanal,
+	type WASocket,
+} from "./channel/baileys/runtime.js";
+import { createSession } from "./channel/baileys/session.js";
+import { translateDisconnect } from "./channel/baileys/signals.js";
+import { ensureDataDirs, env, logsDir } from "./config/env.js";
 import { closeDb, openDb } from "./infra/db/client.js";
 import { childLogger, flushLogSync } from "./infra/logger.js";
 
@@ -26,6 +39,13 @@ const BOOT_CHECK_ONLY = process.env.BOOT_CHECK_ONLY === "1";
  * o que impediria o processo de sair no Ctrl+C.
  */
 let keepAlive: NodeJS.Timeout | undefined;
+
+/**
+ * Socket do canal, no escopo do módulo para que `encerra` possa fechá-lo ANTES do
+ * pool: um kill abrupto corrompe o `useMultiFileAuthState`, e um auth corrompido é
+ * lido pelo WhatsApp como dispositivo novo (Armadilha 4, T-01-02).
+ */
+let canalSock: WASocket | undefined;
 
 /**
  * Contagem com `::int`: o driver devolve `count(*)` como `bigint`, que serializa
@@ -124,9 +144,137 @@ const main = async (): Promise<void> => {
 	);
 	keepAlive = setInterval(() => {}, 60_000);
 
-	// (g) Encerramento gracioso. Kill abrupto corrompe o `useMultiFileAuthState`, e um
+	// (h) Etapa 4 do boot — CANAL, depois do banco. `createSession()` monta a sessão
+	//     a partir de `DATA_ROOT` (nunca do cwd) e `abrirSocketDoCanal` cria o socket
+	//     com `emitOwnEvents: true` (via `socketConfigOverrides`, WHS-05/R-001): é a
+	//     flag que faz o evento `fromMe` do número dedicado existir, e portanto a
+	//     única fonte autorizada de `first_contact_by_human` (R-001). O SDK do Baileys
+	//     só é tocado dentro de `src/channel/baileys/**` (T-01-12) — aqui só se
+	//     orquestra, nenhum import do pacote de protocolo.
+	const sessao = await createSession();
+	const sock = abrirSocketDoCanal(sessao);
+	canalSock = sock;
+	log.info(
+		{
+			step: "channel_session",
+			restore_required: sessao.restoreRequired,
+		},
+		"sessao do canal carregada",
+	);
+
+	// O `creds.update` PRECISA ser persistido: sem isso a sessão viveria só em
+	// memória até o próximo kill, e o kill destrói a credencial no disco — novo
+	// dispositivo (Armadilha 4).
+	sock.ev.on("creds.update", () => {
+		void sessao.saveCreds().catch((erro: unknown) => {
+			log.error(
+				{ event: "save_creds_falhou" },
+				`nao persisti creds do canal: ${erro instanceof Error ? erro.message : String(erro)}`,
+			);
+		});
+	});
+
+	// O `inbound-handler` é o consumidor do canal: ligado ao barramento, ele resolve
+	// o JID e grava em `messages` (T-01-06) ou aciona o handoff.
+	const barramento = new BarramentoEventos(conn.db);
+	barramento.on("inbound", async (evt) => {
+		await processInboundFromMe(conn.db, sock, evt);
+	});
+
+	// Pareamento: só quando não há sessão registrada. O Admin DIGITA o par de 8
+	// dígitos (o WhatsApp o oferece como alternativa oficial ao scan). O código é
+	// segredo de sessão: vai SÓ para `logs\qr.txt`, nunca para o log estruturado.
+	if (sessao.restoreRequired) {
+		const destino = join(logsDir(), "qr.txt");
+		const par = await sock.requestPairingCode(
+			env.CHANNEL_PHONE_E164.replace(/^\+/, ""),
+		);
+		writeFileSync(destino, String(par), { encoding: "utf8" });
+		log.info(
+			{
+				step: "pairing_code",
+				arquivo: destino,
+				dica: "digite o par de 8 digitos no celular",
+			},
+			"par de codigo gravado; aguardando connection === open",
+		);
+	}
+
+	// `readCapabilities()` é chamado na ABERTURA (não antes de conectar): as duas
+	// leituras são de rede e só fazem sentido com o socket `open`. Elas logam
+	// `new_chat_message_cap`/`reachout_timelock_until` — as linhas que o checkpoint
+	// de pareamento confere no `app.log`.
+	const lerCapacidades = async (): Promise<void> => {
+		try {
+			const caps = await readCapabilities(sock);
+			log.info(
+				{
+					step: "capabilities",
+					new_chat_message_cap: caps.newChatMessageCap,
+					reachout_timelock_until: caps.reachoutTimelockUntil
+						? caps.reachoutTimelockUntil.toISOString()
+						: null,
+					account_valid: caps.accountValid,
+				},
+				"capabilities lidas na abertura da conexao",
+			);
+		} catch (erro: unknown) {
+			log.warn(
+				{ event: "capabilities_falhou" },
+				`nao li as capabilities: ${erro instanceof Error ? erro.message : String(erro)}`,
+			);
+		}
+	};
+
+	// Registro explícito dos handlers nomeados do contrato do checkpoint.
+	const { onBaileysConnectionUpdate, onBaileysMessage } = criarHandlersDoCanal({
+		aoConectar: () => {
+			void lerCapacidades();
+		},
+		aoDesconectar: (status) => {
+			const estadoDoSocket = translateDisconnect(status ?? 0);
+			log.warn(
+				{
+					step: "channel_disconnected",
+					sinal: estadoDoSocket.event,
+					terminal: estadoDoSocket.terminal,
+					severity: estadoDoSocket.severity,
+				},
+				"socket do canal caiu",
+			);
+			if (estadoDoSocket.terminal) {
+				// Reconectar num número deslogado/bloqueado é o pior cenário (T-01-14):
+				// fecha e sai em erro em vez de entrar em loop de reconexão.
+				void encerra(conn, log, `canal_${estadoDoSocket.event}`).then(() => {
+					flushLogSync();
+					process.exit(1);
+				});
+			}
+		},
+		aoEventoInbound: (evt) => {
+			if (evt.fromMe === true) {
+				// A linha que o passo 5 do checkpoint procura: prova que `emitOwnEvents`
+				// está ligado e que a auto-mensagem do número dedicado chega como `fromMe`.
+				log.info(
+					{ event: "inbound_fromme", provider_msg_id: evt.providerMsgId ?? null },
+					"mensagem fromMe do numero dedicado recebida",
+				);
+			}
+			void barramento.emit("inbound", evt).catch((erro: unknown) => {
+				log.error(
+					{ event: "inbound_emit_falhou" },
+					`handler de inbound falhou: ${erro instanceof Error ? erro.message : String(erro)}`,
+				);
+			});
+		},
+	});
+	sock.ev.on("connection.update", onBaileysConnectionUpdate);
+	sock.ev.on("messages.upsert", onBaileysMessage);
+	log.info({ step: "channel_ready" }, "canal armado; aguardando eventos");
+
+	// (i) Encerramento gracioso. Kill abrupto corrompe o `useMultiFileAuthState`, e um
 	//     auth corrompido é lido pelo WhatsApp como dispositivo novo — sinal de
-	//     banimento. Fechar o pool e drenar o log é o que torna o Ctrl+C seguro.
+	//     banimento. Fechar o socket, o pool e drenar o log é o que torna o Ctrl+C seguro.
 	const sinal = (nome: NodeJS.Signals) => {
 		void encerra(conn, log, nome).then(() => {
 			flushLogSync();
@@ -148,6 +296,20 @@ const encerra = async (
 	if (keepAlive) {
 		clearInterval(keepAlive);
 		keepAlive = undefined;
+	}
+	// Fecha o socket ANTES do pool: é o fechamento gracioso que evita corromper o
+	// `useMultiFileAuthState` (Armadilha 4). `end(undefined)` encerra sem logout.
+	if (canalSock) {
+		log.info({ step: "channel_close" }, "fechando socket do canal");
+		try {
+			await canalSock.end(undefined);
+		} catch (erro: unknown) {
+			log.warn(
+				{ event: "channel_close_falhou" },
+				`socket nao fechou limpo: ${erro instanceof Error ? erro.message : String(erro)}`,
+			);
+		}
+		canalSock = undefined;
 	}
 	await closeDb(conn);
 };

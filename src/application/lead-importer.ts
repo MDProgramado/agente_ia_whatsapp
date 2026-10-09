@@ -13,8 +13,8 @@
  * - **`originSource`, `legalBasis` e `purpose` são obrigatórios** (R-064). Faltou
  *   um → `DadosIncompletos` e a transação reverte. Lead sem lastro é lead sem base
  *   legal.
- * - **O `opt_out` do banco é autoritativo.** O import NUNCA escreve
- *   `opt_out = EXCLUDED.opt_out`: a fonte só pode ATIVAR (`false`→`true`), e nesse
+ * - **O `opt_out` do banco é autoritativo.** O import NUNCA copia o `opt_out` do
+ *   registro EXCLUDED para a coluna: a fonte só pode ATIVAR (`false`→`true`), e nesse
  *   caso grava o evento em `optout_ledger` (AR-005, R-024). Um caça-leads
  *   desatualizado não reativa quem pediu para sair.
  * - **Dedup por `phone_number` com `wa_jid` preenchido** (LEAD-02): dois registros
@@ -164,7 +164,7 @@ export const importLeads = async (
 					return;
 				}
 
-				// (c) INSERT ... ON CONFLICT DO UPDATE — NUNCA `opt_out = EXCLUDED.opt_out`.
+				// (c) INSERT ... ON CONFLICT DO UPDATE — o `opt_out` nunca é copiado do EXCLUDED.
 				const upsert = await tx
 					.insert(leads)
 					.values({
