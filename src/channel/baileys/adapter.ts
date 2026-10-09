@@ -3,10 +3,10 @@
  *
  * O que este arquivo pode fazer é tão importante quanto o que não pode:
  *
- * - **Não há `sendMedia`/mídia.** `ChannelPort` não declara o método, o CHECK
+ * - **Não há envio de mídia.** `ChannelPort` não declara o método, o CHECK
  *   `messages_kind_check` (`text`,`link`) rejeita o payload no banco, e
- *   `downloadMediaMessage` não é importado — importar seria uma API de mídia no
- *   processo (a barreira do lint em `src/channel/baileys/**` cuida do resto).
+ *   nenhuma API de download de mídia do Baileys é importada — importar seria uma
+ *   API de mídia no processo (a barreira do lint em `src/channel/baileys/**` cuida do resto).
  *   R-038 é "registrar e acionar handoff", não "baixar e entender".
  * - **Retry só em 429 e 5xx**, com backoff exponencial e teto de 3 tentativas.
  *   Nenhum retry em outros 4xx e, em especial, **nenhum em 463** — o bloco do 463

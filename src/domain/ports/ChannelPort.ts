@@ -1,6 +1,7 @@
 /**
  * Mídia é um branded type sem construtor exportado: nenhum código de produção
- * consegue fabricar um valor de mídia para enviar. Não existe `sendMedia`.
+ * consegue fabricar um valor de mídia para enviar. Não existe método de envio
+ * de mídia na interface.
  */
 export type OutboundPart =
 	| { readonly kind: "text" }
