@@ -7,5 +7,12 @@ export default defineConfig({
 		environment: "node",
 		include: ["tests/**/*.test.ts"],
 		globals: false,
+		// Os testes de `tests/application/outbox*.test.ts` e
+		// `dispatcher-choke-point.test.ts` abrem conexão e aplicam `migrate()`.
+		// Rodar arquivos em paralelo faria várias sessões executarem DDL de
+		// migration ao mesmo tempo no mesmo banco (corrida em
+		// `__drizzle_migrations`). Serializar os arquivos elimina a corrida sem
+		// custo de correção — o volume de testes é pequeno.
+		fileParallelism: false,
 	},
 });

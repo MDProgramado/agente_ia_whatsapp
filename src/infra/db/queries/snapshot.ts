@@ -19,7 +19,12 @@ interface SnapshotRow {
 	origin_source: string | null;
 	legal_basis: string | null;
 	purpose: string | null;
-	legal_registered_at: Date | null;
+	/**
+	 * `timestamp` SEM fuso. O `db.execute` do Drizzle (node-postgres) devolve
+	 * TIMESTAMP como **string crua** (`getTypeParser` devolve `(val) => val`), não
+	 * como `Date` — por isso a união. O `paraIso` abaixo normaliza os dois casos.
+	 */
+	legal_registered_at: Date | string | null;
 	first_contact_by_human: boolean;
 	wa_validation_state: string | null;
 	conversation_id: string;
@@ -69,6 +74,28 @@ const paraModo = (bruto: string): Modo =>
 	MODOS.find((m) => m === bruto) ?? "pausado";
 
 /**
+ * Normaliza `legal_registered_at` (o guard AR-011 o lê) para ISO.
+ *
+ * O Drizzle devolve TIMESTAMP como string crua do PostgreSQL. Se a string já traz
+ * fuso (`Z` ou `±hh:mm`), parseia direto; se for ingênua (`2025-01-01 12:00:00`,
+ * o formato que um `timestamp without time zone` produz), assume UTC — a coluna
+ * guarda o instante em UTC e tratá-la como hora local deslocaria a data em horas,
+ * o que importa quando o guard barra registro "no futuro".
+ */
+const paraIso = (valor: Date | string | null): string | null => {
+	if (valor === null) return null;
+	const data =
+		valor instanceof Date
+			? valor
+			: new Date(
+					/[zZ]$|[+-]\d{2}:?\d{2}$/.test(valor)
+						? valor
+						: `${valor.replace(" ", "T")}Z`,
+				);
+	return Number.isNaN(data.getTime()) ? null : data.toISOString();
+};
+
+/**
  * Monta o `GateInput` a partir da linha crua.
  *
  * Exportada para teste: a cobertura de `wa_validation_state` desconhecido ou de
@@ -96,7 +123,7 @@ export const paraGateInput = (
 		originSource: row.origin_source,
 		legalBasis: row.legal_basis,
 		purpose: row.purpose,
-		legalRegisteredAt: row.legal_registered_at?.toISOString() ?? null,
+		legalRegisteredAt: paraIso(row.legal_registered_at),
 		firstContactByHuman: row.first_contact_by_human,
 		waValidationState: paraEstado(row.wa_validation_state),
 	},

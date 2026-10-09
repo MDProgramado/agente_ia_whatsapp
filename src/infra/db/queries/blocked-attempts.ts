@@ -49,6 +49,11 @@ import { blockedAttempts } from "../schema.js";
  */
 export interface NegativoDoGate {
 	readonly conversationId: string;
+	/**
+	 * Lead da conversa, quando o chamador o conhece (o `dispatch` lê do snapshot).
+	 * O relatório de conformidade cruza o negativo com o titular sem um JOIN.
+	 */
+	readonly leadId?: string;
 	readonly ruleReference: GateReason;
 	/** Texto legível do porquê — é o que o painel mostra ao Admin. */
 	readonly detail: string;
@@ -106,6 +111,7 @@ export const recordBlockedAttempt = async (
 	const resultado = await db.execute(sql`
 		insert into ${blockedAttempts} (
 			conversation_id,
+			lead_id,
 			direction,
 			guard,
 			reason_code,
@@ -117,6 +123,7 @@ export const recordBlockedAttempt = async (
 		)
 		values (
 			${input.conversationId},
+			${input.leadId ?? null},
 			${input.direction ?? "out"},
 			${input.guard ?? null},
 			${input.ruleReference},
@@ -253,3 +260,16 @@ export const countBlockedAttemptsByGuard = async (
 	return (resultado as unknown as { rows: { guard: string; total: number }[] })
 		.rows;
 };
+
+/**
+ * Atalho para o painel da Fase 04: "qual regra está disparando mais" desde uma
+ * data, até agora. Delega a `countBlockedAttemptsByGuard` — a agregação já existe
+ * e duplicá-la seria a forma mais fácil de as duas divergirem. Sem `CREATE VIEW`:
+ * o painel é da Fase 04 e uma view agora seria especulação.
+ */
+export const countBlockedByGuard = (
+	db: Db,
+	since: Date,
+	ate: Date = new Date(),
+): Promise<readonly { guard: string; total: number }[]> =>
+	countBlockedAttemptsByGuard(db, since, ate);
