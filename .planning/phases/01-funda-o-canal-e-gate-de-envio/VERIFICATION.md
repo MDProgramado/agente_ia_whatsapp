@@ -37,15 +37,15 @@ gaps:
         issue: "Grava handoff_events e pending_media_block; não transita engagement_mode/handoff_active."
       - path: "src/domain/gate/guards/ar-010.ts"
         issue: "Consome handoffActive/engagementMode/state, mas nenhum produtor escreve esses valores."
-    missing:
+missing:
       - "Nenhuma ação no escopo da Fase 1: a transição de modo pertence ao plano 02-02 (HandoffService + mode_changes)."
-deferred:
-  - truth: "O Admin lê o QR Code, conecta o único número dedicado (WHS-05) e, após queda de rede, reconecta sozinho sem duplicar envio (SC1)."
-    addressed_in: "Phase 1 / plano 01-03 (DEFERIDO — P-004), a ser retomado"
-    evidence: "ROADMAP SC1; 01-03-PLAN (não concluído); 01-03-DIAG.md (CREDS_INVALID); docs/pendencias.md (P-004). Instrução de escopo: 01-03 é deferido e NÃO conta como falha."
-  - truth: "Transição de handoff (`engagement_mode = awaiting_human` + `handoff_active`) na mesma transação do evento."
-    addressed_in: "Phase 2 (02-02 — HandoffService + gatilhos + handoff_events + mode_changes)"
-    evidence: "ROADMAP §Fase 2: '02-02: Handoff e silêncio — HandoffService + gatilhos R-012/R-056/R-065/R-038 + handoff_events + mode_changes'."
+    deferred:
+      - truth: "O Admin lê o QR Code, conecta o único número dedicado (WHS-05) e, após queda de rede, reconecta sozinho sem duplicar envio (SC1)."
+        addressed_in: "Phase 1 / plano 01-03 (DEFERIDO — P-004), a ser retomado"
+        evidence: "ROADMAP SC1; 01-03-PLAN (não concluído); 01-03-DIAG.md (CREDS_INVALID); docs/pendencias.md (P-004). Instrução de escopo: 01-03 é deferido e NÃO conta como falha."
+      - truth: "Transição de handoff (`engagement_mode = awaiting_human` + `handoff_active`) na mesma transação do evento."
+        addressed_in: "Phase 2 (02-02 — HandoffService + gatilhos + handoff_events + mode_changes)"
+        evidence: "ROADMAP §Fase 2: '02-02: Handoff e silêncio — HandoffService + gatilhos R-012/R-056/R-065/R-038 + handoff_events + mode_changes'. Registrado como P-006 em docs/pendencias.md (2026-10-13); truth removida do must_have do 01-05 e REQUIREMENTS.md anotado."
 human_verification:
   - test: "Executar `scripts/notify.ps1 -Sound -Urgent` (ou disparar uma falha crítica real) na máquina do Admin."
     expected: "Toast nativo do Windows com som audível, sem bloqueio por Focus Assist; ExecutionPolicy permite o script."

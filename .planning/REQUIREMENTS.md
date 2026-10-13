@@ -85,13 +85,13 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 - [x] **NFRQ-01**: Banco PostgreSQL local com script/migração de criação e atualização de schema; sem servidor externo (R-031)
 - [x] **NFRQ-02**: Backup manual para pasta local, versionado por data/hora, com restauração sem serviços externos (R-032)
 - [ ] **NFRQ-03**: Modo automático total após a 1ª mensagem manual; bot conduz sozinho e só chama nos handoffs; após handoff → modo copiloto (R-034)
-- [x] **NFRQ-04**: Logs em arquivo + painel de erros + notificação local imediata em falhas críticas (WhatsApp desconectado, API de IA fora, PostgreSQL parado, suspeita de banimento) (R-045)
+- [x] **NFRQ-04**: Logs em arquivo + painel de erros + notificação local imediata em falhas críticas (WhatsApp desconectado, API de IA fora, PostgreSQL parado, suspeita de banimento) (R-045) — **parcela deferida para a Fase 2 (plano 02-02, P-006):** a transição `engagement_mode = awaiting_human` + escrita de `handoff_active` na mesma transação do evento de handoff (truth do must_have do 01-05). A mecânica (logs pino + `event_log` + notificação local + guarda AR-010 que LÊ o sinal) está entregue nesta fase.
 - [ ] **NFRQ-05**: Painel de controle: lista de leads + chat + sugestões da IA + histórico + botões de ação rápida (pausar bot, assumir, devolver ao bot, copiloto); exibe modo em tempo real; sugestões só enviadas com ação explícita (R-046)
 - [x] **NFRQ-06**: Roda em Windows: PostgreSQL local, sessão WhatsApp, painel e notificações nativas compatíveis (R-047)
 
 ### Equipe e Arquitetura (EQUP)
 
-- [ ] **EQUP-01**: Usuário único nesta fase; sem perfis, permissões ou auditoria multiusuário (R-027) — ⚠️ **schema pronto, mas a linha do Admin em `app_users` não existe** (verificação de fase 2026-10-13; pendência **P-005**)
+- [x] **EQUP-01**: Usuário único nesta fase; sem perfis, permissões ou auditoria multiusuário (R-027) — ✅ **linha do Admin seedada pela migration `0005_seed_admin`** (`name='Admin'`, `email='admin@whatsapp-prospect.local'`, `is_active=true`; idempotente via `ON CONFLICT (email) DO NOTHING`); prova em `tests/ops/seed-admin.test.ts` (P-005 → resolvido em 2026-10-13)
 - [x] **EQUP-02**: Arquitetura preparada para multiusuário futuro: campos de responsável, criado por, permissões e auditoria no schema desde já (R-028)
 
 ### Critérios do Piloto (PILO)
@@ -209,10 +209,10 @@ Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/0
 | NFRQ-01 | Phase 1 | Complete |
 | NFRQ-02 | Phase 1 | Complete |
 | NFRQ-03 | Phase 2 | Pending |
-| NFRQ-04 | Phase 1 | Complete |
+| NFRQ-04 | Phase 1 | Complete (transição `awaiting_human` deferida — Fase 2, P-006) |
 | NFRQ-05 | Phase 3 | Pending |
 | NFRQ-06 | Phase 1 | Complete |
-| EQUP-01 | Phase 1 | Pending |
+| EQUP-01 | Phase 1 | Complete |
 | EQUP-02 | Phase 1 | Complete |
 | PILO-01 | Phase 4 | Pending |
 | PILO-02 | Phase 4 | Pending |
@@ -223,10 +223,11 @@ Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/0
 - Mapped to phases: 60
 - Unmapped: 0 ✓
 - Nota: a contagem "67" (R-001…R-067) inclui 7 IDs v2/fora de escopo (R-029, R-030, R-035, R-036, R-039, R-040, R-048); todos os 60 requisitos v1 em REQ-IDs estão mapeados, sem órfãos nem duplicatas.
-- **Fase 1 — fechamento parcial (verificação 2026-10-13, `PASS_WITH_NOTES`):** 17 de 23 requisitos da fase Complete.
+- **Fase 1 — fechamento parcial (pós-correções 2026-10-13, `PASS_WITH_NOTES`):** 18 de 23 requisitos da fase Complete.
   - **5 Pending por deferimento do 01-03 (P-004):** LEAD-01, LEAD-02, LEAD-03, LEAD-04, WHS-05 — escopo do plano 01-03, cuja automação está commitada; falta o checkpoint humano do pareamento QR antes do piloto.
-  - **1 Pending por gap de verificação (P-005):** EQUP-01 — a tabela `app_users` existe com DDL correto, mas está vazia (`count(*)` = 0) e não há nenhum INSERT no repositório; a verdade literal do plano 01-02 ("Admin existe como linha") não é observável. R-027 é satisfeito no nível do schema.
+  - **✅ EQUP-01 resolvido em 2026-10-13 (P-005):** linha do Admin seedada pela migration `0005_seed_admin.sql` (idempotente) + prova em `tests/ops/seed-admin.test.ts` (`app_users >= 1` após a migration).
+  - **→ Parcela deferida para a Fase 2 (P-006):** transição `engagement_mode = awaiting_human` + escrita de `handoff_active` (truth do must_have do 01-05), pertencente ao plano 02-02 — a mecânica de NFRQ-04 (logs + notificação + guarda AR-010 que lê o sinal) está entregue.
 
 ---
 *Requirements defined: 2026-09-28*
-*Last updated: 2026-10-13 after verificação da Fase 1 (17/23 Complete; 01-03 deferido — P-004; EQUP-01 pendente — P-005)*
+*Last updated: 2026-10-13 after correções pós-verificação da Fase 1 (18/23 Complete; 01-03 deferido — P-004; EQUP-01 resolvido — P-005; handoff`awaiting_human` deferido — P-006)*

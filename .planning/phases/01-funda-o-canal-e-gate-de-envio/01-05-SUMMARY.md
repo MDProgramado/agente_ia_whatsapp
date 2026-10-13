@@ -150,7 +150,7 @@ completed: 2026-10-13
 
 **5. `tests/ops/backup-ps1.test.ts` é estático:** valida tokens do script (não o round-trip real); a verificação dinâmica é o checkpoint humano (Task 3), atendido com as 4 contagens.
 
-**6. Porções dependentes de painel:** `NFRQ-04` (painel de erros) e `NFRQ-06` (painel) entregam aqui a **mecânica** (logs pino + `event_log` + notificação local); o painel visual formaliza na Fase 3, conforme a divisão mecânica/comportamento já registrada no ROADMAP.
+**6. Porções dependentes de painel:** `NFRQ-04` (painel de erros) e `NFRQ-06` (painel) entregam aqui a **mecânica** (logs pino + `event_log` + notificação local); o painel visual formaliza na Fase 3, conforme a divisão mecânica/comportamento já registrada no ROADMAP. **Revisão pós-verificação (2026-10-13):** a truth do must_have sobre `engagement_mode = awaiting_human` + escrita de `handoff_active` na mesma transação do handoff **não** é entregue por este plano — a guarda AR-010 só LÊ o sinal (que ainda ninguém escreve) — e foi **deferida para a Fase 2** (plano 02-02, `HandoffService` + `mode_changes`), registrada como **P-006**. O requisito NFRQ-04 permanece Complete pela mecânica entregue.
 
 ---
 

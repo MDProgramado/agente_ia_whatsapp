@@ -164,10 +164,9 @@ trocar de fork, comparar a API (`makeWASocket`, `useMultiFileAuthState`, `Browse
 
 ---
 
-## P-005 — Linha do Admin em `app_users` inexistente ⚠️ ABERTO
+## P-005 — Linha do Admin em `app_users` inexistente ✅ RESOLVIDO (2026-10-13)
 
-**Status:** Aberto. Encontrado na verificação de fase (2026-10-13). Não bloqueia a Fase 2; bloqueia o
-fechamento `passed` da Fase 1 e o uso real das colunas de authorship (R-028) no CRM.
+**Status:** Resolvido. Encontrado na verificação de fase (2026-10-13, gap #1) e correto no mesmo dia.
 
 **Origem:** `.planning/phases/01-funda-o-canal-e-gate-de-envio/VERIFICATION.md` (gap #1).
 
@@ -181,10 +180,37 @@ verdade literal do plano não é observável. As colunas nullable de authorship 
 do Admin, não há `id` para preencher `leads.created_by` / `conversations.responsible_user_id` /
 `messages.author_user_id`.
 
-**Como fechar:** escolher o ponto onde a linha nasce — (a) migration de seed idempotente
-(`INSERT ... ON CONFLICT DO NOTHING`), (b) bootstrap no boot junto do `channel_accounts`, ou (c) passo
-manual documentado do Admin. Requer **nome e e-mail** do Admin (a tabela tem `app_users_email_unique`).
-Depois, re-verificar EQUP-01.
+**Correção aplicada (2026-10-13, commit fix(01-02)):** migration de seed idempotente
+`0005_seed_admin.sql` — `INSERT INTO app_users (name, email) VALUES ('Admin', 'admin@whatsapp-prospect.local')
+ON CONFLICT (email) DO NOTHING`. **Sem `role='ADMIN'` de propósito:** a tabela não tem coluna `role`
+(R-027 adia perfis; adicioná-la seria mudança de schema). E-mail é placeholder porque `email` é NOT NULL e
+a linha nasce aqui; o Admin pode trocá-lo depois. Prova: `tests/ops/seed-admin.test.ts` (`app_users >= 1` após
+`openDb`, que roda `migrate()`). Re-verificado em 2026-10-13 — EQUP-01 fechado.
+
+---
+
+## P-006 — Transição de handoff → `engagement_mode = awaiting_human` ⚠️ DIFERIDO (Fase 2)
+
+**Status:** Deferido à **Fase 2** (plano **02-02** — HandoffService + gatilhos + `mode_changes`), por decisão
+do Admin em 2026-10-13. Não bloqueia o fechamento da Fase 1.
+
+**Origem:** `.planning/phases/01-funda-o-canal-e-gate-de-envio/VERIFICATION.md` (gap #2) — truth do must_have
+do plano 01-05 (NFRQ-04/AR-010).
+
+**Sintoma:** a verdade de plano "uma notificação de handoff para imediatamente o envio — o `inbound-handler`
+grava `handoff_events` **e** muda `engagement_mode` para `awaiting_human` na mesma transação" não é
+observável na Fase 1: **nenhum código do `src` escreve** `conversations.engagement_mode = 'awaiting_human'`
+nem `handoff_active = true`. A guarda **AR-010** (`ar010_handoff_ativo`) apenas **lê** esses campos.
+O `HandoffService` + `mode_changes` estão explicitamente alocados à Fase 2 (ROADMAP, plano 02-02), então a
+truth é parcialmente forward-looking.
+
+**O que já está entregue na Fase 1 (mecânica):** `handoff_events`/`pending_media_block` escritos
+(AR-009 bloqueia mídia recebida), guarda AR-010 pronta para bloquear quando o sinal existir, notificação
+local (R-013) e logs. Falta exatamente o **escritor** do sinal, que é escopo do 02-02 junto do LLM/gatilhos
+de handoff (R-012/R-038/R-056/R-065).
+
+**Como fechar:** no plano 02-02, implementar o `HandoffService` que grava `handoff_events` + muda
+`engagement_mode`/`handoff_active` na mesma transação; re-verificar a truth do must_have.
 
 ---
 
@@ -213,4 +239,4 @@ Resultados atestados por **humano** (e não por teste automatizado), com data e 
 
 ---
 
-*Criado em 2026-10-05 (Task 4 do plano 01-02). P-001, P-002, P-003, P-004 e P-005 (2026-10-13).*
+*Criado em 2026-10-05 (Task 4 do plano 01-02). P-001, P-002, P-003, P-004 e P-005 (2026-10-13); P-006 (2026-10-13).*
