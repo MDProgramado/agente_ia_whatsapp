@@ -12,6 +12,7 @@ consiga corrigir com segurança é corrigido e vira commit, não pendência.
 ## P-001 — Toast nativo do Windows sem AUMID registrado ✅ RESOLVIDO
 
 **Status:** Resolvido em 2026-10-05. Decisão de não corrigir o script; a pendência fica fechada.
+**Verificação humana (2026-10-05):** o toast foi **exibido de verdade** — `npm run notify -- -Title "Teste R-013" -Message "Verificacao" -Urgent` apresentou o toast "WhatsApp Prospecção" após o registro do AUMID abaixo. Não foi só `toast_sent` no log; a entrega visual foi atestada.
 
 **Origem:** Task 6 do plano 01-01.
 
@@ -184,6 +185,19 @@ do Admin, não há `id` para preencher `leads.created_by` / `conversations.respo
 (`INSERT ... ON CONFLICT DO NOTHING`), (b) bootstrap no boot junto do `channel_accounts`, ou (c) passo
 manual documentado do Admin. Requer **nome e e-mail** do Admin (a tabela tem `app_users_email_unique`).
 Depois, re-verificar EQUP-01.
+
+---
+
+## Verificações humanas registradas
+
+Resultados atestados por **humano** (e não por teste automatizado), com data e evidência:
+
+- **Toast R-013 (2026-10-05):** `npm run notify` exibiu o toast "WhatsApp Prospecção" de verdade
+  após o registro manual do AUMID `WhatsAppProspect.Automacao` em `HKCU\SOFTWARE\Classes\AppUserModelId`
+  (P-001). Causa raiz confirmada: AUMID ausente, não o serviço `WpnUserService`.
+- **Restauração de backup (2026-10-13):** `backup.ps1 -Verify` terminou com exit 0 — `pg_restore` numa
+  base temporária com as 4 contagens conferidas contra a origem: leads 2=2, conversations 0=0,
+  messages 0=0, daily_counters 0=0 (NFRQ-02, R-032).
 
 ---
 
