@@ -91,7 +91,7 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 
 ### Equipe e Arquitetura (EQUP)
 
-- [x] **EQUP-01**: Usuário único nesta fase; sem perfis, permissões ou auditoria multiusuário (R-027)
+- [ ] **EQUP-01**: Usuário único nesta fase; sem perfis, permissões ou auditoria multiusuário (R-027) — ⚠️ **schema pronto, mas a linha do Admin em `app_users` não existe** (verificação de fase 2026-10-13; pendência **P-005**)
 - [x] **EQUP-02**: Arquitetura preparada para multiusuário futuro: campos de responsável, criado por, permissões e auditoria no schema desde já (R-028)
 
 ### Critérios do Piloto (PILO)
@@ -212,7 +212,7 @@ Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/0
 | NFRQ-04 | Phase 1 | Complete |
 | NFRQ-05 | Phase 3 | Pending |
 | NFRQ-06 | Phase 1 | Complete |
-| EQUP-01 | Phase 1 | Complete |
+| EQUP-01 | Phase 1 | Pending |
 | EQUP-02 | Phase 1 | Complete |
 | PILO-01 | Phase 4 | Pending |
 | PILO-02 | Phase 4 | Pending |
@@ -223,8 +223,10 @@ Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/0
 - Mapped to phases: 60
 - Unmapped: 0 ✓
 - Nota: a contagem "67" (R-001…R-067) inclui 7 IDs v2/fora de escopo (R-029, R-030, R-035, R-036, R-039, R-040, R-048); todos os 60 requisitos v1 em REQ-IDs estão mapeados, sem órfãos nem duplicatas.
-- **Fase 1 — fechamento parcial:** 18 de 23 requisitos da fase Complete. Os 5 Pending (LEAD-01, LEAD-02, LEAD-03, LEAD-04, WHS-05) são exatamente o escopo do plano 01-03, **deferido como P-004** (pareamento do número dedicado não concluído). A automação do 01-03 está commitada; falta o checkpoint humano do pareamento QR antes do piloto.
+- **Fase 1 — fechamento parcial (verificação 2026-10-13, `PASS_WITH_NOTES`):** 17 de 23 requisitos da fase Complete.
+  - **5 Pending por deferimento do 01-03 (P-004):** LEAD-01, LEAD-02, LEAD-03, LEAD-04, WHS-05 — escopo do plano 01-03, cuja automação está commitada; falta o checkpoint humano do pareamento QR antes do piloto.
+  - **1 Pending por gap de verificação (P-005):** EQUP-01 — a tabela `app_users` existe com DDL correto, mas está vazia (`count(*)` = 0) e não há nenhum INSERT no repositório; a verdade literal do plano 01-02 ("Admin existe como linha") não é observável. R-027 é satisfeito no nível do schema.
 
 ---
 *Requirements defined: 2026-09-28*
-*Last updated: 2026-10-13 after plan 01-05 (Fase 1 fechada parcialmente: 18/23; 01-03 deferido — P-004)*
+*Last updated: 2026-10-13 after verificação da Fase 1 (17/23 Complete; 01-03 deferido — P-004; EQUP-01 pendente — P-005)*

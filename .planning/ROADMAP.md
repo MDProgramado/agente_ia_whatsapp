@@ -37,7 +37,6 @@ O sintetizador propôs 4 fases (Fundação+Canal+Gate ⮑ IA+Handoff+Shadow ⮑ 
 ### Phase 1: Fundação, Canal e Gate de Envio
 
 **Goal**: O Admin conecta o único número dedicado, o sistema tem estado durável (Postgres local) e nenhuma mensagem sai sem passar por um único gate que recusa toda fronteira proibida — com as travas anti-ban (463, contatos novos, janela) armadas desde o primeiro dia. R-001 é restrição transversal: o primeiro contato é sempre manual, feito pelo Admin.
-**Mode**: mvp
 **Depends on**: Nothing (first phase)
 **Requirements**: OPRE-01, LEAD-01, LEAD-02, LEAD-03, LEAD-04, WHS-01, WHS-03, WHS-04, WHS-05, CONV-11, CONV-13, CONV-14, INTR-01, COMP-02, COMP-03, COMP-04, COMP-05, NFRQ-01, NFRQ-02, NFRQ-04, NFRQ-06, EQUP-01, EQUP-02
 **Success Criteria** (what must be TRUE):

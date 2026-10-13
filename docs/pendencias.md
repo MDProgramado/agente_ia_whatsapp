@@ -163,6 +163,30 @@ trocar de fork, comparar a API (`makeWASocket`, `useMultiFileAuthState`, `Browse
 
 ---
 
+## P-005 — Linha do Admin em `app_users` inexistente ⚠️ ABERTO
+
+**Status:** Aberto. Encontrado na verificação de fase (2026-10-13). Não bloqueia a Fase 2; bloqueia o
+fechamento `passed` da Fase 1 e o uso real das colunas de authorship (R-028) no CRM.
+
+**Origem:** `.planning/phases/01-funda-o-canal-e-gate-de-envio/VERIFICATION.md` (gap #1).
+
+**Sintoma:** o must_have do plano 01-02 é "um único usuário administrador existe como **linha** em
+`app_users` (EQUP-01/R-027)". A tabela existe com o DDL correto (migration `0003_phase01_02_tabelas.sql`),
+mas está **vazia** (`SELECT count(*) FROM app_users` = 0) e **não há nenhum INSERT** dessa linha em todo o
+repositório (nenhum seed, bootstrap, `launch.cmd` ou código de boot).
+
+**Impacto:** R-027 ("usuário único; sem perfis/permissões") está satisfeito no nível do schema, mas a
+verdade literal do plano não é observável. As colunas nullable de authorship (EQUP-02) existem; sem a linha
+do Admin, não há `id` para preencher `leads.created_by` / `conversations.responsible_user_id` /
+`messages.author_user_id`.
+
+**Como fechar:** escolher o ponto onde a linha nasce — (a) migration de seed idempotente
+(`INSERT ... ON CONFLICT DO NOTHING`), (b) bootstrap no boot junto do `channel_accounts`, ou (c) passo
+manual documentado do Admin. Requer **nome e e-mail** do Admin (a tabela tem `app_users_email_unique`).
+Depois, re-verificar EQUP-01.
+
+---
+
 ## Como este arquivo é usado
 
 - **Antes de dar um plano por concluído:** ler este arquivo e conferir se alguma pendência mudou
@@ -175,4 +199,4 @@ trocar de fork, comparar a API (`makeWASocket`, `useMultiFileAuthState`, `Browse
 
 ---
 
-*Criado em 2026-10-05 (Task 4 do plano 01-02). P-001, P-002, P-003 e P-004.*
+*Criado em 2026-10-05 (Task 4 do plano 01-02). P-001, P-002, P-003, P-004 e P-005 (2026-10-13).*
