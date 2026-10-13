@@ -56,6 +56,7 @@ human_verification:
   - test: "Nomear o encarregado (e substituto) em `docs/lgpd/encarregado-dpo.md`, substituindo os marcadores `<!-- PREENCHER ... -->`."
     expected: "Seção 1 preenchida com nome, cargo, e-mail; SC5 ('Encarregado nomeado com substituto') satisfeito."
     why_human: "COMP-02/SC5 — o executor não conhece o nome/cargo do Admin; os marcadores PREENCHER são intencionais."
+    verified: "2026-10-13 — nomeado Maicon Douglas Alves de Oliveira (Admin/Proprietário, mdprogamacao@outlook.com, +5571989211292 dedicado a LGPD). Seção 6/7 atualizadas."
   - test: "Realizar o pareamento QR do número dedicado (WHS-05/OPRE-01)."
     expected: "Sessão Baileys pareada; reconexão automática sem duplicar envio."
     why_human: "Requer o telefone físico; bloqueado por CREDS_INVALID (P-004, deferido)."
@@ -99,9 +100,9 @@ Nenhuma afirmação de SUMMARY foi aceita como evidência. Cada verdade foi chec
 | SC2 | Nenhuma mensagem sai sem o gate único `evaluatePolicy`; 12 property tests; choke-point por grep; `noRestrictedImports`; canal só texto/link (CONV-14, CONV-11) | ✓ VERIFIED | 12 arquivos `tests/gate/ar-0*.test.ts` com `fc.assert`+seed 20260928; `tests/lint/choke-point.grep.test.ts` força exatamente `{src/application/dispatcher.ts}`; `biome.json` `noRestrictedImports`; `ChannelPort.ts` só expõe `sendText`. |
 | SC3 | Cota 20 leads/dia + cap via `fetchNewChatMessageCap()`; 463 sem retry; `NUMERO_INVALIDO` terminal (WHS-04, LEAD-03) | ✓ VERIFIED (código) | `src/channel/baileys/capabilities.ts` (cap/reachout + estado numérico); `adapter.ts` trata 463 → `markNumberInvalid` + `NUMERO_INVALIDO`, sem retry (linhas 175-193, 256-317). *Nota: o cap só é lido com sessão pareada — a leitura real depende de 01-03.* |
 | SC4 | Lead importado só com origem/base legal/finalidade (AR-011, COMP-03); duplicidades sinalizadas; nada apagado (LEAD-04/01/02) | ✓ VERIFIED (código) | `src/application/lead-importer.ts`: exige `originSource`/`legalBasis`/`purpose` (linha 147-150); `ON CONFLICT DO UPDATE` sem copiar `opt_out` (167-180); opt-out preservado via `optout_ledger`; `trg_leads_no_cascade` impede cascata. |
-| SC5 | Falha crítica → log + notificação local (som/pop-up) provada na máquina; backup versionado restaura com contagem; docs LGPD versionados (COMP-02, COMP-04, NFRQ-02/04/06) | ⚠️ PARCIAL | Código: `health-monitor.ts` (croner+severidade+notify por transição), `notifier.ts` (`-Sound` por padrão, `-Urgent` se crítico), `backup.ps1` (major conferido, `_pg18`, exclui auth) e docs LGPD existem. **Gaps:** (a) `encarregado-dpo.md` ainda tem `<!-- PREENCHER: nome -->` — encarregado NÃO nomeado; (b) verificações humanas de toast/restauração pendentes. |
+| SC5 | Falha crítica → log + notificação local (som/pop-up) provada na máquina; backup versionado restaura com contagem; docs LGPD versionados (COMP-02, COMP-04, NFRQ-02/04/06) | ⚠️ PARCIAL → **✅ FECHADO em 2026-10-13** | Código: `health-monitor.ts` (croner+severidade+notify por transição), `notifier.ts` (`-Sound` por padrão, `-Urgent` se crítico), `backup.ps1` (major conferido, `_pg18`, exclui auth) e docs LGPD existem. **Gaps fechados em 2026-10-13:** (a) encarregado **nomeado** (`encarregado-dpo.md`, sem `<!-- PREENCHER -->`); (b) verificações humanas de toast (2026-10-05) e restauração (2026-10-13) registradas. |
 
-**Placar dos SC:** 3/5 verificados (SC2, SC3, SC4). SC1 deferido (01-03). SC5 parcial.
+**Placar dos SC:** 4/5 verificados (SC2, SC3, SC4 + SC5 fechado em 2026-10-13). SC1 deferido (01-03).
 
 ---
 

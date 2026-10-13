@@ -10,18 +10,22 @@ Este documento é operacional. Ele diz quem responde, em quanto tempo, e o que e
 
 | Campo | Valor |
 |-------|-------|
-| Encarregado | **<!-- PREENCHER: nome do encarregado -->** |
-| Cargo | **<!-- PREENCHER: cargo -->** |
-| E-mail de contato | **<!-- PREENCHER: e-mail dedicado -->** |
-| Telefone de contato | o telefone do Admin, dedicado a vendas |
+| Encarregado | **Maicon Douglas Alves de Oliveira** |
+| Cargo | **Admin / Proprietário** |
+| E-mail de contato | **mdprogamacao@outlook.com** |
+| Telefone de contato | **+5571989211292** — canal dedicado a pedidos LGPD (não é o número de vendas) |
+| Data de nomeação | **2026-10-13** |
 | Titularidade do tratamento | o Admin do sistema |
 
-Os marcadores `PREENCHER` são intencionais. Um encarregado fictício é pior do que um
-encarregado declarado ausente: é um endereço que não responde, e o prazo do Art. 41 começa a
-correr mesmo assim.
+Os marcadores `PREENCHER` que existiam aqui eram intencionais: um encarregado fictício é pior do
+que um encarregado declarado ausente, porque é um endereço que não responde e o prazo do Art. 41
+começa a correr mesmo assim.
 
-Enquanto o marcador não for preenchido, o canal de contato do titular é **o e-mail do Admin
-e o telefone do Admin** — ver `docs/lgpd/canal-do-titular.md`.
+**Encarregado nomeado em 2026-10-13 (SC5, Opção A):** o Admin acumula a função de encarregado no
+piloto. A dualidade de papéis é conhecida e temporária — o Admin é ao mesmo tempo o responsável
+pelo tratamento e a pessoa que responde aos titulares (seção 6, opção 1). O canal de contato do
+titular é o e-mail **mdprogamacao@outlook.com** ou o telefone **+5571989211292** (dedicado a
+pedidos LGPD) — ver `docs/lgpd/canal-do-titular.md`.
 
 ## 2. Prazo de resposta
 
@@ -95,8 +99,9 @@ figura, não o seu dimensionamento.
 
 Três saídas válidas, em ordem de preferência:
 
-1. **O Admin é o encarregado.** Aceitável no piloto. Preencha a seção 1 com o nome do Admin
-   e registre que a dualidade de papéis é conhecida e temporária.
+1. **O Admin é o encarregado.** Aceitável no piloto. ✅ **É a situação deste documento desde
+   2026-10-13** — a seção 1 está preenchida e a dualidade de papéis está registrada ali e na
+   seção 7.
 2. **Consultoria externa como encarregado (DPO outsourced).** Contratação pontual, com alguém
    nomeado e com e-mail que responde. Não exige dedicado nem equipe interna.
 3. **Titular do negócio como encarregado.** Válido quando o titular é pessoa física. Atenção:
@@ -113,3 +118,4 @@ contrário.
 |------|-----------|
 | 2026-10-01 | Documento criado no plano 01-01 (Task 4 do 01-02), com o marcador `PREENCHER` |
 | 2026-10-05 | Reescrito como procedimento operacional: prazo de 5 dias úteis, o que o encarregado **não** faz, e a seção de nomeação |
+| 2026-10-13 | **Encarregado nomeado (SC5, Opção A):** Maicon Douglas Alves de Oliveira — Admin/Proprietário; e-mail mdprogamacao@outlook.com; telefone +5571989211292 (dedicado a pedidos LGPD). Dualidade de papéis conhecida e temporária. |
