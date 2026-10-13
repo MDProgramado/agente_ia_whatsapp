@@ -76,7 +76,9 @@ describe("resolveNextState (FSM pura)", () => {
 
 	it("hint válida em ALLOWED[prev] avança o estado", () => {
 		expect(
-			resolveNextState("novo", "qualificando", { engagementMode: "bot_active" }),
+			resolveNextState("novo", "qualificando", {
+				engagementMode: "bot_active",
+			}),
 		).toBe("qualificando");
 		expect(
 			resolveNextState("awaiting_human", "human", {
@@ -96,16 +98,12 @@ describe("resolveNextState (FSM pura)", () => {
 	describe("property tests (seed 20261013)", () => {
 		it("hint fora de ALLOWED[prev] NUNCA muda o estado (numRuns 300)", () => {
 			fc.assert(
-				fc.property(
-					fc.constantFrom(...ESTADOS),
-					fc.string(),
-					(prev, hint) => {
-						fc.pre(!(ALLOWED[prev] as readonly string[]).includes(hint));
-						expect(
-							resolveNextState(prev, hint, { engagementMode: "bot_active" }),
-						).toBe(prev);
-					},
-				),
+				fc.property(fc.constantFrom(...ESTADOS), fc.string(), (prev, hint) => {
+					fc.pre(!(ALLOWED[prev] as readonly string[]).includes(hint));
+					expect(
+						resolveNextState(prev, hint, { engagementMode: "bot_active" }),
+					).toBe(prev);
+				}),
 				{ numRuns: 300, seed: SEMENTE },
 			);
 		});

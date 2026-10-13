@@ -49,7 +49,9 @@ describe("maskPii", () => {
 	});
 
 	it("mascara a 1ª mensagem do Admin", () => {
-		expect(maskPii(payloadCru()).adminPrimeiraMensagem).not.toMatch(SEM_TELEFONE);
+		expect(maskPii(payloadCru()).adminPrimeiraMensagem).not.toMatch(
+			SEM_TELEFONE,
+		);
 	});
 
 	it("mascara o histórico de conversa", () => {
