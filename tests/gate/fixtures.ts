@@ -13,6 +13,14 @@ import type { OutboundPart } from "../../src/domain/ports/ChannelPort.js";
 
 export const TZ = "America/Sao_Paulo";
 
+/**
+ * Modo de engajamento `shadow` (Fase 02, D-18): a conversa rascunha sem tocar o
+ * número dedicado. Exportado aqui para que um teste que precise do modo não
+ * reintroduza a string à mão — o valor tem de casar com a união
+ * `GateInput["conversation"]["engagementMode"]` e com o CHECK do banco.
+ */
+export const MODO_SHADOW = "shadow" as const;
+
 /** Terça-feira, 29/09/2026, 13h00 em São Paulo — dentro da janela e dia útil. */
 export const DIA_UTIL_DENTRO_DA_JANELA = "2026-09-29T16:00:00.000Z";
 

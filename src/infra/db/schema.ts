@@ -38,6 +38,7 @@ import {
 	index,
 	integer,
 	jsonb,
+	numeric,
 	pgTable,
 	primaryKey,
 	smallint,
@@ -189,9 +190,12 @@ export const conversations = pgTable(
 			"conversations_state_check",
 			sql`state IN ('novo', 'aquecimento', 'qualificando', 'aquecido', 'awaiting_human', 'human', 'copilot', 'pausado', 'encerrado')`,
 		),
+		// `'shadow'` entra na Fase 02 (D-18): a conversa rascunha sem tocar o
+		// número dedicado. É a ÚNICA fonte de verdade do modo shadow — o booleano
+		// global `settings.shadowMode` do ADR-010 fica superseded (Pitfall 3).
 		check(
 			"conversations_engagement_mode_check",
-			sql`engagement_mode IN ('bot_active', 'awaiting_human', 'human', 'copilot', 'pausado')`,
+			sql`engagement_mode IN ('bot_active', 'awaiting_human', 'human', 'copilot', 'pausado', 'shadow')`,
 		),
 	],
 );
@@ -469,11 +473,11 @@ export const modeChanges = pgTable(
 	(t) => [
 		check(
 			"mode_changes_to_mode_check",
-			sql`to_mode IN ('bot_active', 'awaiting_human', 'human', 'copilot', 'pausado')`,
+			sql`to_mode IN ('bot_active', 'awaiting_human', 'human', 'copilot', 'pausado', 'shadow')`,
 		),
 		check(
 			"mode_changes_from_mode_check",
-			sql`from_mode IN ('bot_active', 'awaiting_human', 'human', 'copilot', 'pausado')`,
+			sql`from_mode IN ('bot_active', 'awaiting_human', 'human', 'copilot', 'pausado', 'shadow')`,
 		),
 		check("mode_changes_actor_check", sql`actor IN ('bot', 'admin', 'system')`),
 		index("mode_changes_conversation_created_idx").on(
@@ -664,3 +668,79 @@ export const settings = pgTable("settings", {
 		.defaultNow(),
 	updatedBy: uuid("updated_by").references(() => appUsers.id),
 });
+
+/**
+ * Metadados de cada execução da LLM (D-05, R-045). **Append-only.**
+ *
+ * Guarda só METADADOS — modelo, tokens, latência, custo e as versões do prompt e
+ * da política. **Nunca** o corpo do prompt nem o texto gerado: o corpo da
+ * mensagem vive em `messages`, que é a tabela auditável com prazo de retenção, e
+ * duplicá-lo aqui colocaria PII fora desse registro (Pitfall 4, T-02-05). O
+ * logger segue a mesma regra (`redact`).
+ *
+ * `message_id` é nullable e SEM cascata (padrão `outbox.message_id`): a corrida
+ * de EXTRAÇÃO (Camada 1) acontece ANTES de existir rascunho; só a corrida de
+ * geração tem `message_id` para amarrar.
+ *
+ * Append-only é garantido no banco pelo trigger `trg_llm_runs_append_only`
+ * (reuso de `fn_append_only`, migration 0006) + `REVOKE UPDATE, DELETE`: um
+ * metadado de execução não é corrigido, é re-medido.
+ */
+export const llmRuns = pgTable(
+	"llm_runs",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		messageId: uuid("message_id").references(() => messages.id),
+		model: text("model").notNull(),
+		promptTokens: integer("prompt_tokens"),
+		completionTokens: integer("completion_tokens"),
+		latencyMs: integer("latency_ms"),
+		/** Custo em USD da chamada; a escala cobre o custo por milhão de tokens. */
+		costUsd: numeric("cost_usd", { precision: 12, scale: 6 }),
+		/** Versão do template de prompt — o que permite comparar qualidade entre revisões. */
+		promptVersion: text("prompt_version").notNull(),
+		/** Versão do mapa de guardas/FSM vigente na corrida. */
+		policyVersion: text("policy_version").notNull(),
+		zodParseOk: boolean("zod_parse_ok").notNull(),
+		canaryOk: boolean("canary_ok").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+	},
+	(t) => [index("llm_runs_message_idx").on(t.messageId)],
+);
+
+/**
+ * Decisão de revisão de um rascunho em shadow (D-03/D-06): aprovar, editar ou
+ * descartar. **Append-only.**
+ *
+ * É um EVENTO, não um estado: `messages` é imutável (R-043), então
+ * `UPDATE messages SET status='sent'` é impossível — a promoção de um rascunho
+ * tem de ser um novo registro. A pergunta "quem aprovou o quê, quando" é
+ * respondida por linha, e a linha nunca é corrigida.
+ *
+ * `edited_text` só tem conteúdo quando `decision='edited'`; é nullable porque
+ * aprovar/descartar não carregam texto.
+ */
+export const reviewEvents = pgTable(
+	"review_events",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		messageId: uuid("message_id")
+			.notNull()
+			.references(() => messages.id),
+		decision: text("decision").notNull(),
+		actor: text("actor").notNull(),
+		editedText: text("edited_text"),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+	},
+	(t) => [
+		check(
+			"review_events_decision_check",
+			sql`decision IN ('approved', 'edited', 'discarded')`,
+		),
+		index("review_events_message_created_idx").on(t.messageId, t.createdAt),
+	],
+);

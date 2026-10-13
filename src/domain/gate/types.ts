@@ -60,7 +60,9 @@ export interface GateInput {
 			| "awaiting_human"
 			| "human"
 			| "copilot"
-			| "pausado";
+			| "pausado"
+			/** Fase 02 (D-18): rascunho sem tocar o número dedicado. */
+			| "shadow";
 		handoffActive: boolean;
 		/**
 		 * Sinaliza mídia recebida ainda não tratada (AR-009). O 01-01 cria a coluna

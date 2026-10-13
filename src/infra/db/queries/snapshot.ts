@@ -9,7 +9,7 @@
 import { sql } from "drizzle-orm";
 import type { GateInput } from "../../../domain/gate/types.js";
 import type { Db } from "../client.js";
-import { channelAccounts, conversations, leads } from "../schema.js";
+import { channelAccounts, conversations, leads, settings } from "../schema.js";
 
 /** A linha crua do `SELECT`, já com os nomes do schema (snake_case). */
 interface SnapshotRow {
@@ -35,13 +35,17 @@ interface SnapshotRow {
 	// registra o bloqueio; o 01-04 consome este sinal no guard `ar-009.ts`.
 	pending_media_block: boolean;
 	/**
-	 * O kill switch é lido de `channel_accounts.is_active`: conta INATIVA é kill
-	 * switch ligado. Não existe coluna `kill_switch` — o botão de emergência do
-	 * painel da Fase 04 desativa a conta, e o gate precisa do mesmo sinal.
+	 * O kill switch tem DUAS fontes, unidas por `OR` (D-02):
 	 *
-	 * A inversão acontece no SQL (`not coalesce(...)`) e não no TypeScript porque
-	 * o nome da coluna e o nome do campo precisam concordar: `kill_switch` aqui
-	 * significa "envio proibido", e `is_active = true` significa "envio
+	 * 1. `channel_accounts.is_active` — conta INATIVA é kill switch ligado. É o
+	 *    botão de emergência do painel da Fase 04, que desativa a conta.
+	 * 2. `settings.operational_mode = 'paused'` — o interruptor global da Fase 02
+	 *    (plano 02-03). O valor é `jsonb`; `#>> '{}'` extrai o escalar como texto
+	 *    (`"paused"` → `paused`). `coalesce(..., '')` cobre a ausência da chave.
+	 *
+	 * A inversão de (1) acontece no SQL (`not coalesce(...)`) e não no TypeScript
+	 * porque o nome da coluna e o nome do campo precisam concordar: `kill_switch`
+	 * aqui significa "envio proibido", e `is_active = true` significa "envio
 	 * permitido". Sem o `not`, uma conta ativa — o caso normal — devolveria
 	 * `kill_switch = true` e o gate bloquearia toda mensagem do sistema.
 	 * `coalesce(..., false)` antes do `not` porque um `LEFT JOIN` sem conta
@@ -60,13 +64,20 @@ const paraEstado = (bruto: string | null): EstadoValidacao | null => {
 	return achado ?? null;
 };
 
-/** `engagement_mode` idem: um valor inesperado no banco vira `null`, nunca lixo. */
+/**
+ * `engagement_mode` idem: um valor inesperado no banco vira `pausado`, nunca
+ * lixo. `shadow` (Fase 02, D-18) PRECISA constar: sem ele, `paraModo` cairia em
+ * `pausado` e SILENCIARIA uma conversa que deveria estar rascunhando — o modo
+ * mais restritivo por acidente, exatamente o erro que este default existe para
+ * evitar no caso inválido, mas que aqui seria o caso válido.
+ */
 const MODOS = [
 	"bot_active",
 	"awaiting_human",
 	"human",
 	"copilot",
 	"pausado",
+	"shadow",
 ] as const;
 type Modo = (typeof MODOS)[number];
 
@@ -171,10 +182,14 @@ export const loadGateSnapshot = async (
 			c.engagement_mode,
 			c.handoff_active,
 			c.pending_media_block,
-			not coalesce(a.is_active, false) as kill_switch
+			(
+				not coalesce(a.is_active, false)
+				or coalesce(s.value #>> '{}', '') = 'paused'
+			) as kill_switch
 		from ${conversations} c
 		left join ${leads} l on l.id = c.lead_id
 		left join ${channelAccounts} a on a.id = c.channel_account_id
+		left join ${settings} s on s.key = 'operational_mode'
 		where c.id = ${conversationId}
 	`);
 

@@ -43,6 +43,13 @@
       "when": 1791899243555,
       "tag": "0005_seed_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791916727406,
+      "tag": "0006_shadow_and_llm_runs",
+      "breakpoints": true
     }
   ]
 }
