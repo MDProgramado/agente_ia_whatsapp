@@ -83,8 +83,16 @@ Plans:
 
 Plans:
 
+**Wave 1**
+
 - [ ] 02-01-PLAN.md — LlmPort e FSM hintada + migração 0006: `ScriptedLlmAdapter` primeiro; sanduíche de 3 camadas (LLM extrai intent → código decide → LLM responde com a decisão), schema Zod com campos-canário, `resolveNextState()` com guardas locais vencendo a hint, mascaramento de PII em todo egresso, rascunho append-only em `messages(origin='ai_suggestion')` + `llm_runs` (CONV-01/CONV-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 02-02-PLAN.md — Handoff e silêncio: `HandoffService` atômico (handoff_events + mode_changes + engagement_mode='awaiting_human' numa transação) + gatilhos R-012/R-056/R-065/R-038 + silêncio total (D-13), `NotifyPort` (som + pop-up), matcher determinístico de opt-out pt-BR (autoridade) + reforço por sinal da LLM, qualificação auditável (verba + decisão) com histórico de status corrigível (P-006 descarregado)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 02-03-PLAN.md — Shadow review e gate de saída: CLI `shadow:list/approve/edit/discard` (decisões append-only) + kill switch global de 1 comando (`mode`), pós-gate de conteúdo L4 (CONV-07) validado por corpus adversário, relatório shadow gerado do banco (D-17) e promoção explícita shadow→ativo (D-18)
 
 ### Phase 3: Cadência, Operação e Painel

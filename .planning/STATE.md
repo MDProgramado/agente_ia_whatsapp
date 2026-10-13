@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-10-13T18:00:00.000Z"
+last_updated: "2026-10-13T18:16:08.068Z"
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 5
+  total_plans: 8
   completed_plans: 4
-  percent: 80
+  percent: 0
 ---
 
 # Estado do Projeto
@@ -25,7 +25,7 @@ Ver: `.planning/PROJECT.md` (atualizado 2026-09-28)
 
 Fase: 1 de 4 (Fundação, Canal e Gate de Envio)
 Plano: 5 de 5 na fase atual (01-01, 01-02, 01-04 e 01-05 concluídos; 01-03 deferido — P-004)
-Status: Phase 01 fechada parcialmente (4/5 planos; verificação 2026-10-13 = PASS_WITH_NOTES; 5 requisitos deferidos com o 01-03 (P-004); EQUP-01 resolvido (P-005); handoff→`awaiting_human` deferido à Fase 2 (P-006); **18/23 Complete**)
+Status: Ready to execute
 Última atividade: 2026-10-13 — Wave 4: plano 01-05 (Operação e humanização) concluído com 3/3 tasks, incluindo o checkpoint humano de backup. `humanize.ts` (atraso determinístico por hash + digitação + quebra preservando a concatenação) ligado **dentro** do branch `send` do `dispatch` (mantém o choke-point único de `sendText` do 01-04) + fila **por lead** (`queue-per-lead.ts`); `health-monitor` (croner 30s, severidade warn/critical, notificação só por transição); `daily-report` apurando os 2 objetivos do piloto a partir de `status_history`; `env-check` com 8 códigos nomeados no boot; `backup.ps1` com `pg_dump -Fc` carimbado `_pg18` e `-Verify` restaurado de verdade (4 contagens batendo: leads 2=2, conversations 0=0, messages 0=0, daily_counters 0=0). Suíte 32 arquivos / 139 testes verdes, `tsc` e biome limpos. 01-03 segue deferido (P-004 `CREDS_INVALID`) e 5 requisitos da fase permanecem Pending até o canal parear.
 
 Verificação de fase (2026-10-13, gsd-verifier): **PASS_WITH_NOTES** / `gaps_found` — 3/5 Success Criteria ✓ (SC2, SC3, SC4); SC1 deferido (01-03); SC5 parcial à época (encarregado) — **nomeado em 2026-10-13** (`docs/lgpd/encarregado-dpo.md`). Relatório: `.planning/phases/01-funda-o-canal-e-gate-de-envio/VERIFICATION.md`.
