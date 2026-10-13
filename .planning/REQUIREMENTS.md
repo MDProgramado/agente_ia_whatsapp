@@ -28,7 +28,7 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 
 - [x] **WHS-01**: Nenhuma mensagem automática fora de dias úteis, 7h–17h (janela operacional) (R-006)
 - [ ] **WHS-02**: Follow-up vencido fora da janela é drenado com limite e jitter controlados assim que o app abre — nunca em rajada (misfire `FIRE_ONCE`, ADR) (R-007)
-- [ ] **WHS-03**: Camada de conexão do WhatsApp isolada em interface/adaptador, permitindo trocar Baileys/WPPConnect → API oficial sem quebrar histórico, status ou agendamentos (R-016)
+- [x] **WHS-03**: Camada de conexão do WhatsApp isolada em interface/adaptador, permitindo trocar Baileys/WPPConnect → API oficial sem quebrar histórico, status ou agendamentos (R-016)
 - [x] **WHS-04**: Travas duras: 20 leads/dia + N contatos novos/dia via `fetchNewChatMessageCap()` + 20–30 mensagens/dia; ao atingir, para e enfileira para o próximo dia útil; erro 463 jamais é retryado (R-023*)
 - [ ] **WHS-05**: Opera um único número de WhatsApp dedicado e exclusivo para vendas (R-059)
 
@@ -46,7 +46,7 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 - [ ] **CONV-10**: Suspeita de automação → silêncio total até o Admin assumir; nenhuma mensagem de transição (R-057)
 - [x] **CONV-11**: Envia apenas texto e links; jamais imagens, PDFs, áudios, vídeos ou documentos (R-037)
 - [ ] **CONV-12**: Mídia recebida (áudio, imagem, PDF, vídeo) é apenas registrada; notifica e aciona handoff; não finge entendimento (R-038)
-- [ ] **CONV-13**: Humaniza o envio com delays aleatórios, simulação de "digitando…" e quebra de mensagens longas em varias mensagens curtas (R-067)
+- [x] **CONV-13**: Humaniza o envio com delays aleatórios, simulação de "digitando…" e quebra de mensagens longas em varias mensagens curtas (R-067)
 - [x] **CONV-14**: Anti-requisitos (AR-001 a AR-012) impõem-se como invariantes de estado via um único gate de envio mecânico (`evaluatePolicy`), com 1 property test por AR; nenhum caminho de mensagem escapa do gate (derivado da pesquisa — mecânica transversal)
 
 ### Follow-up, Agendamento e Handoff (FLUP)
@@ -70,29 +70,29 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 
 ### Integrações (INTR)
 
-- [ ] **INTR-01**: Escopo mínimo de integrações: API do caça-leads, API externa de LLM e WhatsApp local; nenhuma outra nesta etapa (R-044)
+- [x] **INTR-01**: Escopo mínimo de integrações: API do caça-leads, API externa de LLM e WhatsApp local; nenhuma outra nesta etapa (R-044)
 
 ### Compliance, Segurança e LGPD (COMP)
 
 - [ ] **COMP-01**: Detecta opt-out automaticamente; registra base legal/finalidade/consentimento; oferece comando manual de opt-out e exclusão; aplica política de retenção (R-024)
-- [ ] **COMP-02**: Trata base de contato sem opt-in explícito (fontes públicas/terceiros) com risco declarado de MUITO ALTO (R-063)
+- [x] **COMP-02**: Trata base de contato sem opt-in explícito (fontes públicas/terceiros) com risco declarado de MUITO ALTO (R-063)
 - [x] **COMP-03**: Base legal de legítimo interesse para contato B2B: registra origem, base legal e finalidade; opt-out imediato; exclusão sob solicitação (R-064)
-- [ ] **COMP-04**: Sem criptografia adicional nesta fase; confiança no controle de acesso do PC (risco aceito e documentado) (R-033)
-- [ ] **COMP-05**: Auth state do WhatsApp e backups fora da árvore OneDrive/git (derivado da pesquisa — protege R-033/LGPD)
+- [x] **COMP-04**: Sem criptografia adicional nesta fase; confiança no controle de acesso do PC (risco aceito e documentado) (R-033)
+- [x] **COMP-05**: Auth state do WhatsApp e backups fora da árvore OneDrive/git (derivado da pesquisa — protege R-033/LGPD)
 
 ### Requisitos Não Funcionais e Operação Local (NFRQ)
 
 - [x] **NFRQ-01**: Banco PostgreSQL local com script/migração de criação e atualização de schema; sem servidor externo (R-031)
-- [ ] **NFRQ-02**: Backup manual para pasta local, versionado por data/hora, com restauração sem serviços externos (R-032)
+- [x] **NFRQ-02**: Backup manual para pasta local, versionado por data/hora, com restauração sem serviços externos (R-032)
 - [ ] **NFRQ-03**: Modo automático total após a 1ª mensagem manual; bot conduz sozinho e só chama nos handoffs; após handoff → modo copiloto (R-034)
-- [ ] **NFRQ-04**: Logs em arquivo + painel de erros + notificação local imediata em falhas críticas (WhatsApp desconectado, API de IA fora, PostgreSQL parado, suspeita de banimento) (R-045)
+- [x] **NFRQ-04**: Logs em arquivo + painel de erros + notificação local imediata em falhas críticas (WhatsApp desconectado, API de IA fora, PostgreSQL parado, suspeita de banimento) (R-045)
 - [ ] **NFRQ-05**: Painel de controle: lista de leads + chat + sugestões da IA + histórico + botões de ação rápida (pausar bot, assumir, devolver ao bot, copiloto); exibe modo em tempo real; sugestões só enviadas com ação explícita (R-046)
-- [ ] **NFRQ-06**: Roda em Windows: PostgreSQL local, sessão WhatsApp, painel e notificações nativas compatíveis (R-047)
+- [x] **NFRQ-06**: Roda em Windows: PostgreSQL local, sessão WhatsApp, painel e notificações nativas compatíveis (R-047)
 
 ### Equipe e Arquitetura (EQUP)
 
-- [ ] **EQUP-01**: Usuário único nesta fase; sem perfis, permissões ou auditoria multiusuário (R-027)
-- [ ] **EQUP-02**: Arquitetura preparada para multiusuário futuro: campos de responsável, criado por, permissões e auditoria no schema desde já (R-028)
+- [x] **EQUP-01**: Usuário único nesta fase; sem perfis, permissões ou auditoria multiusuário (R-027)
+- [x] **EQUP-02**: Arquitetura preparada para multiusuário futuro: campos de responsável, criado por, permissões e auditoria no schema desde já (R-028)
 
 ### Critérios do Piloto (PILO)
 
@@ -153,7 +153,7 @@ Explicitamente excluídos. Documentado para prevenir escopo creep.
 
 ## Traceability
 
-Atualizado na criação do roadmap (2026-09-28), mapeamento corrigido após auditoria dos 60 REQ-IDs v1 contra a estrutura do sintetizador.
+Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/01-05; 01-03 deferido como P-004).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -170,7 +170,7 @@ Atualizado na criação do roadmap (2026-09-28), mapeamento corrigido após audi
 | LEAD-06 | Phase 2 | Pending |
 | WHS-01 | Phase 1 | Complete |
 | WHS-02 | Phase 3 | Pending |
-| WHS-03 | Phase 1 | Pending |
+| WHS-03 | Phase 1 | Complete |
 | WHS-04 | Phase 1 | Complete |
 | WHS-05 | Phase 1 | Pending |
 | CONV-01 | Phase 2 | Pending |
@@ -185,7 +185,7 @@ Atualizado na criação do roadmap (2026-09-28), mapeamento corrigido após audi
 | CONV-10 | Phase 2 | Pending |
 | CONV-11 | Phase 1 | Complete |
 | CONV-12 | Phase 2 | Pending |
-| CONV-13 | Phase 1 | Pending |
+| CONV-13 | Phase 1 | Complete |
 | CONV-14 | Phase 1 | Complete |
 | FLUP-01 | Phase 3 | Pending |
 | FLUP-02 | Phase 3 | Pending |
@@ -200,20 +200,20 @@ Atualizado na criação do roadmap (2026-09-28), mapeamento corrigido após audi
 | CRM-01 | Phase 3 | Pending |
 | CRM-02 | Phase 2 | Pending |
 | CRM-03 | Phase 3 | Pending |
-| INTR-01 | Phase 1 | Pending |
+| INTR-01 | Phase 1 | Complete |
 | COMP-01 | Phase 2 | Pending |
-| COMP-02 | Phase 1 | Pending |
+| COMP-02 | Phase 1 | Complete |
 | COMP-03 | Phase 1 | Complete |
-| COMP-04 | Phase 1 | Pending |
-| COMP-05 | Phase 1 | Pending |
+| COMP-04 | Phase 1 | Complete |
+| COMP-05 | Phase 1 | Complete |
 | NFRQ-01 | Phase 1 | Complete |
-| NFRQ-02 | Phase 1 | Pending |
+| NFRQ-02 | Phase 1 | Complete |
 | NFRQ-03 | Phase 2 | Pending |
-| NFRQ-04 | Phase 1 | Pending |
+| NFRQ-04 | Phase 1 | Complete |
 | NFRQ-05 | Phase 3 | Pending |
-| NFRQ-06 | Phase 1 | Pending |
-| EQUP-01 | Phase 1 | Pending |
-| EQUP-02 | Phase 1 | Pending |
+| NFRQ-06 | Phase 1 | Complete |
+| EQUP-01 | Phase 1 | Complete |
+| EQUP-02 | Phase 1 | Complete |
 | PILO-01 | Phase 4 | Pending |
 | PILO-02 | Phase 4 | Pending |
 | PILO-03 | Phase 4 | Pending |
@@ -223,7 +223,8 @@ Atualizado na criação do roadmap (2026-09-28), mapeamento corrigido após audi
 - Mapped to phases: 60
 - Unmapped: 0 ✓
 - Nota: a contagem "67" (R-001…R-067) inclui 7 IDs v2/fora de escopo (R-029, R-030, R-035, R-036, R-039, R-040, R-048); todos os 60 requisitos v1 em REQ-IDs estão mapeados, sem órfãos nem duplicatas.
+- **Fase 1 — fechamento parcial:** 18 de 23 requisitos da fase Complete. Os 5 Pending (LEAD-01, LEAD-02, LEAD-03, LEAD-04, WHS-05) são exatamente o escopo do plano 01-03, **deferido como P-004** (pareamento do número dedicado não concluído). A automação do 01-03 está commitada; falta o checkpoint humano do pareamento QR antes do piloto.
 
 ---
 *Requirements defined: 2026-09-28*
-*Last updated: 2026-10-09 after plan 01-04 (OPRE-01, WHS-01, WHS-04, CONV-11, CONV-14, COMP-03, NFRQ-01 concluídos)*
+*Last updated: 2026-10-13 after plan 01-05 (Fase 1 fechada parcialmente: 18/23; 01-03 deferido — P-004)*

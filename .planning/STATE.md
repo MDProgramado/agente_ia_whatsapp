@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-10-13T12:09:51.060Z"
+last_updated: "2026-10-13T13:10:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 5
-  completed_plans: 3
-  percent: 60
+  completed_plans: 4
+  percent: 80
 ---
 
 # Estado do Projeto
@@ -24,11 +24,11 @@ Ver: `.planning/PROJECT.md` (atualizado 2026-09-28)
 ## Posição Atual
 
 Fase: 1 de 4 (Fundação, Canal e Gate de Envio)
-Plano: 4 de 5 na fase atual (01-01, 01-02 e 01-04 concluídos; 01-03 com checkpoint humano pendente)
-Status: Executing Phase 01
-Última atividade: 2026-10-09 — Wave 3: plano 01-04 (Gate de envio: os 12 anti-requisitos) concluído com 4/4 tasks. Os 12 ARs têm property test; a ordem canônica do gate (`GUARD_ORDER` ↔ `GUARD_SLOTS`) é travada por teste; o `outbox` durável reavalia o gate por job; e o choke-point único de `sendText` é provado por grep (só `src/application/dispatcher.ts`). Suíte total 25 arquivos / 101 testes verdes, `tsc` e biome limpos. O plano 01-03 (canal e ingestão) teve a automação commitada, mas o checkpoint humano de pareamento QR (P-004 `CREDS_INVALID`) segue em aberto — não bloqueia 01-04/01-05.
+Plano: 5 de 5 na fase atual (01-01, 01-02, 01-04 e 01-05 concluídos; 01-03 deferido — P-004)
+Status: Phase 01 fechada parcialmente (4/5 planos; 5 requisitos deferidos com o 01-03)
+Última atividade: 2026-10-13 — Wave 4: plano 01-05 (Operação e humanização) concluído com 3/3 tasks, incluindo o checkpoint humano de backup. `humanize.ts` (atraso determinístico por hash + digitação + quebra preservando a concatenação) ligado **dentro** do branch `send` do `dispatch` (mantém o choke-point único de `sendText` do 01-04) + fila **por lead** (`queue-per-lead.ts`); `health-monitor` (croner 30s, severidade warn/critical, notificação só por transição); `daily-report` apurando os 2 objetivos do piloto a partir de `status_history`; `env-check` com 8 códigos nomeados no boot; `backup.ps1` com `pg_dump -Fc` carimbado `_pg18` e `-Verify` restaurado de verdade (4 contagens batendo: leads 2=2, conversations 0=0, messages 0=0, daily_counters 0=0). Suíte 32 arquivos / 139 testes verdes, `tsc` e biome limpos. 01-03 segue deferido (P-004 `CREDS_INVALID`) e 5 requisitos da fase permanecem Pending até o canal parear.
 
-Progresso: [██████░░░░] 60% (3 de 5 planos concluídos; 5 de 5 planejados)
+Progresso: [████████░░] 80% (4 de 5 planos concluídos; 5 de 5 planejados)
 
 ## Métricas de Desempenho
 
@@ -106,6 +106,19 @@ Decisões completas em PROJECT.md (tabela Key Decisions). Recentes que afetam o 
 - **`outbox` durável:** status `pending|reserved|sent|failed|abandoned`, idempotência por `idempotency_key`, cota reservada na **mesma transação** do branch `send` (bloqueio não consome cota). O dreno reavalia o gate **por job** — teste prova que opt-out ligado após o enqueue faz o job virar `abandoned`.
 - **Comentário enganoso de `ar-009.ts` adiado** (afirma precedência sobre ar-010, mas a ordem real é ar-010 → ar-009): registrado em `.planning/phases/01-funda-o-canal-e-gate-de-envio/deferred-items.md`; doc-only, fora de escopo.
 
+### Decisões do Plano 01-05 (2026-10-13, operação e humanização)
+
+- **Humanização mora DENTRO do branch `send` do `dispatch`, não ao lado dele.** Se o atraso ficasse fora, existiria um caminho de envio sem humanização — o oposto do que o plano existe para garantir. A prova de choke-point único de `sendText` (01-04) continua válida.
+- **Cadência invertida de propósito:** `humanDelay('first')` é o mais rápido (teto 2s) e `'followup'` o mais lento (piso 2,5s); um bot mais lento na primeira mensagem que na segunda tem assinatura não-humana. Atraso derivado de hash (`node:crypto`), nunca `Math.random()`, para o teste fixar a seed.
+- **Fila por lead, não global:** `queue-per-lead.ts` com `concurrency: 1` e `Map` limitado a 5000 — um lead travado (número inválido, retry) não pode segurar os outros 19.
+- **Falha de pedaço = nenhum pedaço:** se um dos pedaços de `splitLongMessage` falha, os seguintes não saem e vai para `markFailed(retryable: false)`; meia mensagem de 3 é pior que nenhuma (R-045 pesa mais que "tente de novo").
+- **`taxa_qualificacao` devolve `null` com denominador zero, nunca `0`** — "0% qualificado" e "sem dados" são afirmações diferentes (T-01-30). Base é `status_history`, não estado atual.
+- **`warn` notifica UMA vez por transição de estado** (revertida quando a saúde volta); só `critical` usa `-Urgent`. Um `warn` a cada 30s por 8h vira 960 notificações e o Admin desliga o alerta (T-01-28).
+- **`requestPairingCode` no monitor só com credenciais válidas;** senão `critical` e para — pareamento com sessão corrompida conta como novo dispositivo (vetor de ban).
+- **`env-check` roda ANTES de qualquer conexão e falha fechado** (8 códigos nomeados); mismatch de `pg_dump` é pego no boot, não no restore (Armadilha 5).
+- **A base de teste do `backup.ps1 -Verify` roda como `-U postgres`:** o papel da app (`whatsapp_bot`) é least-privilege e não tem `CREATEDB`; o idioma está documentado em `01-RESEARCH §Backup` e `01-PATTERNS §4.11`. O wrapper `Invoke-Nativa` tolera o stderr nativo do `psql` sob `ErrorActionPreference = "Stop"` (a verdade é o `$LASTEXITCODE`).
+- **`NFRQ-04`/`NFRQ-06` entregues como mecânica** (logs + `event_log` + notificação local); o painel visual formaliza na Fase 3, conforme a divisão mecânica/comportamento do ROADMAP.
+
 ### Todos Pendentes
 
 De `.planning/todos/pending/`:
@@ -145,18 +158,19 @@ Nenhum ainda.
 
 | Categoria | Item | Status | Adiado Em |
 |-----------|------|--------|-----------|
+| Infra/Canal | Pareamento do número dedicado (plano 01-03) — **P-004 `CREDS_INVALID`**; automação commitada, checkpoint humano não concluído | Aberto | 2026-10-13 |
 | Pesquisa | Procedimento de appeal de ban (fonte secundária) — confirmar antes de depender | Aberto | 2026-09-28 |
 | Pesquisa | Onboarding da API oficial (migração R-016) — não pesquisado | Aberto | 2026-09-28 |
 | Produto | Break-up message (FLUP-11 v2) — decidir com dado do piloto | Aberto | 2026-09-28 |
 
 ## Continuidade de Sessão
 
-Última sessão: 2026-10-09
-Parou em: Fase 1, wave 3 concluída. Plano 01-04 executado (4/4 tasks, 4 commits: `e56d6e6`, `40208e3`, `542070b`, `03ea113`; `01-04-SUMMARY.md` criado). Os 12 anti-requisitos têm property test; a ordem canônica e o choke-point de `sendText` foram provados por teste; o `outbox` durável reavalia o gate por job. Estado final: 25 arquivos / 101 testes verdes, `tsc` e biome limpos. O plano 01-03 tem a automação commitada, mas o pareamento QR real segue pendente (**P-004 `CREDS_INVALID`** — sem `01-03-SUMMARY.md`).
-Próximo passo: `/gsd-execute-phase 1` (wave 4: plano 01-05 — operação e humanização; serializado)
-Pendente (não bloqueia 01-05): fechar o checkpoint de pareamento do 01-03 — `CHANNEL_PHONE_E164` precisa do número real (hoje `+5511999999999`) e o QR precisa parear (`CREDS_INVALID` em `01-03-DIAG.md` / `docs/pendencias.md`).
+Última sessão: 2026-10-13
+Parou em: Fase 1 fechada parcialmente (4/5). Plano 01-05 executado (3/3 tasks; commits `26e1fd4`, `38f2a77`, `3b772ac`, `7712463`, `62b0400`, `182196e`, `c4e44d6`, `f69791c`; `01-05-SUMMARY.md` criado). Checkpoint humano de backup atendido: `-Verify` exit 0 com as 4 contagens batendo (leads 2=2, conversations 0=0, messages 0=0, daily_counters 0=0). Estado final: 32 arquivos / 139 testes verdes, `tsc` e biome limpos. Restam 5 requisitos da fase (LEAD-01..04, WHS-05) Pending porque o plano 01-03 está deferido (P-004).
+Próximo passo: verificação de fase dos planos concluídos (01-01/01-02/01-04/01-05); a Fase 2 só começa depois. O 01-03 fecha antes do piloto, não antes da Fase 2.
+Pendente (deferido — P-004): fechar o checkpoint de pareamento do 01-03 — `CHANNEL_PHONE_E164` precisa do número real (hoje `+5511999999999`) e o QR precisa parear (`CREDS_INVALID` em `01-03-DIAG.md` / `docs/pendencias.md`).
 Pós-reboot: revalidar com `npm run notify -- -Title "Teste R-013" -Message "Verificacao" -Urgent` e fechar a Task 6 do plano 01-01
-Arquivo de retomada: `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-04-SUMMARY.md`
+Arquivo de retomada: `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-05-SUMMARY.md`
 
 ---
-*Atualizado: 2026-10-09*
+*Atualizado: 2026-10-13*

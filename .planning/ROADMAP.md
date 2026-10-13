@@ -27,7 +27,7 @@ O sintetizador propôs 4 fases (Fundação+Canal+Gate ⮑ IA+Handoff+Shadow ⮑ 
 
 ## Phases
 
-- [ ] **Phase 1: Fundação, Canal e Gate de Envio** - Estado durável, canal WhatsApp isolado e o gate único que torna os 12 anti-requisitos invariantes de sistema
+- [ ] **Phase 1: Fundação, Canal e Gate de Envio** - Estado durável, canal WhatsApp isolado e o gate único que torna os 12 anti-requisitos invariantes de sistema *(parcial: 4/5 planos concluídos; 01-03 deferido — P-004)*
 - [ ] **Phase 2: IA, Handoff e Shadow Mode** - LLM como gerador de dica, handoff como fronteira projetada e validação por rascunho sem tocar no número
 - [ ] **Phase 3: Cadência, Operação e Painel** - Follow-up conservador, painel único e CRM operacional: o bot roda sozinho e o Admin opera
 - [ ] **Phase 4: Piloto, Calibração e Apuração** - 30 dias de operação real, medição dos critérios de sucesso e decisões com dado
@@ -55,9 +55,9 @@ Plans:
 
 - [x] 01-01-PLAN.md — **Walking Skeleton** (wave 1, autonomous: false) — preflight `[BLOCKING]` (Node 24 LTS, PG 18.3, `DATA_ROOT` fora do OneDrive) + correção do pin em `AGENTS.md` + ADR-001; scaffold com pins exatos e barreira de lint D-06; 6 tabelas + `0000_initial.sql` aplicada 2× (idempotente); `launch.cmd` sobe tudo sem elevação; gate puro com Guard 0 + 7 guardas AR (AR-001, AR-003, AR-004, AR-006, AR-007, AR-008, AR-011) + kill switch + `dispatcher` choke-point; checkpoint do toast do Windows
 - [x] 01-02-PLAN.md — **Fundação de dados e compliance** (wave 2, autonomous: false) — 7 tabelas restantes + 3 colunas de authorship nullable (R-028); `0001_guards_and_audit.sql` com triggers de append-only e de irreversibilidade de `opt_out`; checkpoint de higiene do PostgreSQL (`listen_addresses = localhost`); dossiê LGPD (encarregado, balanceamento, canal do titular, retenção) + ADR-002/003
-- [ ] 01-03-PLAN.md — **Canal e ingestão** (wave 2, autonomous: false) — `session.ts` com detecção de `CREDS_INVALID` (auth corrompido aborta em vez de degradar), `capabilities.ts` com `fetchNewChatMessageCap`/`fetchAccountReachoutTimelock`, `jid-resolver.ts` LID↔PN, `signals.ts` com 463 sem retry, `adapter.ts` sendText-only; `inbound-handler` marcando `first_contact_by_human` **só** por `fromMe` do número dedicado; `lead-importer` gravando origem/base legal/finalidade na mesma transação e nunca reativando opt-out; checkpoint de pareamento real do número
+- [ ] 01-03-PLAN.md — **(DEFERIDO — P-004)** **Canal e ingestão** (wave 2, autonomous: false) — `session.ts` com detecção de `CREDS_INVALID` (auth corrompido aborta em vez de degradar), `capabilities.ts` com `fetchNewChatMessageCap`/`fetchAccountReachoutTimelock`, `jid-resolver.ts` LID↔PN, `signals.ts` com 463 sem retry, `adapter.ts` sendText-only; `inbound-handler` marcando `first_contact_by_human` **só** por `fromMe` do número dedicado; `lead-importer` gravando origem/base legal/finalidade na mesma transação e nunca reativando opt-out; checkpoint de pareamento real do número. **Automação commitada; checkpoint humano de pareamento QR não concluído (`CREDS_INVALID`) — ver `01-03-DIAG.md` e `docs/pendencias.md` (P-004).**
 - [x] 01-04-PLAN.md — **Gate de envio: os 12 anti-requisitos** (wave 3, autonomous: true) — 5 guardas restantes (AR-002, AR-005, AR-009, AR-010, AR-012) + `lead-number-invalid` (R-019/LEAD-03) + 2 arquivos de padrões; `evaluatePolicy` com os **15** invariantes em ordem fixa exportada (`GUARD_ORDER`) e `AR_MAP` de 18 entradas; `outbox` durável com `FOR UPDATE SKIP LOCKED` e cota na transação do branch `send` do `dispatch` (choke-point único de `sendText`); 12 property tests de AR + teste de ordem + teste de choke-point por grep + teste de revalidação do worker
-- [ ] 01-05-PLAN.md — **Operação e humanização** (wave 4, autonomous: false) — `humanize.ts` com atraso determinístico, typing indicator, quebra preservando ordem e fila **por lead** (`queue-per-lead.ts`) no branch `send` do `dispatch`; `health-monitor` com croner, severidade e notificação por transição; `daily-report` apurando R-061/R-062 a partir de `status_history` com denominador explícito; `env-check` pegando mismatch de `pg_dump` no boot; checkpoint de backup com `pg_dump -Fc` e restauração verificada
+- [x] 01-05-PLAN.md — **Operação e humanização** (wave 4, autonomous: false) — `humanize.ts` com atraso determinístico, typing indicator, quebra preservando ordem e fila **por lead** (`queue-per-lead.ts`) no branch `send` do `dispatch`; `health-monitor` com croner, severidade e notificação por transição; `daily-report` apurando R-061/R-062 a partir de `status_history` com denominador explícito; `env-check` pegando mismatch de `pg_dump` no boot; checkpoint de backup com `pg_dump -Fc` e restauração verificada
 
 > **Nota de granularity**: os 3 sketches originais foram decompostos em 5 planos porque o
 > `01-01` precisa ser um Walking Skeleton executável por conta própria (MVP mode) e porque os 3
@@ -139,7 +139,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Fundação, Canal e Gate de Envio | 3/5 | In Progress|  |
+| 1. Fundação, Canal e Gate de Envio | 4/5 | In Progress (01-03 deferido — P-004) |  |
 | 2. IA, Handoff e Shadow Mode | 0/3 | Not started | - |
 | 3. Cadência, Operação e Painel | 0/3 | Not started | - |
 | 4. Piloto, Calibração e Apuração | 0/2 | Not started | - |
