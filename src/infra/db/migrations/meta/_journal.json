@@ -36,6 +36,13 @@
       "when": 1790788788042,
       "tag": "0004_guards_and_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791899243555,
+      "tag": "0005_seed_admin",
+      "breakpoints": true
     }
   ]
 }
