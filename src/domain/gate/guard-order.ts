@@ -93,8 +93,7 @@ export const GUARD_SLOTS: readonly GuardSlot[] = [
  * teste de ordem falha se houver slot nulo, o que pega a regressão de alguém
  * adicionar um `reason` à união e esquecer o guard.
  */
-export const REASONS_PENDENTES_01_04: readonly GateReason[] = GUARD_SLOTS.filter(
-	(s) => s.guard === null,
-).map((s) => s.reason);
+export const REASONS_PENDENTES_01_04: readonly GateReason[] =
+	GUARD_SLOTS.filter((s) => s.guard === null).map((s) => s.reason);
 
 export type { GateInput, GateReason };

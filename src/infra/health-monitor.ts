@@ -4,7 +4,12 @@
 import { Cron } from "croner";
 import type { NotifyPort } from "../domain/ports/NotifyPort.js";
 
-export type BaileysState = "open" | "close" | "connecting" | "logged_out" | "unknown";
+export type BaileysState =
+	| "open"
+	| "close"
+	| "connecting"
+	| "logged_out"
+	| "unknown";
 
 export type Achado = {
 	severity: "warn" | "critical";
@@ -50,11 +55,19 @@ export function startHealthMonitor(deps: HealthDeps): HealthMonitor {
 				urgency: "high",
 			};
 			await deps.logFinding(achado);
-			await deps.notify({ title: "Monitor de sa�de", message: achado.message, urgent: true });
+			await deps.notify({
+				title: "Monitor de sa�de",
+				message: achado.message,
+				urgent: true,
+			});
 			return;
 		}
 		if (state === "logged_out") {
-			if (deps.credsValid && deps.credsValid() === true && deps.requestPairingCode) {
+			if (
+				deps.credsValid &&
+				deps.credsValid() === true &&
+				deps.requestPairingCode
+			) {
 				await deps.requestPairingCode();
 				return;
 			}
@@ -65,7 +78,11 @@ export function startHealthMonitor(deps: HealthDeps): HealthMonitor {
 				urgency: "high",
 			};
 			await deps.logFinding(achado);
-			await deps.notify({ title: "Monitor de sa�de", message: achado.message, urgent: true });
+			await deps.notify({
+				title: "Monitor de sa�de",
+				message: achado.message,
+				urgent: true,
+			});
 			parado = true;
 			return;
 		}
@@ -75,7 +92,7 @@ export function startHealthMonitor(deps: HealthDeps): HealthMonitor {
 				healthOk = true;
 				warned = false;
 			}
-		} catch (e: any) {
+		} catch {
 			const achado: Achado = {
 				severity: "warn",
 				event: "db_down",
@@ -84,7 +101,11 @@ export function startHealthMonitor(deps: HealthDeps): HealthMonitor {
 			};
 			await deps.logFinding(achado);
 			if (!warned) {
-				await deps.notify({ title: "Monitor de sa�de", message: achado.message, urgent: false });
+				await deps.notify({
+					title: "Monitor de sa�de",
+					message: achado.message,
+					urgent: false,
+				});
 				warned = true;
 				healthOk = false;
 			}
@@ -97,7 +118,9 @@ export function startHealthMonitor(deps: HealthDeps): HealthMonitor {
 	const monitor: HealthMonitor = {
 		stop: () => job.stop(),
 		tick,
-		get parado() { return parado; },
+		get parado() {
+			return parado;
+		},
 	};
 	return monitor;
 }

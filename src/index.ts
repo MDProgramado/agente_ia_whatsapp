@@ -256,7 +256,10 @@ const main = async (): Promise<void> => {
 				// A linha que o passo 5 do checkpoint procura: prova que `emitOwnEvents`
 				// está ligado e que a auto-mensagem do número dedicado chega como `fromMe`.
 				log.info(
-					{ event: "inbound_fromme", provider_msg_id: evt.providerMsgId ?? null },
+					{
+						event: "inbound_fromme",
+						provider_msg_id: evt.providerMsgId ?? null,
+					},
 					"mensagem fromMe do numero dedicado recebida",
 				);
 			}

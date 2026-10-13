@@ -25,8 +25,9 @@
  */
 import { eq, sql } from "drizzle-orm";
 import { env } from "../config/env.js";
-import { reserveNewContactQuota } from "../infra/db/queries/counters.js";
+import type { Lead, LeadSourcePort } from "../domain/ports/LeadSourcePort.js";
 import type { Db } from "../infra/db/client.js";
+import { reserveNewContactQuota } from "../infra/db/queries/counters.js";
 import {
 	channelAccounts,
 	conversations,
@@ -34,7 +35,6 @@ import {
 	optoutLedger,
 	statusHistory,
 } from "../infra/db/schema.js";
-import type { Lead, LeadSourcePort } from "../domain/ports/LeadSourcePort.js";
 import { childLogger } from "../infra/logger.js";
 
 const log = childLogger("lead_importer");
@@ -187,9 +187,7 @@ export const importLeads = async (
 					.returning({ id: leads.id });
 				const leadId = upsert[0]?.id;
 				if (!leadId) {
-					throw new Error(
-						"lead-importer: upsert de leads nao devolveu id",
-					);
+					throw new Error("lead-importer: upsert de leads nao devolveu id");
 				}
 
 				// Opt-out da fonte: só ATIVA o banco (false→true) e só então registra o evento.

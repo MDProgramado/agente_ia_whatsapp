@@ -58,7 +58,11 @@ export const normalizeJid = (rawJid: string): JidNormalizado => {
 		return { e164: null, jid, lid: null };
 	}
 	const candidato = `+${decodificado.user}`;
-	return { e164: E164_REGEX.test(candidato) ? candidato : null, jid, lid: null };
+	return {
+		e164: E164_REGEX.test(candidato) ? candidato : null,
+		jid,
+		lid: null,
+	};
 };
 
 /**

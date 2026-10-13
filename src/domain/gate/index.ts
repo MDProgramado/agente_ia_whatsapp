@@ -8,13 +8,13 @@
  */
 import type { GateReason } from "./types.js";
 
+export type { Bloqueio } from "./evaluate-policy.js";
 export {
 	evaluatePolicy,
 	GUARD_ORDER,
 	primeiroBloqueio,
 	REASONS_PENDENTES_01_04,
 } from "./evaluate-policy.js";
-export type { Bloqueio } from "./evaluate-policy.js";
 export type { Guard } from "./guard.js";
 export type { Decision, GateInput, GateReason } from "./types.js";
 

@@ -18,8 +18,8 @@
  * assinaturas — o código instalado vence; ver `session.ts`.
  */
 import {
-	NewChatMessageCappingStatusType,
 	type NewChatMessageCapInfo,
+	NewChatMessageCappingStatusType,
 	type ReachoutTimelockState,
 	type WASocket,
 } from "@whiskeysockets/baileys";

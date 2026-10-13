@@ -121,6 +121,9 @@ export class BarramentoEventos {
 			);
 		}
 		// Log estruturado SEM payload de conversa (redação de PII no logger).
-		log.error({ event: "handler_falhou", canal }, `handler falhou: ${mensagem}`);
+		log.error(
+			{ event: "handler_falhou", canal },
+			`handler falhou: ${mensagem}`,
+		);
 	}
 }

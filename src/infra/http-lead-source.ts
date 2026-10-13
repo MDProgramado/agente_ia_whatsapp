@@ -8,10 +8,7 @@
  * e insistir só gasta cota. Timeout de 10s via `AbortSignal.timeout`, para que uma
  * fonte pendurada não segure o importador indefinidamente.
  */
-import type {
-	Lead,
-	LeadSourcePort,
-} from "../domain/ports/LeadSourcePort.js";
+import type { Lead, LeadSourcePort } from "../domain/ports/LeadSourcePort.js";
 import { childLogger } from "./logger.js";
 
 const log = childLogger("lead_source_http");
@@ -128,15 +125,12 @@ export class HttpLeadSourceAdapter implements LeadSourcePort {
 	}
 
 	async markValidNewLead(e164: string): Promise<void> {
-		const resposta = await this.fetchImpl(
-			`${this.baseUrl}/leads/validar`,
-			{
-				method: "POST",
-				headers: { ...this.headers(), "content-type": "application/json" },
-				body: JSON.stringify({ phone: e164 }),
-				signal: AbortSignal.timeout(this.timeoutMs),
-			},
-		);
+		const resposta = await this.fetchImpl(`${this.baseUrl}/leads/validar`, {
+			method: "POST",
+			headers: { ...this.headers(), "content-type": "application/json" },
+			body: JSON.stringify({ phone: e164 }),
+			signal: AbortSignal.timeout(this.timeoutMs),
+		});
 		if (!resposta.ok) {
 			drena(resposta);
 			throw new Error(
@@ -156,9 +150,9 @@ export class HttpLeadSourceAdapter implements LeadSourcePort {
 	}
 
 	async fetchAccountReachoutTimelock(): Promise<Date | null> {
-		const corpo = await this.getJson<{ reachout_timelock_until?: string | null }>(
-			"/conta/reachout-timelock",
-		);
+		const corpo = await this.getJson<{
+			reachout_timelock_until?: string | null;
+		}>("/conta/reachout-timelock");
 		const iso = corpo.reachout_timelock_until;
 		if (!iso) return null;
 		const quando = new Date(iso);

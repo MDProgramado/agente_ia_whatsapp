@@ -17,8 +17,9 @@
  * `readQuota` NÃO pergunta ao WhatsApp: conta `daily_counters` do dia e usa o cap
  * lido por `capabilities.ts` (cache de 15 min — T-01-11).
  */
-import { sql } from "drizzle-orm";
+
 import type { WASocket } from "@whiskeysockets/baileys";
+import { sql } from "drizzle-orm";
 import { env } from "../../config/env.js";
 import type { ChannelPort } from "../../domain/ports/ChannelPort.js";
 import type { NotifyPort } from "../../domain/ports/NotifyPort.js";
@@ -169,8 +170,7 @@ export class BaileysChannel implements ChannelPort {
 				return;
 			} catch (erro) {
 				const sinal = translateSendError(erro);
-				const motivo =
-					erro instanceof Error ? erro.message : String(erro);
+				const motivo = erro instanceof Error ? erro.message : String(erro);
 
 				// (c) 463: número inválido/inacessível. Este bloco NÃO tem retry,
 				// não tem espera e não tem reagendamento — marca, notifica e

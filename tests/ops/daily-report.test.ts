@@ -116,7 +116,11 @@ const registrarTransicao = async (
 	`);
 };
 
-const registrarNovos = async (db: Db, dia: string, nov: number): Promise<void> => {
+const registrarNovos = async (
+	db: Db,
+	dia: string,
+	nov: number,
+): Promise<void> => {
 	await db.execute(sql`
 		INSERT INTO daily_counters (day, kind, count) VALUES (${dia}::date, 'new_contacts', ${nov})
 	`);
@@ -144,14 +148,49 @@ describe("dailyReport — fórmula sobre status_history (R-061/R-062)", () => {
 			const conversaB = await inserirConversa(tx, leadB, contaId);
 
 			// A: duas transições BOT no dia → 2 reuniões; distinct conta 1.
-			await registrarTransicao(tx, conversaA, "novo", "qualificando", "bot", NO_DIA(9, 0));
-			await registrarTransicao(tx, conversaA, "qualificando", "aquecido", "bot", NO_DIA(10, 0));
+			await registrarTransicao(
+				tx,
+				conversaA,
+				"novo",
+				"qualificando",
+				"bot",
+				NO_DIA(9, 0),
+			);
+			await registrarTransicao(
+				tx,
+				conversaA,
+				"qualificando",
+				"aquecido",
+				"bot",
+				NO_DIA(10, 0),
+			);
 			// B: qualificou por ADMIN → conta em qualificados, NÃO em reuniões do bot.
-			await registrarTransicao(tx, conversaB, "novo", "qualificando", "admin", NO_DIA(11, 0));
+			await registrarTransicao(
+				tx,
+				conversaB,
+				"novo",
+				"qualificando",
+				"admin",
+				NO_DIA(11, 0),
+			);
 			// B de novo por bot, mas para fora dos estados-alvo → não conta.
-			await registrarTransicao(tx, conversaB, "qualificando", "novo", "bot", NO_DIA(11, 30));
+			await registrarTransicao(
+				tx,
+				conversaB,
+				"qualificando",
+				"novo",
+				"bot",
+				NO_DIA(11, 30),
+			);
 			// A em OUTRO dia → fora da apuração.
-			await registrarTransicao(tx, conversaA, "novo", "qualificando", "bot", instanteEmZona(TZ, 2026, 9, 28, 15, 0));
+			await registrarTransicao(
+				tx,
+				conversaA,
+				"novo",
+				"qualificando",
+				"bot",
+				instanteEmZona(TZ, 2026, 9, 28, 15, 0),
+			);
 
 			await registrarNovos(tx, DIA, 10);
 
@@ -180,7 +219,14 @@ describe("dailyReport — fórmula sobre status_history (R-061/R-062)", () => {
 			const contaId = await inserirConta(tx);
 			const lead = await inserirLead(tx, telefoneAleatorio());
 			const conversa = await inserirConversa(tx, lead, contaId);
-			await registrarTransicao(tx, conversa, "novo", "qualificando", "bot", NO_DIA(9, 0));
+			await registrarTransicao(
+				tx,
+				conversa,
+				"novo",
+				"qualificando",
+				"bot",
+				NO_DIA(9, 0),
+			);
 			// Sem linha em daily_counters para o dia → leads_novos = 0.
 
 			const relatorio = await dailyReport(tx as unknown as Db, DIA);
@@ -202,7 +248,14 @@ describe("dailyReport — fórmula sobre status_history (R-061/R-062)", () => {
 			`);
 			// 'new_contacts' de OUTRO dia também não.
 			await registrarNovos(tx, OUTRO_DIA, 7);
-			await registrarTransicao(tx, conversa, "novo", "qualificando", "bot", NO_DIA(9, 0));
+			await registrarTransicao(
+				tx,
+				conversa,
+				"novo",
+				"qualificando",
+				"bot",
+				NO_DIA(9, 0),
+			);
 
 			const relatorio = await dailyReport(tx as unknown as Db, DIA);
 			expect(relatorio.leadsNovos).toBe(0);

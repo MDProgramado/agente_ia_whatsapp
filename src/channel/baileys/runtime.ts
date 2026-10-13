@@ -14,12 +14,12 @@
 import {
 	type BaileysEventMap,
 	makeWASocket,
-	type WASocket,
 	type WAMessage,
+	type WASocket,
 } from "@whiskeysockets/baileys";
 import type { EventoInbound } from "../../application/event-bus.js";
 import { childLogger } from "../../infra/logger.js";
-import { socketConfigOverrides, type SessionState } from "./session.js";
+import { type SessionState, socketConfigOverrides } from "./session.js";
 import { statusHttpDoErro } from "./signals.js";
 
 /** Payloads de evento direto do `BaileysEventMap` — sem tipar à mão e errar. */
@@ -51,14 +51,19 @@ export const abrirSocketDoCanal = (session: SessionState): WASocket => {
 /** `messageTimestamp` pode vir como number ou Long; normaliza para number. */
 const comoNumero = (valor: unknown): number => {
 	if (typeof valor === "number") return valor;
-	if (valor && typeof (valor as { toNumber?: () => number }).toNumber === "function") {
+	if (
+		valor &&
+		typeof (valor as { toNumber?: () => number }).toNumber === "function"
+	) {
 		return (valor as { toNumber: () => number }).toNumber();
 	}
 	return Number(valor ?? 0);
 };
 
 /** Devolve o nome do campo de mídia presente, ou `null` (texto). */
-const midiaDe = (conteudo: NonNullable<WAMessage["message"]>): string | null => {
+const midiaDe = (
+	conteudo: NonNullable<WAMessage["message"]>,
+): string | null => {
 	for (const tipo of TIPOS_MIDIA) {
 		if (conteudo[tipo]) return tipo;
 	}

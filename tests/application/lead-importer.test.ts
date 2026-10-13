@@ -9,14 +9,18 @@
  * camelCase no TS, `openDb(env.DATABASE_URL)`, e a porta com as assinaturas reais
  * (`Promise<number|null>`/`Promise<Date|null>`).
  */
+
+import { eq, sql } from "drizzle-orm";
 import fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { importLeads } from "../../src/application/lead-importer.js";
 import { env } from "../../src/config/env.js";
+import type {
+	Lead,
+	LeadSourcePort,
+} from "../../src/domain/ports/LeadSourcePort.js";
 import type { Db } from "../../src/infra/db/client.js";
 import { openDb } from "../../src/infra/db/client.js";
-import type { Lead, LeadSourcePort } from "../../src/domain/ports/LeadSourcePort.js";
-import { importLeads } from "../../src/application/lead-importer.js";
 import * as schema from "../../src/infra/db/schema.js";
 
 const SEMENTE = 20260928;

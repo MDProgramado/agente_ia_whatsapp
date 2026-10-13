@@ -22,14 +22,11 @@
  */
 import { createHash } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
+import { E164_REGEX, resolveE164 } from "../channel/baileys/jid-resolver.js";
 import { env } from "../config/env.js";
-import { childLogger } from "../infra/logger.js";
 import type { Db } from "../infra/db/client.js";
 import { leads } from "../infra/db/schema.js";
-import {
-	E164_REGEX,
-	resolveE164,
-} from "../channel/baileys/jid-resolver.js";
+import { childLogger } from "../infra/logger.js";
 import type { EventoInbound } from "./event-bus.js";
 
 const log = childLogger("inbound");
@@ -105,7 +102,9 @@ const pegarOuCriarConversa = async (
 	`);
 	const nova = linhasDe<ConversaLida>(criada)[0];
 	if (!nova) {
-		throw new Error("inbound-handler: INSERT de conversations nao devolveu linha");
+		throw new Error(
+			"inbound-handler: INSERT de conversations nao devolveu linha",
+		);
 	}
 	return nova;
 };

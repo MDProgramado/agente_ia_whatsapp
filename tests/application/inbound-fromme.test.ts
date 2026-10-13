@@ -7,14 +7,15 @@
  * - `openDb` exige a connection string.
  * - `SocketConfig` não existe; o socket é tipado por `Parameters<…>[1]`.
  */
+
+import { eq, sql } from "drizzle-orm";
 import fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { processInboundFromMe } from "../../src/application/inbound-handler.js";
 import { env } from "../../src/config/env.js";
 import type { Db } from "../../src/infra/db/client.js";
 import { openDb } from "../../src/infra/db/client.js";
 import * as schema from "../../src/infra/db/schema.js";
-import { processInboundFromMe } from "../../src/application/inbound-handler.js";
 
 const SEMENTE = 20260928;
 const TZ = env.TZ ?? "America/Sao_Paulo";
