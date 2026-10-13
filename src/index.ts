@@ -6,12 +6,15 @@
  * vem da config. Banco antes do canal porque o canal é quem decide o que existe
  * para conversar; um socket conectado a um schema incompleto é pior que nenhum socket.
  *
- * Hoje o boot termina em (h): o canal está armado; o dispatcher/motor entram numa
- * fase seguinte.
+ * O boot segue config → banco (com migrate) → logs → canal → motor. O "motor"
+ * desta fase é o monitor de saúde e o relatório diário do piloto; o
+ * dispatcher/LLM entram numa fase seguinte.
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { Cron } from "croner";
 import { sql } from "drizzle-orm";
+import { Client } from "pg";
 import { BarramentoEventos } from "./application/event-bus.js";
 import { processInboundFromMe } from "./application/inbound-handler.js";
 import { readCapabilities } from "./channel/baileys/capabilities.js";
@@ -24,7 +27,15 @@ import { createSession } from "./channel/baileys/session.js";
 import { translateDisconnect } from "./channel/baileys/signals.js";
 import { ensureDataDirs, env, logsDir } from "./config/env.js";
 import { closeDb, openDb } from "./infra/db/client.js";
+import { dailyReport } from "./infra/db/queries/daily-report.js";
+import { checkEnv, falhasDeEnv, formatarFalhaEnv } from "./infra/env-check.js";
+import {
+	type Achado,
+	type BaileysState,
+	startHealthMonitor,
+} from "./infra/health-monitor.js";
 import { childLogger, flushLogSync } from "./infra/logger.js";
+import { criarNotifier } from "./infra/notifier.js";
 
 /**
  * `BOOT_CHECK_ONLY=1` vem do `launch.cmd check`. Roda o MESMO boot, passo por passo
@@ -48,6 +59,18 @@ let keepAlive: NodeJS.Timeout | undefined;
 let canalSock: WASocket | undefined;
 
 /**
+ * Estado do socket no último `connection.update`, lido pelo monitor de saúde.
+ * Começa em `unknown` — não em `connecting` — porque um monitor que trata
+ * `connecting` como queda dispararia um `critical` falso no primeiro tick, antes
+ * da conexão abrir; ruído assim treina o Admin a ignorar o monitor (T-01-28).
+ */
+let canalEstado: BaileysState = "unknown";
+
+/** Handles do "motor" (monitor de saúde + cron do relatório), parados no encerra. */
+let monitorSaude: ReturnType<typeof startHealthMonitor> | undefined;
+let cronRelatorio: Cron | undefined;
+
+/**
  * Contagem com `::int`: o driver devolve `count(*)` como `bigint`, que serializa
  * como string (`"0"`) e o campo sairia `"leads_total": "0"` no log — quebrar o gate
  * que exige inteiro e, pior, esconder a diferença entre 0 e "sem lead nenhum".
@@ -61,21 +84,38 @@ const countOf = async (
 };
 
 const main = async (): Promise<void> => {
-	// (a) DATA_ROOT existe, tem auth/backups/logs e NÃO está no OneDrive.
+	// (a) env-check antes de QUALQUER conexão. `checkEnv` compara o major do
+	//     pg_dump com o do servidor e barra DATA_ROOT em link/OneDrive, E.164 fora
+	//     do padrão e janela vazia. Fail-closed: uma única falha aborta o boot, com
+	//     o código nomeado apontando a correção.
+	const verificacoes = await checkEnv();
+	const falhasEnv = falhasDeEnv(verificacoes);
+	if (falhasEnv.length > 0) {
+		for (const falha of falhasEnv) {
+			console.error(`[boot] ${formatarFalhaEnv(falha)}`);
+		}
+		throw new Error(
+			`env-check reprovou ${falhasEnv.length} verificacao(oes): ${falhasEnv
+				.map((falha) => falha.code)
+				.join(", ")}`,
+		);
+	}
+
+	// (b) DATA_ROOT existe, tem auth/backups/logs e NÃO está no OneDrive.
 	//     Sai com DATA_ROOT_ON_ONEDRIVE se estiver: a pasta auth É a sessão do WhatsApp.
 	ensureDataDirs();
 
-	// (b) Logger com child por módulo.
+	// (c) Logger com child por módulo.
 	const log = childLogger("boot");
 
-	// (c) Banco + `migrate()` (R-031). Falha de migration aborta o boot aqui.
+	// (d) Banco + `migrate()` (R-031). Falha de migration aborta o boot aqui.
 	const conn = await openDb(env.DATABASE_URL);
 	log.info(
 		{ step: "db_open", pool_max: 5 },
 		"banco aberto e migrations aplicadas",
 	);
 
-	// (d) Escrita real seguida de leitura real (WHS-05).
+	// (e) Escrita real seguida de leitura real (WHS-05).
 	//     O `ON CONFLICT DO NOTHING` é o que torna o boot idempotente: rodar duas
 	//     vezes deixa exatamente uma linha, e é a segunda execução que prova isso.
 	await conn.db.execute(
@@ -107,14 +147,14 @@ const main = async (): Promise<void> => {
 		"conta do canal gravada e relida",
 	);
 
-	// (e) Sanidade do schema: `leads` tem de responder.
+	// (f) Sanidade do schema: `leads` tem de responder.
 	const leadsTotal = await countOf(
 		conn.db,
 		"select count(*)::int as n from leads",
 	);
 	log.info({ step: "healthcheck", leads_total: leadsTotal }, "total de leads");
 
-	// (f) Quantas migrations o banco realmente tem — a resposta a "o boot aplicou
+	// (g) Quantas migrations o banco realmente tem — a resposta a "o boot aplicou
 	//     tudo?". Comparar com os arquivos em disco é o cruzamento que fecha o R-031.
 	const migrationsApplied = await countOf(
 		conn.db,
@@ -133,7 +173,7 @@ const main = async (): Promise<void> => {
 		process.exit(0);
 	}
 
-	// (g) Boot de produção: o processo precisa ficar VIVO (Agendador de Tarefas).
+	// (h) Boot de produção: o processo precisa ficar VIVO (Agendador de Tarefas).
 	//     Timer REF'D de propósito: o `pg` devolve o cliente ocioso ao pool depois de
 	//     ~10s e, com o event loop vazio, o Node sai sozinho — o launcher "verde" no
 	//     primeiro segundo e morto no minuto seguinte, que é o modo de falha mais
@@ -144,7 +184,7 @@ const main = async (): Promise<void> => {
 	);
 	keepAlive = setInterval(() => {}, 60_000);
 
-	// (h) Etapa 4 do boot — CANAL, depois do banco. `createSession()` monta a sessão
+	// (i) Etapa 4 do boot — CANAL, depois do banco. `createSession()` monta a sessão
 	//     a partir de `DATA_ROOT` (nunca do cwd) e `abrirSocketDoCanal` cria o socket
 	//     com `emitOwnEvents: true` (via `socketConfigOverrides`, WHS-05/R-001): é a
 	//     flag que faz o evento `fromMe` do número dedicado existir, e portanto a
@@ -229,10 +269,13 @@ const main = async (): Promise<void> => {
 	// Registro explícito dos handlers nomeados do contrato do checkpoint.
 	const { onBaileysConnectionUpdate, onBaileysMessage } = criarHandlersDoCanal({
 		aoConectar: () => {
+			canalEstado = "open";
 			void lerCapacidades();
 		},
 		aoDesconectar: (status) => {
 			const estadoDoSocket = translateDisconnect(status ?? 0);
+			canalEstado =
+				estadoDoSocket.event === "logged_out" ? "logged_out" : "close";
 			log.warn(
 				{
 					step: "channel_disconnected",
@@ -275,7 +318,111 @@ const main = async (): Promise<void> => {
 	sock.ev.on("messages.upsert", onBaileysMessage);
 	log.info({ step: "channel_ready" }, "canal armado; aguardando eventos");
 
-	// (i) Encerramento gracioso. Kill abrupto corrompe o `useMultiFileAuthState`, e um
+	// (j) MONITOR DE SAÚDE (R-045, WHS-04). Um cron de 30s: probe do banco com
+	//     `statement_timeout` de 2s numa conexão efêmera (um probe que trava não
+	//     pode pendurar o processo), estado do Baileys lido de `canalEstado`, e
+	//     notificação SÓ em `critical` — um `warn` repetido vira uma notificação
+	//     por transição, e a notificação é revertida quando a saúde volta
+	//     (T-01-28). Cada achado grava em `event_log` (trilha append-only).
+	monitorSaude = startHealthMonitor({
+		notify: criarNotifier().notify,
+		baileysState: () => canalEstado,
+		probeDb: async () => {
+			const cliente = new Client({
+				connectionString: env.DATABASE_URL,
+				statement_timeout: 2000,
+			});
+			await cliente.connect();
+			try {
+				await cliente.query("select 1");
+			} finally {
+				await cliente.end().catch(() => {});
+			}
+		},
+		logFinding: async (achado: Achado) => {
+			try {
+				await conn.db.execute(sql`
+					insert into event_log (event_type, entity_type, payload, severity)
+					values (
+						${achado.event},
+						'health_monitor',
+						${JSON.stringify({ message: achado.message, urgency: achado.urgency })}::jsonb,
+						${achado.severity}
+					)
+				`);
+			} catch (erro: unknown) {
+				log.error(
+					{ event: "event_log_indisponivel" },
+					`nao gravei achado do monitor em event_log: ${erro instanceof Error ? erro.message : String(erro)}`,
+				);
+			}
+		},
+		cronPattern: "*/30 * * * * *",
+		// Reconexão silenciosa (T-01-29): só re-pareia se a sessão carregou com
+		// credenciais válidas. Sessão inválida → o monitor para com `critical`, sem
+		// pedir par (pedir par com sessão corrompida conta como dispositivo novo).
+		credsValid: () => !sessao.restoreRequired,
+		requestPairingCode: async () => {
+			const par = await sock.requestPairingCode(
+				env.CHANNEL_PHONE_E164.replace(/^\+/, ""),
+			);
+			writeFileSync(join(logsDir(), "qr.txt"), String(par), {
+				encoding: "utf8",
+			});
+			log.info(
+				{ step: "reconnect_pairing_code" },
+				"reconexao silenciosa: novo par gravado em qr.txt",
+			);
+		},
+	});
+	log.info({ step: "health_monitor", cron: "30s" }, "monitor de saude armado");
+
+	// (k) RELATÓRIO DIÁRIO 23:55 America/Sao_Paulo (R-061/R-062). A apuração é do
+	//     dia corrente no fuso de São Paulo (o gate avalia nesse fuso, D-05) e vai
+	//     para `event_log` — a trilha que o painel lê, não um arquivo solto.
+	const diaEmSaoPaulo = (data: Date): string =>
+		new Intl.DateTimeFormat("en-CA", {
+			timeZone: env.TZ,
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+		}).format(data);
+
+	cronRelatorio = new Cron("55 23 * * *", { timezone: env.TZ }, async () => {
+		try {
+			const relatorio = await dailyReport(conn.db, diaEmSaoPaulo(new Date()));
+			await conn.db.execute(sql`
+				insert into event_log (event_type, entity_type, payload, severity)
+				values (
+					'piloto_relatorio_diario',
+					'daily_report',
+					${JSON.stringify(relatorio)}::jsonb,
+					'info'
+				)
+			`);
+			log.info(
+				{
+					step: "daily_report",
+					reunioes_agendadas: relatorio.reunioesAgendadas,
+					leads_qualificados: relatorio.leadsQualificados,
+					leads_novos: relatorio.leadsNovos,
+					taxa_qualificacao: relatorio.taxaQualificacao,
+				},
+				"relatorio diario do piloto gravado",
+			);
+		} catch (erro: unknown) {
+			log.error(
+				{ event: "daily_report_falhou" },
+				`relatorio diario falhou: ${erro instanceof Error ? erro.message : String(erro)}`,
+			);
+		}
+	});
+	log.info(
+		{ step: "daily_report_cron", at: "23:55", tz: env.TZ },
+		"cron do relatorio diario armado",
+	);
+
+	// (l) Encerramento gracioso. Kill abrupto corrompe o `useMultiFileAuthState`, e um
 	//     auth corrompido é lido pelo WhatsApp como dispositivo novo — sinal de
 	//     banimento. Fechar o socket, o pool e drenar o log é o que torna o Ctrl+C seguro.
 	const sinal = (nome: NodeJS.Signals) => {
@@ -315,6 +462,16 @@ const encerra = async (
 		canalSock = undefined;
 	}
 	await closeDb(conn);
+	// Para o "motor" por último (ordem do plano: socket → pool → cron). Parar um
+	// cron só desarma o relógio: não há I/O pendente a drenar.
+	if (monitorSaude) {
+		monitorSaude.stop();
+		monitorSaude = undefined;
+	}
+	if (cronRelatorio) {
+		cronRelatorio.stop();
+		cronRelatorio = undefined;
+	}
 };
 
 main().catch((erro: unknown) => {
