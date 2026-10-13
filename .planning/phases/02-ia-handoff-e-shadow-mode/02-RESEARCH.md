@@ -491,27 +491,25 @@ const { output } = await generateText({
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Chave exata do kill switch e forma de "pausado"**
-   - O que sabemos: D-02 propõe `settings.operational_mode='paused'`; o gate já tem `GateReason` `kill_switch_ativo`.
-   - O que é incerto: se a chave já existe seedada na Fase 1 ou se a Fase 2 precisa criar/seedá-la; se "pausado" é global (`settings`) ou por conversa (`engagement_mode='pausado'`).
-   - Recomendação: kill switch **global** em `settings` (1 linha), auditado em `mode_changes` por conversa afetada; confirmar no plano 02-03.
+1. **[RESOLVED] Chave exata do kill switch e forma de "pausado"**
+   - Decisão: kill switch **global** em `settings.operational_mode='paused'` (reversível para `'active'`), auditado em `mode_changes` (actor='admin'). O snapshot (`snapshot.ts`) computa `killSwitch` como `(NOT a.is_active) OR (settings.operational_mode='paused')`, wireado ao gate (`kill-switch.ts`) para retornar `kill_switch_ativo` quando ativo. Resolvido no plano 02-03.
 
-2. **Critérios numéricos de saída do shadow (D-18/discretion)**
-   - O que sabemos: ADR-010 §6.7/§7 dá defaults (`minDaysOfOperation` ex. 14, `minSuggestionsReviewed` ex. 100, `minApprovalRate` 0.80, `maxCriticalHallucinations` 0, `maxAutomationReveals` 0).
-   - O que é incerto: os números finais (discretion) e de onde vêm as métricas (quantos leads/dia × quantas sugestões até 100).
-   - Recomendação: fixar no plano 02-03, checar programaticamente, exigir aprovação explícita; armazenar em `settings`.
+2. **[RESOLVED] Critérios numéricos de saída do shadow (D-18/discretion)**
+   - Decisão: fixados conforme ADR-010 defaults — `minDaysOfOperation` ≥ 14, `minSuggestionsReviewed` ≥ 100, `minApprovalRate` ≥ 0.80, `maxCriticalHallucinations` = 0, `maxAutomationReveals` = 0. `buildShadowReport()` computa veredicto PASS/FAIL com razões; limiares armazenados em `settings` (`shadow_exit.*`) ou documentados. Verificação programática com teste de fronteira; promoção exige aprovação explícita do Admin (D-18). Resolvido no plano 02-03.
 
-3. **Corpus e rubrica do bake-off**
-   - O que sabemos: ~200 mensagens adversarial pt-BR (02-01); landmarks de custo/latência em ADR-002 §6.2.
+3. **[RESOLVED] Corpus e rubrica do bake-off**
+   - O que sabemos: ~200 mensagens adversarial pt-BR (02-02); landmarks de custo/latência em ADR-002 §6.2.
    - O que é incerto: quem rotula "aprovado", qual métrica decide (taxa de aprovação simulada? aderência ao tom? custo?).
-   - Recomendação: harness offline com o mesmo corpus pontuado por 2 critérios (aderência a AR/tom) + custo/latência; resultado registrado antes de plugar o adapter real.
+   - Recomendação: harness offline (`scripts/bake-off.ts`) com o mesmo corpus pontuado por 2 critérios (aderência a AR/tom) + custo/latência; resultado registrado antes de plugar o adapter real. (Mantido como item de execução no plano 02-03.)
+   - **Decisão:** implementado no plano 02-03 (Task 3) — `scripts/bake-off.ts` + `npm run bake-off`, corpus de `tests/adversarial/corpus.ts`, rubrica de 2 eixos (aderência a AR/tom + custo/latência); o vencedor (provider+modelo) é injetado no adaptador do 02-01 (D-10). Resolvido.
 
-4. **Forma dos eventos de revisão (D-03/D-06)**
+4. **[RESOLVED] Forma dos eventos de revisão (D-03/D-06)**
    - O que sabemos: precisam ser append-only e reconstruíveis.
    - O que é incerto: tabela nova (`review_events`) vs colunas em `llm_runs`.
    - Recomendação: tabela `review_events(message_id, decision, actor, edited_text?, created_at)` — separa "geração" de "revisão"; ambos append-only.
+   - **Decisão:** tabela `review_events` (migração 0006, append-only por `fn_append_only` + `REVOKE`), criada no 02-01 e consumida no 02-03; o `messages.status` do rascunho nunca é mutado (D-06). Resolvido.
 
 ---
 
