@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-10-13T13:10:00.000Z"
+last_updated: "2026-10-13T18:00:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 0
@@ -19,7 +19,7 @@ progress:
 Ver: `.planning/PROJECT.md` (atualizado 2026-09-28)
 
 **Valor central:** Quando o bot assume uma conversa, conduz com naturalidade suficiente para gerar reuniões agendadas sem nunca cruzar uma fronteira proibida — e para no instante exato em que o humano precisa assumir.
-**Foco atual:** Phase 1 — Fundação, Canal e Gate de Envio
+**Foco atual:** Phase 2 — IA, Handoff e Shadow Mode
 
 ## Posição Atual
 
@@ -126,6 +126,17 @@ Decisões completas em PROJECT.md (tabela Key Decisions). Recentes que afetam o 
 - **A base de teste do `backup.ps1 -Verify` roda como `-U postgres`:** o papel da app (`whatsapp_bot`) é least-privilege e não tem `CREATEDB`; o idioma está documentado em `01-RESEARCH §Backup` e `01-PATTERNS §4.11`. O wrapper `Invoke-Nativa` tolera o stderr nativo do `psql` sob `ErrorActionPreference = "Stop"` (a verdade é o `$LASTEXITCODE`).
 - **`NFRQ-04`/`NFRQ-06` entregues como mecânica** (logs + `event_log` + notificação local); o painel visual formaliza na Fase 3, conforme a divisão mecânica/comportamento do ROADMAP. **Parcela deferida à Fase 2 (P-006, 2026-10-13):** a transição `engagement_mode = awaiting_human` + escrita de `handoff_active` — a guarda AR-010 lê o sinal, mas na Fase 1 **ninguém o escreve**; o escritor (HandoffService + `mode_changes`) é escopo do plano 02-02.
 
+### Decisões da Discussão da Fase 2 (2026-10-13, `02-CONTEXT.md`)
+
+Discussão em modo `--auto` (passada única, 5 áreas). Decisões D-01..D-18 em `02-CONTEXT.md`:
+
+- **Superfície do Admin = CLI-first** (D-01/02/03): `npm run shadow:*` + `npm run mode`; sem HTTP/painel até a Fase 3; kill switch = 1 comando → `kill_switch_ativo`, auditado em `mode_changes`; decisões de revisão append-only.
+- **Rascunho do copiloto vive em `messages`** (`origin='ai_suggestion'`, `status='suggested'`) + tabela companheira nova **`llm_runs`** para modelo/tokens/latência/custo/versões (D-04/05/06). A `suggestions` do ADR-010 fica **superseded** para o corpo do texto ("message bodies live ONLY in `messages`").
+- **FSM hintada / sanduíche de 3 camadas** (D-07/08/09/10): `conversations.state` + `resolveNextState(prev, hint, ctx)` em código são a autoridade; LLM só dá hint. Duas chamadas: modelo barato extrai intent (Zod + campos-canário) → código decide (`evaluatePolicy` antes do texto) → modelo forte gera sob o estado resolvido. Enum separa `pedido_preco`→handoff (AR-001) de `objecao_preco`→contorno (R-042). Falha-fechada: 1 reprompt → silêncio + notificação. Provider/modelo = resultado do bake-off.
+- **Handoff/silêncio/opt-out** (D-11..D-15): `HandoffService` grava `handoff_events` + `mode_changes` + `engagement_mode='awaiting_human'` + flag numa transação (**quita P-006**); gatilhos por código (R-012/R-056/R-065/R-038/FLUP-09); silêncio total na conversa (inclusive "é bot?" → não nega/admite/desvia) mas **notificação local continua**; opt-out determinístico pt-BR é a autoridade (explícito + implícito definido → `opt_out` + `optout_ledger` irreversível; ambíguo → handoff); volta só por ação explícita do Admin.
+- **PII/saída do shadow** (D-16/17/18): mascarar telefone+endereço antes de qualquer chamada de LLM (choke-point único do prompt-builder), manter nome (negócio B2B); `npm run shadow:report` gera relatório do banco (alucinações/revelações de automação/latência/custo); promoção shadow→ativo exige **aprovação explícita** — o programa não se auto-promove.
+- **Conflito de roadmap resolvido:** o chime Web Audio (citado como redundância em 02-02) fica para a **Fase 3** (não há painel/Web Audio até lá); a notificação na Fase 2 é só `notify.ps1`.
+
 ### Todos Pendentes
 
 De `.planning/todos/pending/`:
@@ -175,8 +186,8 @@ Nenhum ainda.
 ## Continuidade de Sessão
 
 Última sessão: 2026-10-13
-Parou em: Fase 1 fechada parcialmente (4/5) com as correções pós-verificação commitadas (2026-10-13): verificações humanas de toast e restore (`35b7686`), seed do Admin (`9174912` — migration `0005_seed_admin` aplicada, EQUP-01/P-005 fechado), chore de metadados + ar-009 (`9950846`) e deferimento do handoff→`awaiting_human` à Fase 2 (P-006). Requisitos: **18/23 Complete**; 5 Pending pelo 01-03 (LEAD-01..04, WHS-05, P-004). Suíte **33 arquivos / 141 testes verdes**, `tsc` e biome limpos (30 warnings pré-existentes de `noNonNullAssertion`). Plano 01-05 executado (3/3 tasks; checkpoint humano de backup: `-Verify` exit 0, 4 contagens batendo).
-Próximo passo: **iniciar a Fase 2** (IA, Handoff e Shadow Mode). A verificação de fase foi feita em 2026-10-13 (PASS_WITH_NOTES). Fechar antes do piloto, não antes da Fase 2: 01-03 (pareamento — P-004) e a transição `awaiting_human` (02-02 — P-006). SC5 (encarregado) foi fechado em 2026-10-13.
+Parou em: Fase 2 **discutida** — `02-CONTEXT.md` + `02-DISCUSSION-LOG.md` escritos (modo `--auto`, passada única, 5 áreas; D-01..D-18) e commitados (`eba87b7`). Decisões-chave: Admin CLI-first; rascunho em `messages` + `llm_runs`; FSM hintada com sanduíche de 3 camadas (código decide, texto gerado depois); handoff/silêncio/opt-out com autoridade determinística e silêncio total + notificação local; PII mascarada e saída do shadow com aprovação explícita. **P-006 quitado** (o escritor `HandoffService` é o plano 02-02). Chime Web Audio adiado para a Fase 3 (conflito de ROADMAP 02-02 resolvido). Fase 1 permanece 18/23 requisitos; suíte 33 arquivos / 141 testes verdes.
+Próximo passo: **planejar a Fase 2** (`/gsd-plan-phase 2`) a partir de `02-CONTEXT.md` — planos 02-01 (LlmPort + FSM hintada), 02-02 (Handoff + silêncio, quita P-006), 02-03 (Shadow mode + relatório como gate de saída). Fechar antes do piloto: 01-03 (pareamento — P-004).
 Pendente (deferido — P-004): fechar o checkpoint de pareamento do 01-03 — `CHANNEL_PHONE_E164` precisa do número real (hoje `+5511999999999`) e o QR precisa parear (`CREDS_INVALID` em `01-03-DIAG.md` / `docs/pendencias.md`).
 Pós-reboot: revalidar com `npm run notify -- -Title "Teste R-013" -Message "Verificacao" -Urgent` e fechar a Task 6 do plano 01-01 (toast já exibido por humano em 2026-10-05, P-001).
 Arquivo de retomada: `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-05-SUMMARY.md`
