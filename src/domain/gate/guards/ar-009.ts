@@ -10,9 +10,10 @@ import type { GateInput, GateReason } from "../types.js";
  *
  * Enquanto `pendingMediaBlock` estiver ligado, **nenhum** outbound sai: o conteúdo
  * da mídia não foi interpretado e o Admin precisa assumir. `ar-010.ts` também é
- * handoff; a diferença é que AR-009 carrega o motivo específico "mídia recebida", e
- * `ar-009` vem **antes** na ordem, então `pendingMediaBlock` tem a precedência
- * quando os dois estão ligados.
+ * handoff; a diferença é que AR-009 carrega o motivo específico "mídia recebida".
+ * Na ordem canônica (`guard-order.ts`), **AR-010 precede AR-009** (posições 4 e 5):
+ * quando os dois estão ligados, o `reason` gravado em `blocked_attempts` é
+ * `ar010_handoff_ativo` — não `ar009_midia_recebida`.
  */
 export function evaluate(input: GateInput): GateReason | null {
 	return input.conversation.pendingMediaBlock ? "ar009_midia_recebida" : null;

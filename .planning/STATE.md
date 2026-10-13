@@ -111,7 +111,7 @@ Decisões completas em PROJECT.md (tabela Key Decisions). Recentes que afetam o 
 - **Bug corrigido em `snapshot.ts` (Rule 1):** `db.execute` devolve TIMESTAMP como **string**; o helper `paraIso` ancorou strings ingênuas como UTC e o AR-011 passou a comparar corretamente. Teste de deferimento passou a comparar timestamp em texto (`::text`).
 - **`types.ts` congelado neste plano:** TTL de `wa_validation_state = 'desconhecido'` adiado (não há timestamp de validação no `GateInput`); só `"invalido"` bloqueia (`leadNumeroInvalido`).
 - **`outbox` durável:** status `pending|reserved|sent|failed|abandoned`, idempotência por `idempotency_key`, cota reservada na **mesma transação** do branch `send` (bloqueio não consome cota). O dreno reavalia o gate **por job** — teste prova que opt-out ligado após o enqueue faz o job virar `abandoned`.
-- **Comentário enganoso de `ar-009.ts` adiado** (afirma precedência sobre ar-010, mas a ordem real é ar-010 → ar-009): registrado em `.planning/phases/01-funda-o-canal-e-gate-de-envio/deferred-items.md`; doc-only, fora de escopo.
+- **Comentário enganoso de `ar-009.ts` adiado** (afirma precedência sobre ar-010, mas a ordem real é ar-010 → ar-009): registrado em `.planning/phases/01-funda-o-canal-e-gate-de-envio/deferred-items.md`; doc-only, fora de escopo. **✅ Corrigido em 2026-10-13** — o comentário agora diz que AR-010 precede AR-009 (chore pós-verificação).
 
 ### Decisões do Plano 01-05 (2026-10-13, operação e humanização)
 

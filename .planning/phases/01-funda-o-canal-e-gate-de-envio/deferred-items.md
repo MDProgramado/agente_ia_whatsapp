@@ -4,7 +4,12 @@ Itens **pré-existentes** encontrados durante a execução do 01-04 mas fora do
 escopo desta task (limite de escopo de desvios: não corrigir o que não foi
 causado pelas mudanças da task). Registrados aqui para a Fase 04 / verificação.
 
-## 1. Comentário enganoso em `src/domain/gate/guards/ar-009.ts`
+## 1. Comentário enganoso em `src/domain/gate/guards/ar-009.ts` ✅ RESOLVIDO
+
+**Resolvido em 2026-10-13** (chore da pós-verificação da Fase 1): o comentário
+foi corrigido para dizer que AR-010 precede AR-009 (posições 4 e 5 em
+`guard-order.ts`). A decisão de design ficou com a precedência **executada**:
+`ar010_handoff_ativo` é o motivo gravado quando os dois estão ligados.
 
 O comentário de `ar-009.ts` afirma que "`ar-009` vem **antes** na ordem, então
 `pendingMediaBlock` tem a precedência quando os dois [AR-009 e AR-010] estão
