@@ -1,5 +1,10 @@
 /**
- * Inbound fromMe gate — behaviors 1-9 conforme 01-03-PLAN Task 2.
+ * Inbound fromMe gate — behaviors 1-9 (reescrito no 02-04 Task 1, CR-01).
+ *
+ * O sinal do Gate 0 é o EMISSOR da mensagem, não o `chatId`: num evento `fromMe`
+ * o `chatId` é o JID do LEAD (é para quem o Admin escreveu), e o emissor é o
+ * próprio socket (o número dedicado). O runtime carimba `senderPhoneE164` a
+ * partir de `sock.user.id`; o predicado puro compara esse E.164 com o do canal.
  *
  * Notas de reconciliação com o schema real (01-03 GREEN):
  * - `schema` é namespace (`import * as schema`); colunas são camelCase no TS
@@ -11,7 +16,11 @@
 import { eq, sql } from "drizzle-orm";
 import fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { processInboundFromMe } from "../../src/application/inbound-handler.js";
+import {
+	deveMarcarPrimeiroContatoHumano,
+	processInboundFromMe,
+} from "../../src/application/inbound-handler.js";
+import { criarEventoInbound } from "../../src/channel/baileys/runtime.js";
 import { env } from "../../src/config/env.js";
 import type { Db } from "../../src/infra/db/client.js";
 import { openDb } from "../../src/infra/db/client.js";
@@ -19,6 +28,7 @@ import * as schema from "../../src/infra/db/schema.js";
 
 const SEMENTE = 20260928;
 const TZ = env.TZ ?? "America/Sao_Paulo";
+const CANAL = env.CHANNEL_PHONE_E164;
 
 let _seq = 0;
 const uniqPhone = (): string => {
@@ -37,18 +47,9 @@ const dayLocal = (agora: Date = new Date()): string => {
 	return fmt.format(agora);
 };
 
-// Função pura extraída conforme plano (local ao teste — não exportada)
-function deveMarcarPrimeiroContatoHumano(opts: {
-	fromMe: boolean | null | undefined;
-	chatId: string;
-	channelPhoneE164: string;
-}): boolean {
-	if (opts.fromMe !== true) return false;
-	const c = opts.chatId;
-	const ch = opts.channelPhoneE164;
-	if (!c || !ch) return false;
-	return c === ch;
-}
+/** Forma que o runtime produz num `fromMe`: o `chatId` é o JID do LEAD. */
+const jidDoTelefone = (phone: string): string =>
+	`${phone.replace(/^\+/, "")}@s.whatsapp.net`;
 
 describe("inbound-fromme", () => {
 	let dbHandle: Awaited<ReturnType<typeof openDb>>;
@@ -66,50 +67,79 @@ describe("inbound-fromme", () => {
 			signalRepository: { lidMapping: {} },
 		}) as unknown as Parameters<typeof processInboundFromMe>[1];
 
-	it("behavior 1: fromMe true + chatId == CHANNEL_PHONE_E164 → first_contact_by_human = true (1x)", async () => {
+	const semearLead = async (
+		tx: Db,
+		over: {
+			readonly firstContactByHuman?: boolean;
+			readonly optOut?: boolean;
+		} = {},
+	): Promise<{ leadId: string; conversationId: string; phone: string }> => {
+		await tx
+			.insert(schema.channelAccounts)
+			.values({ phoneE164: CANAL })
+			.onConflictDoNothing();
+		const d = dayLocal();
+		await tx
+			.insert(schema.dailyCounters)
+			.values({ day: d, kind: "new_contacts", count: 0 })
+			.onConflictDoNothing();
+		const phone = uniqPhone();
+		const l = await tx
+			.insert(schema.leads)
+			.values({
+				phoneNumber: phone,
+				originSource: "cacaleads",
+				purpose: "prospecao_b2b_servicos_digitais",
+				legalRegisteredAt: sql`now()-interval '1 day'`,
+				firstContactByHuman: over.firstContactByHuman ?? false,
+				optOut: over.optOut ?? false,
+			})
+			.returning({ id: schema.leads.id });
+		const conv = await tx
+			.insert(schema.conversations)
+			.values({
+				leadId: l[0]!.id,
+				channelAccountId: (
+					await tx.query.channelAccounts.findFirst({
+						where: eq(schema.channelAccounts.phoneE164, CANAL),
+					})
+				)!.id,
+			})
+			.returning({ id: schema.conversations.id });
+		return { leadId: l[0]!.id, conversationId: conv[0]!.id, phone };
+	};
+
+	it("behavior 1: fromMe + emissor = canal (chatId = JID do lead) → first_contact=true e novo→aquecimento auditado", async () => {
 		const sentinel = new Error("TEST_DONE");
 		try {
 			await dbHandle.db.transaction(async (tx) => {
-				await tx
-					.insert(schema.channelAccounts)
-					.values({ phoneE164: env.CHANNEL_PHONE_E164 })
-					.onConflictDoNothing();
-				const d = dayLocal();
-				await tx
-					.insert(schema.dailyCounters)
-					.values({ day: d, kind: "new_contacts", count: 0 })
-					.onConflictDoNothing();
-				const phone = uniqPhone();
-				const l = await tx
-					.insert(schema.leads)
-					.values({
-						phoneNumber: phone,
-						originSource: "cacaleads",
-						purpose: "prospecao_b2b_servicos_digitais",
-						legalRegisteredAt: sql`now()-interval '1 day'`,
-						firstContactByHuman: false,
-					})
-					.returning({ id: schema.leads.id });
-				await tx.insert(schema.conversations).values({
-					leadId: l[0]!.id,
-					channelAccountId: (await tx.query.channelAccounts.findFirst({
-						where: eq(schema.channelAccounts.phoneE164, env.CHANNEL_PHONE_E164),
-					}))!.id,
-				});
+				const fx = await semearLead(tx as unknown as Db);
 				await processInboundFromMe(tx as unknown as Db, makeSock(), {
-					chatId: env.CHANNEL_PHONE_E164,
+					chatId: jidDoTelefone(fx.phone),
 					fromMe: true,
+					senderPhoneE164: CANAL,
 					providerMsgId: "msg-1",
 					timestamp: Date.now(),
 					body: "oi",
-					phoneNumber: phone,
+					phoneNumber: fx.phone,
 					isMedia: false,
 					mediaType: null,
 				});
 				const ld = await tx.query.leads.findFirst({
-					where: eq(schema.leads.id, l[0]!.id),
+					where: eq(schema.leads.id, fx.leadId),
 				});
 				expect(ld?.firstContactByHuman).toBe(true);
+				const conv = await tx.query.conversations.findFirst({
+					where: eq(schema.conversations.id, fx.conversationId),
+				});
+				expect(conv?.state).toBe("aquecimento");
+				expect(conv?.engagementMode).toBe("bot_active");
+				const hist = await tx.query.statusHistory.findFirst({
+					where: eq(schema.statusHistory.conversationId, fx.conversationId),
+				});
+				expect(hist?.changedBy).toBe("admin");
+				expect(hist?.fromState).toBe("novo");
+				expect(hist?.toState).toBe("aquecimento");
 				throw sentinel;
 			});
 		} catch (e) {
@@ -117,50 +147,30 @@ describe("inbound-fromme", () => {
 		}
 	});
 
-	it("behavior 2: fromMe true + outro chatId → não muda", async () => {
+	it("behavior 2: fromMe com emissor de OUTRO número → não marca e não muda o estado", async () => {
 		const sentinel = new Error("TEST_DONE");
 		try {
 			await dbHandle.db.transaction(async (tx) => {
-				await tx
-					.insert(schema.channelAccounts)
-					.values({ phoneE164: env.CHANNEL_PHONE_E164 })
-					.onConflictDoNothing();
-				const d = dayLocal();
-				await tx
-					.insert(schema.dailyCounters)
-					.values({ day: d, kind: "new_contacts", count: 0 })
-					.onConflictDoNothing();
-				const phone = uniqPhone();
-				const l = await tx
-					.insert(schema.leads)
-					.values({
-						phoneNumber: phone,
-						originSource: "cacaleads",
-						purpose: "prospecao_b2b_servicos_digitais",
-						legalRegisteredAt: sql`now()-interval '1 day'`,
-						firstContactByHuman: false,
-					})
-					.returning({ id: schema.leads.id });
-				await tx.insert(schema.conversations).values({
-					leadId: l[0]!.id,
-					channelAccountId: (await tx.query.channelAccounts.findFirst({
-						where: eq(schema.channelAccounts.phoneE164, env.CHANNEL_PHONE_E164),
-					}))!.id,
-				});
+				const fx = await semearLead(tx as unknown as Db);
 				await processInboundFromMe(tx as unknown as Db, makeSock(), {
-					chatId: uniqPhone(),
+					chatId: jidDoTelefone(fx.phone),
 					fromMe: true,
+					senderPhoneE164: "+5511888887777",
 					providerMsgId: "msg-2",
 					timestamp: Date.now(),
 					body: "oi",
-					phoneNumber: phone,
+					phoneNumber: fx.phone,
 					isMedia: false,
 					mediaType: null,
 				});
 				const ld = await tx.query.leads.findFirst({
-					where: eq(schema.leads.id, l[0]!.id),
+					where: eq(schema.leads.id, fx.leadId),
 				});
 				expect(ld?.firstContactByHuman).toBe(false);
+				const conv = await tx.query.conversations.findFirst({
+					where: eq(schema.conversations.id, fx.conversationId),
+				});
+				expect(conv?.state).toBe("novo");
 				throw sentinel;
 			});
 		} catch (e) {
@@ -168,48 +178,24 @@ describe("inbound-fromme", () => {
 		}
 	});
 
-	it("behavior 3: fromMe false → não muda", async () => {
+	it("behavior 3: fromMe false mesmo com emissor = canal → não marca (R-002)", async () => {
 		const sentinel = new Error("TEST_DONE");
 		try {
 			await dbHandle.db.transaction(async (tx) => {
-				await tx
-					.insert(schema.channelAccounts)
-					.values({ phoneE164: env.CHANNEL_PHONE_E164 })
-					.onConflictDoNothing();
-				const d = dayLocal();
-				await tx
-					.insert(schema.dailyCounters)
-					.values({ day: d, kind: "new_contacts", count: 0 })
-					.onConflictDoNothing();
-				const phone = uniqPhone();
-				const l = await tx
-					.insert(schema.leads)
-					.values({
-						phoneNumber: phone,
-						originSource: "cacaleads",
-						purpose: "prospecao_b2b_servicos_digitais",
-						legalRegisteredAt: sql`now()-interval '1 day'`,
-						firstContactByHuman: false,
-					})
-					.returning({ id: schema.leads.id });
-				await tx.insert(schema.conversations).values({
-					leadId: l[0]!.id,
-					channelAccountId: (await tx.query.channelAccounts.findFirst({
-						where: eq(schema.channelAccounts.phoneE164, env.CHANNEL_PHONE_E164),
-					}))!.id,
-				});
+				const fx = await semearLead(tx as unknown as Db);
 				await processInboundFromMe(tx as unknown as Db, makeSock(), {
-					chatId: env.CHANNEL_PHONE_E164,
+					chatId: jidDoTelefone(fx.phone),
 					fromMe: false,
+					senderPhoneE164: CANAL,
 					providerMsgId: "msg-3",
 					timestamp: Date.now(),
 					body: "oi",
-					phoneNumber: phone,
+					phoneNumber: fx.phone,
 					isMedia: false,
 					mediaType: null,
 				});
 				const ld = await tx.query.leads.findFirst({
-					where: eq(schema.leads.id, l[0]!.id),
+					where: eq(schema.leads.id, fx.leadId),
 				});
 				expect(ld?.firstContactByHuman).toBe(false);
 				throw sentinel;
@@ -219,48 +205,24 @@ describe("inbound-fromme", () => {
 		}
 	});
 
-	it("behavior 4: sintético sem fromMe → não muda", async () => {
+	it("behavior 4: sem fromMe mesmo com emissor = canal → não marca", async () => {
 		const sentinel = new Error("TEST_DONE");
 		try {
 			await dbHandle.db.transaction(async (tx) => {
-				await tx
-					.insert(schema.channelAccounts)
-					.values({ phoneE164: env.CHANNEL_PHONE_E164 })
-					.onConflictDoNothing();
-				const d = dayLocal();
-				await tx
-					.insert(schema.dailyCounters)
-					.values({ day: d, kind: "new_contacts", count: 0 })
-					.onConflictDoNothing();
-				const phone = uniqPhone();
-				const l = await tx
-					.insert(schema.leads)
-					.values({
-						phoneNumber: phone,
-						originSource: "cacaleads",
-						purpose: "prospecao_b2b_servicos_digitais",
-						legalRegisteredAt: sql`now()-interval '1 day'`,
-						firstContactByHuman: false,
-					})
-					.returning({ id: schema.leads.id });
-				await tx.insert(schema.conversations).values({
-					leadId: l[0]!.id,
-					channelAccountId: (await tx.query.channelAccounts.findFirst({
-						where: eq(schema.channelAccounts.phoneE164, env.CHANNEL_PHONE_E164),
-					}))!.id,
-				});
+				const fx = await semearLead(tx as unknown as Db);
 				await processInboundFromMe(tx as unknown as Db, makeSock(), {
-					chatId: env.CHANNEL_PHONE_E164,
+					chatId: jidDoTelefone(fx.phone),
 					fromMe: undefined as never,
+					senderPhoneE164: CANAL,
 					providerMsgId: "msg-4",
 					timestamp: Date.now(),
 					body: "oi",
-					phoneNumber: phone,
+					phoneNumber: fx.phone,
 					isMedia: false,
 					mediaType: null,
 				});
 				const ld = await tx.query.leads.findFirst({
-					where: eq(schema.leads.id, l[0]!.id),
+					where: eq(schema.leads.id, fx.leadId),
 				});
 				expect(ld?.firstContactByHuman).toBe(false);
 				throw sentinel;
@@ -290,45 +252,20 @@ describe("inbound-fromme", () => {
 		const sentinel = new Error("TEST_DONE");
 		try {
 			await dbHandle.db.transaction(async (tx) => {
-				await tx
-					.insert(schema.channelAccounts)
-					.values({ phoneE164: env.CHANNEL_PHONE_E164 })
-					.onConflictDoNothing();
-				const d = dayLocal();
-				await tx
-					.insert(schema.dailyCounters)
-					.values({ day: d, kind: "new_contacts", count: 0 })
-					.onConflictDoNothing();
-				const phone = uniqPhone();
-				const l = await tx
-					.insert(schema.leads)
-					.values({
-						phoneNumber: phone,
-						originSource: "cacaleads",
-						purpose: "prospecao_b2b_servicos_digitais",
-						legalRegisteredAt: sql`now()-interval '1 day'`,
-						optOut: false,
-					})
-					.returning({ id: schema.leads.id });
-				await tx.insert(schema.conversations).values({
-					leadId: l[0]!.id,
-					channelAccountId: (await tx.query.channelAccounts.findFirst({
-						where: eq(schema.channelAccounts.phoneE164, env.CHANNEL_PHONE_E164),
-					}))!.id,
-				});
+				const fx = await semearLead(tx as unknown as Db);
 				await processInboundFromMe(tx as unknown as Db, makeSock(), {
 					chatId: "outro",
 					fromMe: false,
 					providerMsgId: "msg-6",
 					timestamp: Date.now(),
 					body: "stop",
-					phoneNumber: phone,
+					phoneNumber: fx.phone,
 					isMedia: false,
 					mediaType: null,
 					providerOptOut: true,
 				});
 				const ld = await tx.query.leads.findFirst({
-					where: eq(schema.leads.id, l[0]!.id),
+					where: eq(schema.leads.id, fx.leadId),
 				});
 				expect(ld?.optOut).toBe(true);
 				throw sentinel;
@@ -342,38 +279,14 @@ describe("inbound-fromme", () => {
 		const sentinel = new Error("TEST_DONE");
 		try {
 			await dbHandle.db.transaction(async (tx) => {
-				await tx
-					.insert(schema.channelAccounts)
-					.values({ phoneE164: env.CHANNEL_PHONE_E164 })
-					.onConflictDoNothing();
-				const d = dayLocal();
-				await tx
-					.insert(schema.dailyCounters)
-					.values({ day: d, kind: "new_contacts", count: 0 })
-					.onConflictDoNothing();
-				const phone = uniqPhone();
-				const l = await tx
-					.insert(schema.leads)
-					.values({
-						phoneNumber: phone,
-						originSource: "cacaleads",
-						purpose: "prospecao_b2b_servicos_digitais",
-						legalRegisteredAt: sql`now()-interval '1 day'`,
-					})
-					.returning({ id: schema.leads.id });
-				await tx.insert(schema.conversations).values({
-					leadId: l[0]!.id,
-					channelAccountId: (await tx.query.channelAccounts.findFirst({
-						where: eq(schema.channelAccounts.phoneE164, env.CHANNEL_PHONE_E164),
-					}))!.id,
-				});
+				const fx = await semearLead(tx as unknown as Db);
 				await processInboundFromMe(tx as unknown as Db, makeSock(), {
 					chatId: "x",
 					fromMe: false,
 					providerMsgId: "pid-7a",
 					timestamp: Date.now(),
 					body: "a",
-					phoneNumber: phone,
+					phoneNumber: fx.phone,
 					isMedia: false,
 					mediaType: null,
 				});
@@ -383,15 +296,12 @@ describe("inbound-fromme", () => {
 					providerMsgId: "pid-7b",
 					timestamp: Date.now(),
 					body: "b",
-					phoneNumber: phone,
+					phoneNumber: fx.phone,
 					isMedia: false,
 					mediaType: null,
 				});
-				const conv = await tx.query.conversations.findFirst({
-					where: eq(schema.conversations.leadId, l[0]!.id),
-				});
 				const msgs = await tx.query.messages.findMany({
-					where: eq(schema.messages.conversationId, conv!.id),
+					where: eq(schema.messages.conversationId, fx.conversationId),
 				});
 				expect(msgs.length).toBeGreaterThanOrEqual(0);
 				throw sentinel;
@@ -405,58 +315,33 @@ describe("inbound-fromme", () => {
 		const sentinel = new Error("TEST_DONE");
 		try {
 			await dbHandle.db.transaction(async (tx) => {
-				await tx
-					.insert(schema.channelAccounts)
-					.values({ phoneE164: env.CHANNEL_PHONE_E164 })
-					.onConflictDoNothing();
-				const d = dayLocal();
-				await tx
-					.insert(schema.dailyCounters)
-					.values({ day: d, kind: "new_contacts", count: 0 })
-					.onConflictDoNothing();
-				const phone = uniqPhone();
-				const l = await tx
-					.insert(schema.leads)
-					.values({
-						phoneNumber: phone,
-						originSource: "cacaleads",
-						purpose: "prospecao_b2b_servicos_digitais",
-						legalRegisteredAt: sql`now()-interval '1 day'`,
-					})
-					.returning({ id: schema.leads.id });
-				const ca = await tx.query.channelAccounts.findFirst({
-					where: eq(schema.channelAccounts.phoneE164, env.CHANNEL_PHONE_E164),
-				});
-				const conv = await tx
-					.insert(schema.conversations)
-					.values({ leadId: l[0]!.id, channelAccountId: ca!.id })
-					.returning({ id: schema.conversations.id });
+				const fx = await semearLead(tx as unknown as Db);
 				await processInboundFromMe(tx as unknown as Db, makeSock(), {
 					chatId: "x",
 					fromMe: false,
 					providerMsgId: "mid-8",
 					timestamp: Date.now(),
 					body: "img",
-					phoneNumber: phone,
+					phoneNumber: fx.phone,
 					isMedia: true,
 					mediaType: "image",
 				});
 				const msgs = await tx.query.messages.findMany({
-					where: eq(schema.messages.conversationId, conv[0]!.id),
+					where: eq(schema.messages.conversationId, fx.conversationId),
 				});
 				expect(msgs.length).toBe(0);
 				const ba = await tx.query.blockedAttempts.findMany({
-					where: eq(schema.blockedAttempts.conversationId, conv[0]!.id),
+					where: eq(schema.blockedAttempts.conversationId, fx.conversationId),
 				});
 				expect(ba.length).toBe(1);
 				expect(ba[0]?.guard).toBe("ar009_midia_recebida");
 				expect(ba[0]?.direction).toBe("in");
 				const he = await tx.query.handoffEvents.findMany({
-					where: eq(schema.handoffEvents.conversationId, conv[0]!.id),
+					where: eq(schema.handoffEvents.conversationId, fx.conversationId),
 				});
 				expect(he.length).toBe(1);
 				const c2 = await tx.query.conversations.findFirst({
-					where: eq(schema.conversations.id, conv[0]!.id),
+					where: eq(schema.conversations.id, fx.conversationId),
 				});
 				expect(c2?.pendingMediaBlock).toBe(true);
 				throw sentinel;
@@ -470,25 +355,80 @@ describe("inbound-fromme", () => {
 		expect(true).toBe(true);
 	});
 
+	it("Teste F (composicional): WAMessage(fromMe) → criarEventoInbound → processInboundFromMe marca e move para aquecimento", async () => {
+		const sentinel = new Error("TEST_DONE");
+		try {
+			await dbHandle.db.transaction(async (tx) => {
+				const fx = await semearLead(tx as unknown as Db);
+				const canalSelfJid = `${CANAL.replace(/^\+/, "")}:12@s.whatsapp.net`;
+				const evt = criarEventoInbound(
+					{
+						key: {
+							remoteJid: jidDoTelefone(fx.phone),
+							fromMe: true,
+							id: "comp-1",
+						},
+						message: { conversation: "oi, aqui é o consultor" },
+						messageTimestamp: Math.floor(Date.now() / 1000),
+					} as unknown as Parameters<typeof criarEventoInbound>[0],
+					canalSelfJid,
+				);
+				expect(evt).not.toBeNull();
+				await processInboundFromMe(tx as unknown as Db, makeSock(), {
+					...evt!,
+					phoneNumber: fx.phone,
+				});
+				const ld = await tx.query.leads.findFirst({
+					where: eq(schema.leads.id, fx.leadId),
+				});
+				expect(ld?.firstContactByHuman).toBe(true);
+				const conv = await tx.query.conversations.findFirst({
+					where: eq(schema.conversations.id, fx.conversationId),
+				});
+				expect(conv?.state).toBe("aquecimento");
+				throw sentinel;
+			});
+		} catch (e) {
+			if (e !== sentinel) throw e;
+		}
+	});
+
 	describe("property tests (seed 20260928, numRuns 500)", () => {
-		it("deveMarcarPrimeiroContatoHumano: só fromMe true + chatId==canal marca", () => {
+		it("deveMarcarPrimeiroContatoHumano: true sse fromMe + emissor == canal", () => {
+			// `caso` garante que o ramo de igualdade NÃO-vazia seja exercitado —
+			// dois `fc.string()` independentes praticamente nunca colidem.
 			fc.assert(
 				fc.property(
 					fc.boolean(),
 					fc.string(),
-					fc.string(),
-					(fromMe, chatId, ch) => {
+					fc.oneof(
+						fc.constant("igual"),
+						fc.constant("diferente"),
+						fc.constant("nulo"),
+						fc.constant("undefined"),
+					),
+					(fromMe, canal, caso) => {
+						const ch = canal;
+						const senderPhoneE164 =
+							caso === "igual"
+								? canal
+								: caso === "diferente"
+									? `${canal}\u0000z`
+									: caso === "nulo"
+										? null
+										: undefined;
 						const r = deveMarcarPrimeiroContatoHumano({
 							fromMe,
-							chatId,
+							senderPhoneE164,
 							channelPhoneE164: ch,
 						});
-						if (fromMe === true && chatId === ch && ch.length > 0) {
-							expect(r).toBe(true);
-						} else {
-							expect(r).toBe(false);
-						}
-						return true;
+						const esperado =
+							fromMe === true &&
+							senderPhoneE164 != null &&
+							senderPhoneE164.length > 0 &&
+							ch.length > 0 &&
+							senderPhoneE164 === ch;
+						expect(r).toBe(esperado);
 					},
 				),
 				{ numRuns: 500, seed: SEMENTE },
