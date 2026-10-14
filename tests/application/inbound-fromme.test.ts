@@ -99,11 +99,9 @@ describe("inbound-fromme", () => {
 			.insert(schema.conversations)
 			.values({
 				leadId: l[0]!.id,
-				channelAccountId: (
-					await tx.query.channelAccounts.findFirst({
-						where: eq(schema.channelAccounts.phoneE164, CANAL),
-					})
-				)!.id,
+				channelAccountId: (await tx.query.channelAccounts.findFirst({
+					where: eq(schema.channelAccounts.phoneE164, CANAL),
+				}))!.id,
 			})
 			.returning({ id: schema.conversations.id });
 		return { leadId: l[0]!.id, conversationId: conv[0]!.id, phone };

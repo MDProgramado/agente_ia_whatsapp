@@ -213,7 +213,10 @@ describe("contrato do conjunto INTENCOES_HANDOFF (FLUP-09/R-065)", () => {
 describe("CR-02 — duvida_complexa dispara handoff (R-065/FLUP-09)", () => {
 	it("intent duvida_complexa → handoff atômico + silêncio total (generate nunca chamado)", async () => {
 		await emTransacaoRevertida(async (tx) => {
-			const fx = await semear(tx, { state: "novo", engagementMode: "bot_active" });
+			const fx = await semear(tx, {
+				state: "novo",
+				engagementMode: "bot_active",
+			});
 			const llm = scriptedLlmAdapter({
 				extracao: { intent: "duvida_complexa" },
 			});
@@ -251,7 +254,11 @@ describe("CR-02 — duvida_complexa dispara handoff (R-065/FLUP-09)", () => {
 
 			// A conversa congelou: bot cai, handoff ativo, estado awaiting_human.
 			const conv = primeiro(
-				rows<{ state: string; engagement_mode: string; handoff_active: boolean }>(
+				rows<{
+					state: string;
+					engagement_mode: string;
+					handoff_active: boolean;
+				}>(
 					await tx.execute(sql`
 						select state, engagement_mode, handoff_active
 						from conversations where id = ${fx.conversationId}
