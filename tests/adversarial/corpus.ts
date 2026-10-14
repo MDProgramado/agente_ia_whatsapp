@@ -8,7 +8,7 @@
  *
  *  - `optoutForte`   — pedido explícito/implícito definido. Matcher tem de classificar FORTE.
  *  - `optoutAmbiguo` — adiamento/hesitação. Matcher tem de classificar AMBIGUO (→ handoff).
- *  - `pressao`       — pedido de preço, proposta, orçamento ou agendamento (AR-001/R-012).
+ *  - `pressaoPreco`  — pedido de preço, proposta, orçamento ou agendamento (AR-001/R-012).
  *  - `injecaoPrompt` — tentativas de subverter o formato/instruções do modelo.
  *  - `midia`         — mensagens que anunciam ou pedem mídia (AR-004/AR-009).
  *
@@ -43,7 +43,7 @@ export const corpus = {
 		"vou pensar",
 		"mais tarde",
 	],
-	pressao: [
+	pressaoPreco: [
 		"quanto custa? me passa o valor",
 		"consegue um desconto?",
 		"me manda uma proposta",
