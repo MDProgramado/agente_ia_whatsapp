@@ -35,7 +35,8 @@ findings:
   warning: 6
   info: 3
   total: 11
-status: issues_found
+status: clean
+updated: 2026-10-14T18:45:11Z
 ---
 
 # Phase 02: Code Review Report
@@ -236,6 +237,69 @@ and apply them in `maskTexto` (CNPJ before CPF, both before the phone rule).
 
 ---
 
+## Re-review pós-gap-closure (02-04)
+
+**Reviewed:** 2026-10-14T18:45:11Z
+**Diff:** `40ae4ca..HEAD` (`b55eeca`)
+**Depth:** standard (foco: gap-closure)
+**Status:** clean — as duas Critical do review original estão fechadas e nenhum achado novo (BLOCKER/WARNING) foi introduzido pelo diff de gap.
+
+Escopo desta re-revisão: apenas o diff `40ae4ca..HEAD` (plano `02-04`). As 6 warnings e 3 infos originais (WR-01/02/03/04/05/06, IN-01/02/03) permanecem **fenceadas** e não foram re-flagadas — o diff não as piorou.
+
+### CR-01 → RESOLVED ✅
+
+**Predicado** (`src/application/inbound-handler.ts:120-128`): `deveMarcarPrimeiroContatoHumano` agora recebe `{ fromMe, senderPhoneE164, channelPhoneE164 }` e compara o **EMISSOR** E.164:
+
+```ts
+if (opts.fromMe !== true) return false;
+if (!opts.senderPhoneE164 || !opts.channelPhoneE164) return false;
+return opts.senderPhoneE164 === opts.channelPhoneE164;
+```
+
+- **Nunca mais compara `chatId`/`remoteJid` com E.164** — a comparação defeituosa do CR-01 foi removida (era `opts.chatId === opts.channelPhoneE164`). Fail-closed: `fromMe !== true` ou emissor ausente/vazio → `false`.
+- **Call site do passo (d)** (`src/application/inbound-handler.ts:622-627`) passa `senderPhoneE164: evt.senderPhoneE164`.
+- **Carimbo no runtime** (`src/channel/baileys/runtime.ts:108-114`): `fromMe === true` → `normalizeJid(canalSelfJid).e164`; senão → `normalizeJid(chatId).e164`; `canalSelfJid` ausente → `undefined`. Propagado em `runtime.ts:163` (`criarEventoInbound(mensagem, deps.canalSelfJid?.())`).
+- **Fiação de boot** (`src/index.ts:275`): `canalSelfJid: () => sock.user?.id` (getter; `sock.user` só existe pós-registro).
+- **A transição realmente acontece** (`src/application/inbound-handler.ts:632-660`): seta `first_contact_by_human = true` (linha 632-635) e, dentro de uma `db.transaction`, faz `UPDATE conversations.state` + `recordStatusChange(..., changedBy: "admin")` (linhas 644-659) — `novo → aquecimento` auditado (R-022).
+
+**Evidência de que é alcançável em produção (não só em teste):**
+- `sock.user` é getter que devolve `authState.creds.me` (Baileys `lib/Socket/socket.js:931-933`), populado no login/pareamento — logo disponível em `connection === 'open'` e por mensagem. `sock.user.id` tem a forma `5511999999999[:device]@s.whatsapp.net`; `normalizeJid` (via `jidNormalizedUser`+`jidDecode`) devolve `+5511999999999`, que casa com `env.CHANNEL_PHONE_E164` (validado por `env.ts:48-50` como `/^\+[1-9][0-9]{7,14}$/`).
+- Único call site do predicado é o passo (d) — grep repo-wide confirma.
+- Testes verdes executados: `tests/channel/evento-inbound.test.ts` (3/3), `tests/application/inbound-fromme.test.ts` + `tests/application/handoff-intents.test.ts` (13/13). `npm run typecheck` exit 0.
+- Teste **não-tautológico**: a re-implementation local de `deveMarcarPrimeiroContatoHumano` foi removida (o teste importa a função REAL, `inbound-fromme.test.ts:19-22`); o property test (`inbound-fromme.test.ts:395-434`) exercita a função real com os 4 ramos forçados; o **Teste F composicional** (`inbound-fromme.test.ts:356-392`) encadeia de verdade `WAMessage(fromMe) → criarEventoInbound → processInboundFromMe` com `chatId` = JID do lead — exatamente a costura cross-módulo que o bug CR-01 quebrou. O RED precede o GREEN no git (`757f728` antes de `aacaa69`).
+- Testes ajustados (`qualification.test.ts:460-500`, `shadow.test.ts:382-421`) **preservaram** todas as asserções (`state=aquecimento`, `first_contact_by_human=true`, `status_history.changed_by='admin'`, `0` rascunhos) — apenas a construção do evento foi atualizada ao novo contrato.
+
+### CR-02 → RESOLVED ✅
+
+- `"duvida_complexa"` presente no conjunto **exportado** `INTENCOES_HANDOFF` (`src/application/inbound-handler.ts:82-91`), com os 8 intents requeridos.
+- Consumido por `precisaHandoff` (`inbound-handler.ts:498-505`: `INTENCOES_HANDOFF.has(intent) || …`) → dispara `dispararHandoff` (`inbound-handler.ts:507-522`) na mesma transação atômica, com silêncio (sem `generate`, sem rascunho).
+- `triggeredByDoGatilho` mapeia o default para `"intent"` (`inbound-handler.ts:341-355`), confirmado no e2e.
+- Teste de contrato (`tests/application/handoff-intents.test.ts:197-211`) trava EXATAMENTE os 8 intents; o e2e (`handoff-intents.test.ts:214-277`) prova `handoff_events(triggered_by='intent', trigger_value='duvida_complexa')` + `mode_changes(to_mode='awaiting_human')` + `conversations(engagement_mode='awaiting_human', handoff_active=true, state='awaiting_human')` + `llm.chamadas === ["extract"]` + `0` `ai_suggestion`. RED (`0a51cc5`) precede GREEN (`2e3c56d`).
+
+### Novos achados no diff de gap
+
+Nenhum achado **BLOCKER** ou **WARNING** introduzido. Duas observações **Info**:
+
+#### IN-04 (novo): doc-comment de `senderPhoneE164` diz `undefined`, mas o ramo LID carimba `null`
+
+**File:** `src/application/event-bus.ts:38-39` (doc) x `src/channel/baileys/runtime.ts:109-114`
+**Issue:** O comentário diz *"undefined quando não derivável"*, mas quando `canalSelfJid` existe e resolve para LID, `normalizeJid(...).e164` devolve `null` (não `undefined`). O tipo `string | null | undefined` cobre ambos e o predicado trata os dois como fail-closed, então é inofensivo — é imprecisão de documentação.
+**Fix:** Trocar o texto para `"null/undefined quando não derivável"`.
+
+#### IN-05 (novo): warn de LID dispara por `connection === 'open'` (por conexão), não "uma vez no boot"
+
+**File:** `src/index.ts:276-290`
+**Issue:** O `log.warn { event: "jid_proprio_sem_e164" }` está dentro de `aoConectar`, invocado a cada `connection === 'open'` (inclusive reconexões). É o que o plano descreveu ("UM warn por abertura de conexão, nunca por mensagem") e o volume é baixo, mas num socket instável (flapping) o warn se repete a cada reconexão — não é "uma vez no boot" como o `02-04-PLAN.md` fraseia. Não há risco de spam por mensagem.
+**Fix:** Nenhum obrigatório; se quiser literalizar "uma vez", guardar com um flag de módulo (`let avisouLid = false`) — opcional.
+
+### Nota de escopo (não é achado novo)
+
+- **WR-03 fechado apenas na METADE admin.** O passo (d) do caminho do Admin agora é transacional (resolvido). A metade IA (`rascunharShadow`, `src/application/inbound-handler.ts:528-541`) permanece `UPDATE conversations` + `recordStatusChange` sem transação — **explicitamente fenceada** em `02-04-PLAN.md` ("WR-03 metade IA … FORA de escopo") e não piorada pelo diff. Continua aberta, por decisão de escopo.
+- O `UPDATE leads set first_contact_by_human = true` (linha 632-635) permanece **fora** da transação do passo (d), por escolha documentada (idempotente por construção + trigger R-024). Se a transação de estado falhar, o flag fica `true` com o estado ainda `novo`; a próxima mensagem `fromMe` re-tenta a transição (auto-corrige). Sem perda de dado.
+
+---
+
 _Reviewed: 2026-10-14T11:32:17Z_
+_Re-review: 2026-10-14T18:45:11Z (gap-closure 02-04)_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
