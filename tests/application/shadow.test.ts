@@ -344,6 +344,29 @@ describe("shadow — fatia ponta-a-ponta (02-01 Task 3)", () => {
 		});
 	});
 
+	it("pós-gate (CONV-07): texto gerado com preço é barrado ANTES do rascunho → 0 ai_suggestion, 1 blocked_attempts com marcador do pós-gate", async () => {
+		await emTransacaoRevertida(async (tx) => {
+			const fx = await semear(tx);
+			await rodar(tx, fx, {
+				geracao: { replyText: "Fica R$ 3.500 e te mando o PDF" },
+			});
+
+			expect(await contarAiSuggestion(tx, fx.conversationId)).toBe(0);
+
+			const r = await tx.execute(sql`
+				select rule_reference, detail from blocked_attempts
+				where conversation_id = ${fx.conversationId}
+			`);
+			const linhas = rows<{ rule_reference: string; detail: string | null }>(r);
+			expect(linhas).toHaveLength(1);
+			const linha = primeiro(linhas);
+			expect(linha.rule_reference).toBe("ar001_preco");
+			// O detalhe vem do pós-gate (não do gate canônico): prova o
+			// encadeamento `scanPostGate` → `recordBlockedAttempt`.
+			expect(linha.detail ?? "").toMatch(/p[óo]s-gate/i);
+		});
+	});
+
 	it("idempotência: dois eventos com o mesmo providerMsgId → ainda 1 rascunho", async () => {
 		await emTransacaoRevertida(async (tx) => {
 			const fx = await semear(tx);
