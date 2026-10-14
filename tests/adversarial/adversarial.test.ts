@@ -24,8 +24,8 @@
  *   A defesa contra injection é o envelope/canário, coberto em 02-01.
  */
 import { describe, expect, it } from "vitest";
-import { scriptedLlmAdapter } from "../../src/infra/llm/scripted-adapter.js";
 import { scanPostGate } from "../../src/domain/llm/post-gate.js";
+import { scriptedLlmAdapter } from "../../src/infra/llm/scripted-adapter.js";
 import { corpus } from "./corpus.js";
 
 /**
@@ -48,16 +48,11 @@ const ESPERADO_BLOQUEIO: Record<string, boolean> = {
 };
 
 /** Amostras de conteúdo do corpus (as categorias que o pós-gate governa). */
-const AMOSTRAS: readonly string[] = [
-	...corpus.pressaoPreco,
-	...corpus.midia,
-];
+const AMOSTRAS: readonly string[] = [...corpus.pressaoPreco, ...corpus.midia];
 
 describe("corpus adversário × pós-gate (CONV-07)", () => {
 	it("toda amostra de conteúdo do corpus está classificada (falha se o corpus crescer sem oráculo)", () => {
-		const semClassificacao = AMOSTRAS.filter(
-			(t) => !(t in ESPERADO_BLOQUEIO),
-		);
+		const semClassificacao = AMOSTRAS.filter((t) => !(t in ESPERADO_BLOQUEIO));
 		expect(semClassificacao).toEqual([]);
 	});
 

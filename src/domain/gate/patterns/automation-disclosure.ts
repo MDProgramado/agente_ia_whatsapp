@@ -37,9 +37,19 @@ export const DISCOUNT_TERM =
 /** Proposta comercial. AR-002. */
 export const PROPOSAL_TERM = /\bproposta\b|\bor[çc]amento\b/i;
 
-/** AR-004: o texto nomeia um arquivo de mídia. */
+/**
+ * AR-004: o texto nomeia um arquivo de mídia.
+ *
+ * `[áa]udio` usa lookaround (`(?<!\w)` / `(?!\w)`) em vez de `\b` dos dois lados,
+ * pela mesma razão documentada em `AUTOMATION_TERM` abaixo: `\b` é fronteira
+ * entre `\w` e não-`\w`, e o JS só trata `[A-Za-z0-9_]` como `\w` — "á" de
+ * "áudio" é NÃO-`\w`. Então `\b[áa]udio\b` falha quando "áudio" é a primeira
+ * palavra da frase ou vem depois de um espaço (não há fronteira entre dois
+ * caracteres não-`\w`), e a grafia acentuada escapava do AR-004 — um furo real
+ * de mídia. `(?<!\w)` / `(?!\w)` testam o mesmo limite sem depender do `\b`.
+ */
 export const MEDIA_TERM =
-	/\bfoto\b|\bimagem\b|\b[áa]udio\b|\bv[íi]deo\b|\bpdf\b|\bplanilha\b/i;
+	/\bfoto\b|\bimagem\b|(?<!\w)[áa]udio(?!\w)|\bv[íi]deo\b|\bpdf\b|\bplanilha\b/i;
 
 /**
  * AR-004: extensão de mídia na URL.

@@ -35,6 +35,7 @@ import { sql } from "drizzle-orm";
 import { env } from "../config/env.js";
 import { evaluatePolicy } from "../domain/gate/index.js";
 import type { GateReason } from "../domain/gate/types.js";
+import { scanPostGate } from "../domain/llm/post-gate.js";
 import type { Db } from "../infra/db/client.js";
 import { recordBlockedAttempt } from "../infra/db/queries/blocked-attempts.js";
 import {
@@ -144,6 +145,28 @@ export const persistDraft = async (
 			persisted: false,
 			blockedReason: "erro_nao_mapeado",
 			detail: `conversa ${input.conversationId} nao encontrada para rascunho em shadow`,
+		};
+	}
+
+	// L4 (CONV-07): barreira determinística de TEXTO antes do gate canônico.
+	// Conteúdo proibido no rascunho (preço, proposta, agenda, mídia) é bloqueado
+	// primeiro e registrado em `blocked_attempts` — o mesmo negativo auditável
+	// que um envio real deixaria (R-022).
+	const veredito = scanPostGate(input.generatedText);
+	if (!veredito.allowed) {
+		await recordBlockedAttempt(db, {
+			conversationId: input.conversationId,
+			leadId: input.leadId ?? snapshot.lead.id,
+			ruleReference: veredito.reason,
+			detail: veredito.detail,
+			excerpt: input.generatedText,
+			windowAtEvent: agora,
+			createdAt: agora,
+		});
+		return {
+			persisted: false,
+			blockedReason: veredito.reason,
+			detail: veredito.detail,
 		};
 	}
 
