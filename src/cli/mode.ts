@@ -21,6 +21,13 @@
  * sendo o log de modo POR CONVERSA (gravado pelo handoff); o interruptor global
  * se audita em `event_log`, que já é a trilha append-only de fatos do sistema.
  * Ver a nota de desvio em `02-03-SUMMARY.md`.
+ *
+ * ## Promoção shadow→ativo é EXPLÍCITA (D-18)
+ *
+ * Este comando controla o kill switch global (pausa/retoma o envio). Ele NÃO
+ * promove conversas de shadow para ativo. A promoção exige ação EXPLÍCITA do
+ * Admin, orientada pelo veredito de `npm run shadow:report`; nenhum caminho de
+ * código autopromove. `mode status` imprime esse lembrete junto do modo atual.
  */
 import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
@@ -42,6 +49,10 @@ export const CHAVE_MODO_OPERACIONAL = "operational_mode";
 
 const USO =
 	"uso: mode | mode pause [--reason <texto>] | mode resume [--reason <texto>]";
+
+/** Lembrete de D-18 impresso por `mode status`: o comando NÃO promove por si só. */
+const NOTA_PROMOCAO =
+	"Promoção shadow→ativo exige ação EXPLÍCITA do Admin (D-18): confira `npm run shadow:report` (veredito PASS) e promova pela revisão. Nenhum código autopromove.";
 
 const lerFlag = (argv: readonly string[], flag: string): string | null => {
 	const i = argv.indexOf(flag);
@@ -115,6 +126,7 @@ export const runModeCli = async (
 				? "Modo operacional: paused (kill switch LIGADO — nenhum envio)."
 				: "Modo operacional: active (kill switch global desligado).",
 		);
+		escrever(NOTA_PROMOCAO);
 		return 0;
 	}
 

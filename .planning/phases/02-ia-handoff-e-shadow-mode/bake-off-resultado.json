@@ -1,0 +1,31 @@
+{
+  "modo": "offline",
+  "total": 24,
+  "avaliacoes": [
+    {
+      "provider": "scripted",
+      "model": "consultivo",
+      "total": 24,
+      "falhas": 0,
+      "limitesOk": 24,
+      "limitesTaxa": 1,
+      "registroMedio": 1,
+      "combinado": 1
+    },
+    {
+      "provider": "scripted",
+      "model": "neutro",
+      "total": 24,
+      "falhas": 0,
+      "limitesOk": 24,
+      "limitesTaxa": 1,
+      "registroMedio": 1,
+      "combinado": 1
+    }
+  ],
+  "vencedor": {
+    "provider": "scripted",
+    "model": "consultivo"
+  },
+  "geradoEm": "2026-10-14T13:04:54.679Z"
+}
