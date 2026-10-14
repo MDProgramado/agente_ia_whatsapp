@@ -249,8 +249,14 @@ describe("append-only de llm_runs e review_events (Pool cru)", () => {
 				return { erroUpdate, erroDelete };
 			},
 		);
-		expect(erroUpdate, "UPDATE em review_events NÃO foi rejeitado").not.toBeNull();
-		expect(erroDelete, "DELETE em review_events NÃO foi rejeitado").not.toBeNull();
+		expect(
+			erroUpdate,
+			"UPDATE em review_events NÃO foi rejeitado",
+		).not.toBeNull();
+		expect(
+			erroDelete,
+			"DELETE em review_events NÃO foi rejeitado",
+		).not.toBeNull();
 		expect(erroUpdate?.codigo).toBe(P0001);
 		expect(erroDelete?.codigo).toBe(P0001);
 	});
@@ -264,7 +270,10 @@ describe("append-only de llm_runs e review_events (Pool cru)", () => {
 				[messageId],
 			);
 		});
-		expect(erro, "decision='promovido' foi aceito — CHECK ausente").not.toBeNull();
+		expect(
+			erro,
+			"decision='promovido' foi aceito — CHECK ausente",
+		).not.toBeNull();
 		expect(erro?.codigo).toBe("23514");
 	});
 });
@@ -277,6 +286,8 @@ describe("arquivos da migração 0006", () => {
 		const tags = journal.entries.map((e) => e.tag);
 		expect(tags).toContain("0006_shadow_and_llm_runs");
 		expect(existsSync(`${MIGRATIONS_DIR}/meta/0006_snapshot.json`)).toBe(true);
-		expect(existsSync(`${MIGRATIONS_DIR}/0006_shadow_and_llm_runs.sql`)).toBe(true);
+		expect(existsSync(`${MIGRATIONS_DIR}/0006_shadow_and_llm_runs.sql`)).toBe(
+			true,
+		);
 	});
 });

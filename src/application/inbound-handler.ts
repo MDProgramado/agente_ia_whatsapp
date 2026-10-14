@@ -24,12 +24,55 @@ import { createHash } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { E164_REGEX, resolveE164 } from "../channel/baileys/jid-resolver.js";
 import { env } from "../config/env.js";
+import {
+	canarioEsperado,
+	type ExtractionEnvelope,
+	type GenerationEnvelope,
+	validaEcoCanario,
+} from "../domain/llm/envelope.js";
+import {
+	buildExtractPrompt,
+	buildGeneratePrompt,
+} from "../domain/llm/prompt-builder.js";
+import {
+	type Estado,
+	resolveNextState,
+} from "../domain/orchestrator/transitions.js";
+import type { LlmPort } from "../domain/ports/LlmPort.js";
+import type { NotifyPort } from "../domain/ports/NotifyPort.js";
 import type { Db } from "../infra/db/client.js";
+import { loadLlmContext } from "../infra/db/queries/llm-context.js";
+import { recordLlmRun } from "../infra/db/queries/llm-runs.js";
 import { leads } from "../infra/db/schema.js";
 import { childLogger } from "../infra/logger.js";
 import type { EventoInbound } from "./event-bus.js";
+import { type LlmRunMeta, persistDraft } from "./shadow.js";
 
 const log = childLogger("inbound");
+
+/**
+ * Dependências opcionais do sanduíche de IA (D-08). A ausência de `llm` é o que
+ * preserva o comportamento da Fase 1: sem adaptador injetado, o handler só
+ * persiste a mensagem e NÃO rascunha. Testes da Fase 1 chamam com 3 argumentos e
+ * continuam válidos; o boot real injeta o adaptador de produção.
+ */
+export interface InboundDeps {
+	readonly llm?: LlmPort<ExtractionEnvelope, GenerationEnvelope>;
+	readonly notifier?: NotifyPort;
+	/** Instante injetado para determinismo; default `new Date()`. */
+	readonly agora?: Date;
+}
+
+/** Intenções que disparam handoff (D-12) — o stub do 02-01 registra e cala. */
+const INTENCOES_HANDOFF: ReadonlySet<string> = new Set([
+	"pedido_preco",
+	"intencao_agendar",
+	"bot_suspicion",
+	"irritacao",
+	"ameaca",
+	"pedido_optout",
+	"midia_recebida",
+]);
 
 /** Só o que o resolver precisa do socket — sem arrastar o `WASocket` inteiro para cá. */
 type SockResolucao = Parameters<typeof resolveE164>[0];
@@ -41,6 +84,11 @@ const linhasDe = <T>(resultado: unknown): T[] =>
 interface ConversaLida {
 	readonly id: string;
 	readonly channel_account_id: string;
+	/** Necessário para a Camada 2 (`resolveNextState`) e para as guardas locais. */
+	readonly state: string;
+	readonly engagement_mode: string;
+	readonly pending_media_block: boolean;
+	readonly handoff_active: boolean;
 }
 
 /**
@@ -63,7 +111,8 @@ const acharConversa = async (
 	leadId: string,
 ): Promise<ConversaLida | null> => {
 	const resultado = await db.execute(sql`
-		select id, channel_account_id
+		select id, channel_account_id, state, engagement_mode,
+			pending_media_block, handoff_active
 		from conversations
 		where lead_id = ${leadId}
 		order by created_at
@@ -98,7 +147,8 @@ const pegarOuCriarConversa = async (
 	const criada = await db.execute(sql`
 		insert into conversations (lead_id, channel_account_id)
 		values (${leadId}, ${channelAccountId})
-		returning id, channel_account_id
+		returning id, channel_account_id, state, engagement_mode,
+			pending_media_block, handoff_active
 	`);
 	const nova = linhasDe<ConversaLida>(criada)[0];
 	if (!nova) {
@@ -205,6 +255,212 @@ const registrarMidiaRecebida = async (
 };
 
 /**
+ * Versões gravadas em `llm_runs`. Comparar qualidade entre revisões exige saber
+ * sob qual template e qual política a corrida aconteceu (R-045/D-05).
+ */
+export const PROMPT_VERSION = "02-01";
+export const POLICY_VERSION = "02-01";
+
+/** Metadado da corrida a partir do resultado do adaptador — nunca o corpo do prompt. */
+const corridaDe = (
+	resultado: {
+		readonly ok: boolean;
+		readonly usage: {
+			readonly model: string;
+			readonly promptTokens: number | null;
+			readonly completionTokens: number | null;
+			readonly latencyMs: number;
+		} | null;
+		readonly costUsd?: number | null;
+	},
+	zodParseOk: boolean,
+	canaryOk: boolean,
+): LlmRunMeta => ({
+	model: resultado.usage?.model ?? "desconhecido",
+	promptTokens: resultado.usage?.promptTokens ?? null,
+	completionTokens: resultado.usage?.completionTokens ?? null,
+	latencyMs: resultado.usage?.latencyMs ?? null,
+	costUsd: resultado.ok ? (resultado.costUsd ?? null) : null,
+	promptVersion: PROMPT_VERSION,
+	policyVersion: POLICY_VERSION,
+	zodParseOk,
+	canaryOk,
+});
+
+/**
+ * Caminho de falha-fechada (D-10): silêncio + notificação. Nunca um texto livre.
+ * A notificação é best-effort (a porta não lança) — se não houver notificador
+ * injetado, ainda assim o evento fica no log local.
+ */
+const falhaFechada = async (
+	deps: InboundDeps,
+	evt: EventoInbound,
+	kind: string,
+	detail: string,
+): Promise<void> => {
+	log.warn(
+		{ event: "llm_falha_fechada", chat_id: evt.chatId, kind },
+		`falha-fechada na IA: ${detail}`,
+	);
+	await deps.notifier?.notify({
+		title: "IA indisponível (shadow)",
+		message: `A resposta automática foi suspensa (${kind}). Nenhum texto foi enviado ao lead.`,
+		urgent: false,
+	});
+};
+
+/**
+ * Stub do handoff (D-12). O `HandoffService` real é o plano 02-02; aqui o sinal
+ * é apenas registrado e a geração é pulada — nada sai, nada é rascunhado.
+ */
+const registrarHandoffStub = async (
+	db: Db,
+	conversationId: string,
+	leadId: string,
+	intent: string,
+	payload: unknown,
+): Promise<void> => {
+	await db.execute(sql`
+		insert into event_log (
+			event_type, entity_type, conversation_id, lead_id, payload, severity
+		)
+		values (
+			'handoff_stub',
+			'conversation',
+			${conversationId},
+			${leadId},
+			${JSON.stringify({ intent, sinais: payload })}::jsonb,
+			'warn'
+		)
+	`);
+	log.info(
+		{ event: "handoff_stub", conversation_id: conversationId, intent },
+		"sinal de handoff detectado — geração pulada (stub do 02-01)",
+	);
+};
+
+/**
+ * O sanduíche de camadas para uma mensagem de TEXTO do lead (D-08).
+ *
+ * Só roda quando um adaptador foi injetado (`deps.llm`) — sem ele, o
+ * comportamento é o da Fase 1 (persistir e calar). A ordem é: guardas locais
+ * (silêncio barato) → Camada 1 (extração) → Camada 2 (decisão em código) →
+ * Camada 3 (geração) → `persistDraft`. Qualquer falha em 1/3 é falha-fechada.
+ */
+const rascunharShadow = async (
+	db: Db,
+	deps: InboundDeps & { llm: LlmPort<ExtractionEnvelope, GenerationEnvelope> },
+	evt: EventoInbound,
+	lead: { readonly id: string; readonly optOut: boolean },
+	conversa: ConversaLida,
+	agora: Date,
+): Promise<void> => {
+	// Guardas locais em CÓDIGO, antes de gastar token (D-07). O gate reavalia
+	// depois, mas estas evitam chamar a LLM para nada.
+	if (lead.optOut) return;
+	if (conversa.pending_media_block) return;
+	if (
+		conversa.engagement_mode !== "bot_active" &&
+		conversa.engagement_mode !== "shadow"
+	) {
+		return;
+	}
+
+	const semente = evt.providerMsgId ?? `${evt.chatId}|${evt.timestamp}`;
+	const canario = canarioEsperado(semente);
+
+	const ctx = await loadLlmContext(db, conversa.id);
+	if (!ctx) return;
+
+	// Camada 1 — extração (prompt MASCARADO pelo choke-point).
+	const extracao = await deps.llm.extract({
+		prompt: buildExtractPrompt(ctx.payload, canario),
+		canary: canario,
+	});
+	if (!extracao.ok) {
+		return falhaFechada(deps, evt, extracao.error.kind, extracao.error.detail);
+	}
+	const ecoExtracao = validaEcoCanario(canario, extracao.output.canary);
+	if (!ecoExtracao.ok) {
+		return falhaFechada(
+			deps,
+			evt,
+			"canario_divergente",
+			"extração não ecoou o canário",
+		);
+	}
+	await recordLlmRun(db, {
+		...corridaDe(extracao, true, true),
+		messageId: null,
+		createdAt: agora,
+	});
+
+	const { signals, intent, nextStateHint } = extracao.output;
+
+	// Camada 2 — decisão em código puro. A hint da LLM só é aceita se válida.
+	const estadoResolvido = resolveNextState(
+		conversa.state as Estado,
+		nextStateHint,
+		{
+			engagementMode: conversa.engagement_mode,
+			handoffDisparado: conversa.handoff_active,
+			optOutAtivo: lead.optOut,
+			qualification: ctx.qualification,
+		},
+	);
+
+	const precisaHandoff =
+		INTENCOES_HANDOFF.has(intent) ||
+		signals.pricingAsked ||
+		signals.schedulingIntent ||
+		signals.botSuspicion ||
+		signals.irritation ||
+		signals.optOutIntent ||
+		signals.mediaReceived;
+
+	if (precisaHandoff) {
+		await registrarHandoffStub(db, conversa.id, lead.id, intent, signals);
+		return;
+	}
+
+	// Persiste o estado resolvido (a LLM não decide; ela só sugere a hint).
+	if (estadoResolvido !== conversa.state) {
+		await db.execute(sql`
+			update conversations set state = ${estadoResolvido}
+			where id = ${conversa.id}
+		`);
+	}
+
+	// Camada 3 — geração sob o estado resolvido.
+	const geracao = await deps.llm.generate({
+		prompt: buildGeneratePrompt(ctx.payload, estadoResolvido, canario),
+		canary: canario,
+		resolvedState: estadoResolvido,
+	});
+	if (!geracao.ok) {
+		return falhaFechada(deps, evt, geracao.error.kind, geracao.error.detail);
+	}
+	const ecoGeracao = validaEcoCanario(canario, geracao.output.canary);
+	if (!ecoGeracao.ok) {
+		return falhaFechada(
+			deps,
+			evt,
+			"canario_divergente",
+			"geração não ecoou o canário",
+		);
+	}
+
+	await persistDraft(db, {
+		conversationId: conversa.id,
+		generatedText: geracao.output.replyText,
+		idempotencyKey: `shadow:${chaveIdempotente(evt)}`,
+		llmRun: corridaDe(geracao, true, true),
+		agora,
+		leadId: lead.id,
+	});
+};
+
+/**
  * Ponto de entrada. `sock` é usado só quando o E.164 não veio pronto no evento
  * (mensagens de LID). Retorna `void`: os efeitos são as linhas no banco.
  */
@@ -212,7 +468,9 @@ export const processInboundFromMe = async (
 	db: Db,
 	sock: SockResolucao,
 	evt: EventoInbound,
+	deps: InboundDeps = {},
 ): Promise<void> => {
+	const agora = deps.agora ?? new Date();
 	// (a) E.164 — do evento quando já vier, senão resolvido do JID.
 	const e164 = await resolveE164(sock, evt.phoneNumber ?? evt.chatId);
 	if (!e164 || !E164_REGEX.test(e164)) {
@@ -264,6 +522,17 @@ export const processInboundFromMe = async (
 			update leads set first_contact_by_human = true
 			where phone_number = ${e164} and first_contact_by_human = false
 		`);
+		// CONV-01: a primeira mensagem manual do Admin move `novo` → `aquecimento`.
+		// `resolveNextState` é a autoridade (D-07) — não um `set` cru no SQL.
+		const estadoAdmin = resolveNextState(conversa.state as Estado, undefined, {
+			adminPrimeiraMensagem: true,
+		});
+		if (estadoAdmin !== conversa.state) {
+			await db.execute(sql`
+				update conversations set state = ${estadoAdmin}
+				where id = ${conversa.id}
+			`);
+		}
 	}
 
 	// Opt-out vindo da fonte: só ATIVA, nunca desativa (AR-005). Ledger append-only
@@ -292,6 +561,22 @@ export const processInboundFromMe = async (
 				)
 			`);
 		}
+	}
+
+	// Sanduíche de IA (D-08) — só para mensagem do LEAD e com adaptador injetado.
+	// `fromMe` é o eco do próprio número: não há rascunho a gerar para si mesmo.
+	if (deps.llm && evt.fromMe !== true) {
+		await rascunharShadow(
+			db,
+			{ ...deps, llm: deps.llm },
+			evt,
+			{
+				id: lead.id,
+				optOut: lead.optOut === true || evt.providerOptOut === true,
+			},
+			conversa,
+			agora,
+		);
 	}
 
 	// (e) Watermark: o cursor de "até onde já processei" (R-007/T-01-11).
