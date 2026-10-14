@@ -87,3 +87,21 @@
 - **Cadência completa + dreno jittered** (ADR-009) → Fase 3.
 - **Migração para API oficial** do WhatsApp → fase futura.
 - **Escolha definitiva de provider/modelo de LLM** → resultado do bake-off.
+
+---
+
+## Regather `--auto` (2026-10-14) — formalização de discretion
+
+> Segunda passada em modo `--auto`, passada única. **Nenhuma decisão D-01..D-18 foi re-litigada.** As 5 áreas originais foram re-selecionadas automaticamente e mantidas. O valor desta passada foi fechar os itens que estavam em "the agent's Discretion", agora resolvidos por `02-RESEARCH.md` §Open Questions (RESOLVED) e `02-PATTERNS.md`.
+
+| Item (era discretion) | Resolução | Vira |
+|-----------------------|-----------|------|
+| Chave e forma do kill switch `paused` | Global em `settings.operational_mode='paused'`, wireado ao snapshot/`kill-switch.ts`; auditado em `mode_changes` | **D-19** |
+| Forma dos eventos de revisão do shadow | Tabela `review_events` (append-only, migração 0006); separa geração de revisão | **D-20** |
+| Critérios numéricos de saída do shadow | Defaults ADR-010: ≥14 dias, ≥100 rascunhos, ≥80% aprovação, 0 alucinação crítica, 0 revelação de automação | **D-21** |
+| Corpus/rubrica do bake-off | `scripts/bake-off.ts` + corpus adversarial pt-BR (~200); 2 eixos (AR/tom + custo/latência) | **D-22** |
+| Fonte única de shadow / supersessions | `conversations.engagement_mode`; `suggestions` e `settings.shadowMode` do ADR-010 superseded; Pitfalls 2 e 4 corrigidos na 0006/prompt-builder | **D-23** |
+
+**Discretion remanescente (sem impacto de contrato):** keywords pt-BR de opt-out/irritação (matcher determinístico continua autoridade); conteúdo literal dos prompts e do corpus, respeitando ADR-012 e AR-como-código.
+
+**Deferred Ideas:** inalteradas (chime Web Audio → Fase 3; painel → Fase 3; cadência/dreno → Fase 3; API oficial → futura; provider/modelo → bake-off).
