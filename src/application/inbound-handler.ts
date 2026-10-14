@@ -87,6 +87,7 @@ export const INTENCOES_HANDOFF: ReadonlySet<string> = new Set([
 	"ameaca",
 	"pedido_optout",
 	"midia_recebida",
+	"duvida_complexa",
 ]);
 
 /** Só o que o resolver precisa do socket — sem arrastar o `WASocket` inteiro para cá. */
