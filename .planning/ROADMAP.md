@@ -28,7 +28,7 @@ O sintetizador propôs 4 fases (Fundação+Canal+Gate ⮑ IA+Handoff+Shadow ⮑ 
 ## Phases
 
 - [ ] **Phase 1: Fundação, Canal e Gate de Envio** - Estado durável, canal WhatsApp isolado e o gate único que torna os 12 anti-requisitos invariantes de sistema *(parcial: 4/5 planos concluídos; 01-03 deferido — P-004)*
-- [ ] **Phase 2: IA, Handoff e Shadow Mode** - LLM como gerador de dica, handoff como fronteira projetada e validação por rascunho sem tocar no número
+- [x] **Phase 2: IA, Handoff e Shadow Mode** - LLM como gerador de dica, handoff como fronteira projetada e validação por rascunho sem tocar no número (completed 2026-10-14)
 - [ ] **Phase 3: Cadência, Operação e Painel** - Follow-up conservador, painel único e CRM operacional: o bot roda sozinho e o Admin opera
 - [ ] **Phase 4: Piloto, Calibração e Apuração** - 30 dias de operação real, medição dos critérios de sucesso e decisões com dado
 
@@ -78,7 +78,7 @@ Plans:
   4. Preço/proposta/orçamento, intenção de agendar, "você é robô/IA?", mídia recebida, irritação, ameaça ou dúvida técnica complexa param a automação e disparam handoff com notificação local (som + pop-up) identificando lead, motivo e ação de 1 clique (FLUP-04, FLUP-05, FLUP-09, CONV-12); em suspeita de automação ou irritação o bot fica em **silêncio total** — sem negar, sem admitir, sem desviar, sem mensagem de transição (CONV-09, CONV-10, FLUP-10).
   5. Recusa de receber contato (explícita ou recusa sutil) bloqueia o lead permanentemente e fica registrada em ledger com base legal, finalidade e origem — nenhum caminho a contorna (COMP-01, reforça COMP-03/AR-005); após o handoff o modo muda (mode_changes append-only) e o bot só volta a falar com ação explícita do Admin (NFRQ-03, reforça FLUP-04).
 
-**Plans**: 3 plans
+**Plans**: 4 plans (3 originais + 02-04 de fechamento de lacunas)
 **UI hint**: yes
 
 Plans:
@@ -97,7 +97,7 @@ Plans:
 
 **Wave 4 — fechamento de lacunas** *(verificação da fase: `gaps_found`, 16/24)*
 
-- [ ] 02-04-PLAN.md — Fechamento de lacunas (CR-01 + CR-02): Guard 0 passa a comparar o **emissor** E.164 (`EventoInbound.senderPhoneE164`, carimbado pelo runtime a partir de `sock.user.id` via `normalizeJid`) com `CHANNEL_PHONE_E164` em vez do `chatId` (que num `fromMe` é o JID do lead) — primeira mensagem manual do Admin volta a setar `first_contact_by_human` e a disparar `novo → aquecimento`; `duvida_complexa` entra em `INTENCOES_HANDOFF` (R-065/FLUP-09) com e2e atômico e silêncio total; WR-03 (caminho admin) dobrado em transação única (CONV-01, FLUP-09)
+- [x] 02-04-PLAN.md — Fechamento de lacunas (CR-01 + CR-02): Guard 0 passa a comparar o **emissor** E.164 (`EventoInbound.senderPhoneE164`, carimbado pelo runtime a partir de `sock.user.id` via `normalizeJid`) com `CHANNEL_PHONE_E164` em vez do `chatId` (que num `fromMe` é o JID do lead) — primeira mensagem manual do Admin volta a setar `first_contact_by_human` e a disparar `novo → aquecimento`; `duvida_complexa` entra em `INTENCOES_HANDOFF` (R-065/FLUP-09) com e2e atômico e silêncio total; WR-03 (caminho admin) dobrado em transação única (CONV-01, FLUP-09)
 
 ### Phase 3: Cadência, Operação e Painel
 
@@ -151,7 +151,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Fundação, Canal e Gate de Envio | 4/5 | In Progress (01-03 deferido — P-004) |  |
-| 2. IA, Handoff e Shadow Mode | 3/3 | In Progress (3/3 planos; gate `manter-shadow` — D-18) |  |
+| 2. IA, Handoff e Shadow Mode | 4/4 | Complete   | 2026-10-14 |
 | 3. Cadência, Operação e Painel | 0/3 | Not started | - |
 | 4. Piloto, Calibração e Apuração | 0/2 | Not started | - |
 
@@ -161,7 +161,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 - **Requisitos de forma sem comportamento observável direto** (verificados por revisão de migração/ADR, não por comportamento de usuário): NFRQ-01 (migração com CHECKs/FOR UPDATE/watermark na 1ª migration), COMP-04 (sem criptografia, risco aceito e documentado), EQUP-01/EQUP-02 (usuário único + schema apto a multiusuário), INTR-01 (apenas 3 integrações), todos na Fase 1.
 - **Divisão mecânica/comportamento:** requisitos cujo *mecanismo* nasce numa fase e cujo *comportamento observável* só aparece depois foram alocados na fase do mecanismo — ex.: WHS-04 (trava + enfileiramento = Fase 1; retomada no próximo dia útil completa na Fase 3), COMP-01 (ledger/guard = Fase 1 via CONV-14; detecção automática = Fase 2), FLUP-06 (machine de modos = Fase 2 via NFRQ-03; sugestões de copiloto no painel = Fase 3).
 - **R-001 é restrição transversal, não fase:** nenhuma fase automatiza o primeiro contato. A Fase 1 o impõe como **Guard 0** (`r001_primeiro_contato_nao_humano`) no gate — fora de AR-001..AR-012, porque `firstContactByHuman` é um sinal de canal, não uma fronteira proibida; a Fase 3 reforça no scheduler (contato frio **não** é automatizado); o piloto (Fase 4) o executa diariamente.
-- **Granularidade:** coarse (config.json) → 4 fases, 13 plans (5/3/3/2). A Fase 1 concentra os 4 pitfalls CRÍTICOS de fundação (463, R-019, gate único, OneDrive) por serem não-adiáveis; planos da Fase 1 podem ser revisitados no plan-phase sem mudar o roadmap.
+- **Granularidade:** coarse (config.json) → 4 fases, 13 plans (5/3/3/2) + 1 de fechamento de lacunas (02-04, CR-01/CR-02). A Fase 1 concentra os 4 pitfalls CRÍTICOS de fundação (463, R-019, gate único, OneDrive) por serem não-adiáveis; planos da Fase 1 podem ser revisitados no plan-phase sem mudar o roadmap.
 - **Flags de pesquisa por fase:** Fase 1 — validação empírica na máquina do Admin (notificação Windows, `fetchAccountReachoutTimelock` no typings) + API do caça-leads não especificada (bloqueia LEAD-01 na integração, não a arquitetura). Fase 2 — bake-off de provedor de LLM em PT-BR (medição, não pesquisa). Fase 3 — feriados BR e definição de produto de "próximo dia útil". Fase 4 — procedimento de appeal de ban (confirmar em fonte primária antes de depender).
 
 ---

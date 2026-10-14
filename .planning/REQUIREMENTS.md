@@ -34,7 +34,7 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 
 ### Fluxo de Conversa e IA (CONV)
 
-- [ ] **CONV-01**: Bot assume a conversa assim que o Admin envia a 1ª mensagem, mesmo sem resposta do lead (R-002)
+- [x] **CONV-01**: Bot assume a conversa assim que o Admin envia a 1ª mensagem, mesmo sem resposta do lead (R-002)
 - [ ] **CONV-02**: Ao detectar resposta do lead, a IA conduz qualificação, aquecimento, diagnóstico, objeções e CTA em tom humanizado (R-008)
 - [ ] **CONV-03**: Usa API externa de LLM; o sistema local controla fluxo, limites e handoff; minimiza/mascara dados sensíveis antes do envio (R-009)
 - [ ] **CONV-04**: Persona consultiva, educada e direta — foca em entender a dor antes de oferecer solução (R-010)
@@ -173,7 +173,7 @@ Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/0
 | WHS-03 | Phase 1 | Complete |
 | WHS-04 | Phase 1 | Complete |
 | WHS-05 | Phase 1 | Pending |
-| CONV-01 | Phase 2 | Pending |
+| CONV-01 | Phase 2 | Complete |
 | CONV-02 | Phase 2 | Pending |
 | CONV-03 | Phase 2 | Pending |
 | CONV-04 | Phase 2 | Pending |
