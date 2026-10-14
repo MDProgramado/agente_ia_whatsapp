@@ -1,85 +1,36 @@
 ---
 phase: 02-ia-handoff-e-shadow-mode
-verified: 2026-10-14T12:48:00Z
-status: gaps_found
-re_verification: false
-score: 16/24
+verified: 2026-10-14T13:45:00Z
+status: human_needed
+re_verification: true
+score: 24/24
 overrides_applied: 0
+re_verification_report:
+  previous_status: gaps_found
+  previous_score: 16/24
+  gaps_closed:
+    - "CR-01 (CONV-01/R-002) — Guard 0 do primeiro contato humano agora compara o EMISSOR E.164 (`senderPhoneE164`), nao o `chatId`"
+    - "CR-02 (FLUP-09/R-065) — `duvida_complexa` incluido em `INTENCOES_HANDOFF` com e2e atomico e silencio total"
+    - "Truth 17 — Admin first message → aquecimento (fromMe no numero dedicado)"
+    - "Truth 18 — duvida_complexa dispara handoff"
+    - "Truth 19 — transicao adminPrimeiraMensagem efetiva end-to-end (novo → aquecimento)"
+    - "Truth 20 — duvida_complexa → dispararHandoff fiado end-to-end"
+    - "Truth 21 — mapeamento de handoff do inbound cobre todos os intents exigidos"
+    - "Truth 22 — silencio total apos handoff em duvida_complexa"
+    - "Truth 23 — adminPrimeiraMensagem produz novo→aquecimento com engagement_mode bot_active"
+    - "Truth 24 — duvida complexa produz handoff_events+mode_changes+awaiting_human (atomico)"
+  gaps_remaining: []
+  regressions: []
 must_haves:
   source_plans:
     - 02-01-PLAN.md
     - 02-02-PLAN.md
     - 02-03-PLAN.md
-gaps:
-  - truth: "CONV-01/R-002: Bot assumes conversation when Admin sends 1st message (fromMe on dedicated number) so state becomes aquecimento"
-    status: failed
-    reason: "deveMarcarPrimeiroContatoHumano compares chatId (remoteJid = lead JID) with CHANNEL_PHONE_E164; equality never true → first_contact_by_human never set. Guard 0 blocks the planned transition."
-    artifacts:
-      - path: "src/application/inbound-handler.ts"
-        issue: "lines 106-114: chatId === channelPhoneE164 fails when chatId is lead's JID"
-      - path: "src/channel/baileys/runtime.ts"
-        issue: "lines 82-103: criarEventoInbound sets chatId = m.key.remoteJid (lead JID), not the channel number"
-    missing:
-      - "Fix: detect admin first message by checking fromMe==true AND the message is from/to context consistent with channel, or use another signal (e.g. compare to the channel JID forms) so Guard 0 becomes true when Admin sends first message on dedicated number"
-  - truth: "FLUP-09/R-065: duvida_complexa triggers handoff (silence + handoff)"
-    status: failed
-    reason: "INTENCOES_HANDOFF set omits 'duvida_complexa'; intent duvida_complexa from LLM will not trigger dispararHandoff via that mapping"
-    artifacts:
-      - path: "src/application/inbound-handler.ts"
-        issue: "lines 74-83: INTENCOES_HANDOFF missing 'duvida_complexa'"
-    missing:
-      - "Add 'duvida_complexa' to INTENCOES_HANDOFF so complex doubt triggers handoff as specified"
-  - truth: "CONV-01/R-002: FSM guard adminPrimeiraMensagem path effective end-to-end (novo → aquecimento)"
-    status: failed
-    reason: "FSM has ctx.adminPrimeiraMensagem handling in resolveNextState (02-01), but inbound path cannot set adminPrimeiraMensagem to true due to CR-01; effective behavior blocked"
-    artifacts:
-      - path: "src/application/inbound-handler.ts"
-        issue: "adminPrimeiraMensagem transition depends on Guard 0 being true"
-      - path: "src/domain/orchestrator/transitions.ts"
-        issue: "FSM rule exists but not reachable via inbound in current wiring"
-    missing:
-      - "Fix Guard 0 detection so adminPrimeiraMensagem is set when Admin sends first message"
-  - truth: "Handoff on duvida_complexa is wired end-to-end (detected → dispararHandoff)"
-    status: failed
-    reason: "Mapping missing; even if LLM returns duvida_complexa, code path does not fire handoff"
-    artifacts:
-      - path: "src/application/inbound-handler.ts"
-        issue: "intent handoff mapping excludes duvida_complexa"
-    missing:
-      - "Wire duvida_complexa to handoff (add to set and ensure mapping uses same enum values)"
-  - truth: "Inbound applies handoff triggers by code mapping for all required intents (pedido_preco, intencao_agendar, bot_suspicion, irritacao, ameaca, pedido_optout, midia_recebida, duvida_complexa)"
-    status: failed
-    reason: "duvida_complexa missing from handoff trigger set"
-    artifacts:
-      - path: "src/application/inbound-handler.ts"
-        issue: "lines 74-83"
-    missing:
-      - "Include duvida_complexa"
-  - truth: "Silence total after handoff on duvida_complexa (no outbound)"
-    status: failed
-    reason: "Cannot be verified as achieved because trigger not wired; behavior unobservable"
-    artifacts:
-      - path: "src/application/inbound-handler.ts"
-        issue: "handoff trigger mapping incomplete"
-    missing:
-      - "Wire trigger first; then verify silence path"
-  - truth: "adminPrimeiraMensagem transition produces novo → aquecimento with engagement_mode intact (bot_active)"
-    status: failed
-    reason: "Reachability blocked by CR-01"
-    artifacts:
-      - path: "src/application/inbound-handler.ts"
-        issue: "Guard 0 never true in current chatId/channel comparison"
-    missing:
-      - "Fix Guard 0 detection"
-  - truth: "End-to-end: complex doubt produces handoff_events + mode_changes + awaiting_human (atomic)"
-    status: failed
-    reason: "Trigger not wired → cannot produce handoff from duvida_complexa"
-    artifacts:
-      - path: "src/application/handoff-service.ts"
-        issue: "atomic handoff implementation exists but not invoked for duvida_complexa"
-    missing:
-      - "Add duvida_complexa to trigger mapping"
-
+    - 02-04-PLAN.md
+human_verification:
+  - test: "No pareamento real do numero dedicado (P-004), registrar qual forma o `sock.user.id` assume (E.164 em `@s.whatsapp.net` vs LID em `@lid`) e, com o bot em `shadow`, enviar manualmente a 1a mensagem ao lead: observar se `leads.first_contact_by_human` vira `true` e a conversa sai de `novo` para `aquecimento`."
+    expected: "`normalizeJid(sock.user.id).e164` nao-nulo (forma E.164) e a 1a mensagem manual do Admin seta `first_contact_by_human=true` + `novo`→`aquecimento`. Se o id proprio for LID, o boot emite 1x `jid_proprio_sem_e164` e o Guard 0 fica fail-closed (nenhuma transicao) — pareamento precisa ser resolvido antes do shadow valer."
+    why_human: "Somente um pareamento real com o WhatsApp revela a forma do id proprio. Os testes injetam um `canalSelfJid` fixo em forma E.164 e, por construcao, NAO cobrem o ramo LID — que e exatamente a classe do bug CR-01."
 verified_trues:
   - truth: "Rascunho append-only em messages(origin='ai_suggestion', status='suggested') + llm_runs (shadow path persists draft)"
     status: verified
@@ -167,41 +118,100 @@ verified_trues:
     evidence:
       - path: "scripts/shadow-report.ts"
         detail: "buildShadowReport reads DB tables (messages/llm_runs/review_events/handoff_events/optout_ledger/blocked_attempts) and computes verdict with thresholds"
+  - truth: "CONV-01/R-002: Bot assumes conversation when Admin sends 1st message (fromMe on dedicated number) so state becomes aquecimento"
+    status: verified
+    evidence:
+      - path: "src/application/inbound-handler.ts"
+        detail: "deveMarcarPrimeiroContatoHumano (120-128) compara `senderPhoneE164 === channelPhoneE164` (fail-closed); call site 621-628 passa `evt.senderPhoneE164`; 636-660 dispara `novo`→`aquecimento` via `resolveNextState(..., {adminPrimeiraMensagem:true})` com UPDATE+recordStatusChange numa transacao unica (WR-03)"
+      - path: "src/channel/baileys/runtime.ts"
+        detail: "criarEventoInbound(m, canalSelfJid?) carimba `senderPhoneE164` (109-114): fromMe → normalizeJid(canalSelfJid).e164; senao → normalizeJid(chatId).e164"
+      - path: "src/index.ts"
+        detail: "boot fia `canalSelfJid: () => sock.user?.id` (275) e emite 1x `jid_proprio_sem_e164` no ramo LID (278-288)"
+      - path: "tests/application/inbound-fromme.test.ts"
+        detail: "Teste A (unescaped) + property test sobre a funcao REAL + Teste F composicional WAMessage→criarEventoInbound→processInboundFromMe"
+  - truth: "FLUP-09/R-065: duvida_complexa triggers handoff (silence + handoff)"
+    status: verified
+    evidence:
+      - path: "src/application/inbound-handler.ts"
+        detail: "INTENCOES_HANDOFF (82-91) inclui 'duvida_complexa'"
+      - path: "tests/application/handoff-intents.test.ts"
+        detail: "teste de CONTRATO sobre o conjunto real + Teste 2 e2e"
+  - truth: "CONV-01/R-002: FSM guard adminPrimeiraMensagem path effective end-to-end (novo → aquecimento)"
+    status: verified
+    evidence:
+      - path: "src/application/inbound-handler.ts"
+        detail: "638-660: estadoAdmin = resolveNextState(conversa.state, undefined, {adminPrimeiraMensagem:true}); UPDATE de state + recordStatusChange atômicos"
+      - path: "tests/application/inbound-fromme.test.ts"
+        detail: "Teste F encadeia WAMessage(fromMe=true)→criarEventoInbound(canalSelfJid)→processInboundFromMe e assere flag + 'novo'→'aquecimento'"
+  - truth: "Handoff on duvida_complexa is wired end-to-end (detected → dispararHandoff)"
+    status: verified
+    evidence:
+      - path: "src/application/inbound-handler.ts"
+        detail: "INTENCOES_HANDOFF contem duvida_complexa; Camada 2 mapeia intent→dispararHandoff"
+      - path: "tests/application/handoff-intents.test.ts"
+        detail: "Teste 2: deps.llm = scriptedLlmAdapter({intent:'duvida_complexa'}) → handoff_events(triggered_by='intent', trigger_value='duvida_complexa')"
+  - truth: "Inbound applies handoff triggers by code mapping for all required intents (pedido_preco, intencao_agendar, bot_suspicion, irritacao, ameaca, pedido_optout, midia_recebida, duvida_complexa)"
+    status: verified
+    evidence:
+      - path: "src/application/inbound-handler.ts"
+        detail: "INTENCOES_HANDOFF (82-91) contem os 8 intents exigidos"
+      - path: "tests/application/handoff-intents.test.ts"
+        detail: "teste de contrato falha se qualquer um dos 8 for omitido"
+  - truth: "Silence total after handoff on duvida_complexa (no outbound)"
+    status: verified
+    evidence:
+      - path: "tests/application/handoff-intents.test.ts"
+        detail: "Teste 2 assere 0 linhas com origin='ai_suggestion' e llm.chamadas === ['extract'] (generate NUNCA chamado — silencio D-13)"
+      - path: "src/application/handoff-service.ts"
+        detail: "caminho de handoff nao cria outbound"
+  - truth: "adminPrimeiraMensagem transition produces novo → aquecimento with engagement_mode intact (bot_active)"
+    status: verified
+    evidence:
+      - path: "src/application/inbound-handler.ts"
+        detail: "636-660: transicao so muda `state` (novo→aquecimento); `engagement_mode` nao e tocado pela transicao do Admin"
+      - path: "tests/application/inbound-fromme.test.ts"
+        detail: "Teste A/F asserem engagement_mode='bot_active' apos a 1a mensagem do Admin"
+  - truth: "End-to-end: complex doubt produces handoff_events + mode_changes + awaiting_human (atomic)"
+    status: verified
+    evidence:
+      - path: "tests/application/handoff-intents.test.ts"
+        detail: "Teste 2 assere 1 handoff_event + 1 mode_change(to_mode='awaiting_human') + conversations(engagement_mode='awaiting_human', handoff_active=true, state='awaiting_human')"
+      - path: "src/application/handoff-service.ts"
+        detail: "escrita atomica numa unica transacao"
 ---
 
 # Phase 02: IA, Handoff e Shadow Mode — Verification Report
 
 **Phase Goal:** "O bot rascunha conversas consultivas, qualifica, respeita todas as fronteiras e para no instante exato em que o humano precisa assumir - tudo validado em shadow mode, sem tocar no número dedicado."
 
-**Verified:** 2026-10-14T12:48:00Z  
-**Status:** gaps_found  
-**Re-verification:** No — initial verification  
-**Score:** 16/24 must-haves verified (8 FAILED)
+**Verified:** 2026-10-14T13:45:00Z
+**Status:** human_needed
+**Re-verification:** Yes — after gap closure (02-04)
+**Score:** 24/24 must-haves verified (0 FAILED; 8 previously-failed truths now closed)
 
-## CRITICAL FINDINGS (from advisory review) — CONFIRMED/REFUTED
+## Re-verification Scope
 
-### CR-01: Guard 0 / first human contact (BLOCKER)
-- **Verdict:** CONFIRMED — BLOCKER
+This pass re-verifies the 8 truths that FAILED on 2026-10-14T12:48:00Z (all traced to CR-01 and CR-02), against the CURRENT codebase after gap-closure plan `02-04`. Prior passing truths 1-16 were re-checked for regressions (quick pass — unchanged).
+
+## CRITICAL FINDINGS — NOW RESOLVED
+
+### CR-01: Guard 0 / first human contact (was BLOCKER) — RESOLVED
+- **Verdict:** FIXED — code + tests + commits present.
 - **Evidence (exact):**
-  - `src/application/inbound-handler.ts:106–114` — `deveMarcarPrimeiroContatoHumano` compares `chatId === channelPhoneE164`. 
-  - `src/channel/baileys/runtime.ts:82–103` — `criarEventoInbound` sets `chatId = m.key.remoteJid` (recipient JID is the lead when `fromMe=true`), so equality is never true.
-- **Impact:** `first_contact_by_human` is never set. Guard 0 blocks outbound in production; the planned transition `novo → aquecimento` on Admin’s first message is not achieved by current code. Maps to CONV-01/R-002.
+  - `src/application/inbound-handler.ts:120-128` — `deveMarcarPrimeiroContatoHumano` now compares the **emitter**: `fromMe===true` AND `senderPhoneE164 === channelPhoneE164`; missing emitter → `false` (fail-closed, R-001).
+  - `src/application/inbound-handler.ts:621-628` — the call site passes `senderPhoneE164: evt.senderPhoneE164` (no longer `chatId`).
+  - `src/application/inbound-handler.ts:636-660` — `novo → aquecimento` via `resolveNextState(conversa.state, undefined, { adminPrimeiraMensagem: true })`, state UPDATE + `recordStatusChange(changedBy:'admin')` in a single transaction (WR-03).
+  - `src/channel/baileys/runtime.ts:109-114` — `criarEventoInbound(m, canalSelfJid?)` stamps `senderPhoneE164` (`fromMe` → `normalizeJid(canalSelfJid).e164`; else → `normalizeJid(chatId).e164`; no `canalSelfJid` → `undefined`).
+  - `src/index.ts:275` — boot wires `canalSelfJid: () => sock.user?.id`.
+- **Tests:** `tests/application/inbound-fromme.test.ts` — Test A + property test on the REAL function + **Teste F composicional** (`WAMessage→criarEventoInbound→processInboundFromMe`), the exact CR-01 class. GREEN.
+- **Commits:** `aacaa69` (fix), RED precedes GREEN.
 
-### CR-02: duvida_complexa handoff (BLOCKER)
-- **Verdict:** CONFIRMED — BLOCKER
+### CR-02: duvida_complexa handoff (was BLOCKER) — RESOLVED
+- **Verdict:** FIXED — code + tests + commits present.
 - **Evidence (exact):**
-  - `src/application/inbound-handler.ts:74–83` — `INTENCOES_HANDOFF` set is missing `"duvida_complexa"`.
-- **Impact:** Complex doubt (intent `duvida_complexa` exists in envelope) will not trigger `dispararHandoff` via that mapping → handoff on complex doubt not wired. Maps to FLUP-09/R-065.
-
-## Kill switch deviation (assessed)
-- **Deviation:** Global kill switch audit is recorded in `event_log` (event `operational_mode_changed`) instead of `mode_changes` (which is per-conversation, `conversation_id NOT NULL`).
-- **Assessment:** ACCEPTED by design (explicit user decision context). 
-- **Must-have status:** SATISFIED.
-- **Evidence (exact):**
-  - `src/cli/mode.ts` — pause/resume upsert `settings.operational_mode` and insert append-only `event_log` with `event_type='operational_mode_changed'` in same transaction.
-  - `src/infra/db/queries/snapshot.ts` — computes `killSwitch` from `settings.operational_mode` and `channel_accounts.is_active`.
-  - `src/domain/gate/kill-switch.ts` — gate observes `kill_switch_ativo` and returns it.
-- **Conclusion:** Underlying must-have (global, reversible, audited kill switch wired to gate as `kill_switch_ativo`) is satisfied.
+  - `src/application/inbound-handler.ts:82-91` — `INTENCOES_HANDOFF` now contains all 8 intents incl. `"duvida_complexa"` (R-065/FLUP-09).
+- **Tests:** `tests/application/handoff-intents.test.ts` — contract test on the REAL set + Teste 2 e2e (atomic handoff + total silence, `generate` never called). GREEN.
+- **Commits:** `2e3c56d` (fix), RED at `0a51cc5` precedes GREEN.
 
 ## Goal Achievement
 
@@ -225,16 +235,16 @@ verified_trues:
 | 14 | status:corrigir writes status_history with changed_by='admin' (CRM-02) | ✓ VERIFIED | `src/cli/status.ts` |
 | 15 | handoff:ack sets human_acknowledged_at idempotently + append-only event_log; no bot reactivation (D-15) | ✓ VERIFIED | `src/cli/handoff.ts` |
 | 16 | Shadow report from DB with metrics and PASS/FAIL verdict (D-17) | ✓ VERIFIED | `scripts/shadow-report.ts` |
-| 17 | CONV-01/R-002: Admin first message → aquecimento (fromMe on dedicated number) | ✗ FAILED | CR-01: Guard 0 chatId vs channelPhoneE164 never true (inbound-handler:106-114; runtime:82-103) |
-| 18 | FLUP-09/R-065: duvida_complexa triggers handoff | ✗ FAILED | CR-02: INTENCOES_HANDOFF missing 'duvida_complexa' (inbound-handler:74-83) |
-| 19 | adminPrimeiraMensagem transition effective end-to-end (novo → aquecimento) | ✗ FAILED | blocked by CR-01 |
-| 20 | duvida_complexa → dispararHandoff wired end-to-end | ✗ FAILED | trigger mapping incomplete (CR-02) |
-| 21 | Inbound handoff trigger mapping includes all required intents (incl. duvida_complexa) | ✗ FAILED | missing duvida_complexa (CR-02) |
-| 22 | Silence total after handoff on duvida_complexa | ✗ FAILED | trigger not wired |
-| 23 | adminPrimeiraMensagem produces novo→aquecimento with engagement_mode bot_active | ✗ FAILED | blocked by CR-01 |
-| 24 | Complex doubt produces handoff_events+mode_changes+awaiting_human (atomic) | ✗ FAILED | trigger not wired |
+| 17 | CONV-01/R-002: Admin first message → aquecimento (fromMe on dedicated number) | ✓ VERIFIED (was FAILED) | inbound-handler.ts:120-128 (emitter predicate) + :621-628 (call site) + :636-660 (novo→aquecimento, atomic); runtime.ts:109-114 (stamp); index.ts:275 (wiring); `inbound-fromme.test.ts` Test A/F |
+| 18 | FLUP-09/R-065: duvida_complexa triggers handoff | ✓ VERIFIED (was FAILED) | inbound-handler.ts:82-91 (set includes `duvida_complexa`); `handoff-intents.test.ts` |
+| 19 | adminPrimeiraMensagem transition effective end-to-end (novo → aquecimento) | ✓ VERIFIED (was FAILED) | inbound-handler.ts:638-660; `inbound-fromme.test.ts` Teste F composicional |
+| 20 | duvida_complexa → dispararHandoff wired end-to-end | ✓ VERIFIED (was FAILED) | inbound-handler.ts:82-91 + Camada 2 mapping; `handoff-intents.test.ts` Teste 2 |
+| 21 | Inbound handoff trigger mapping includes all required intents (incl. duvida_complexa) | ✓ VERIFIED (was FAILED) | inbound-handler.ts:82-91 (8 intents); contract test |
+| 22 | Silence total after handoff on duvida_complexa | ✓ VERIFIED (was FAILED) | `handoff-intents.test.ts` Teste 2 (0 ai_suggestion; generate never called) |
+| 23 | adminPrimeiraMensagem produces novo→aquecimento with engagement_mode bot_active | ✓ VERIFIED (was FAILED) | inbound-handler.ts:636-660 (state only; engagement_mode untouched); `inbound-fromme.test.ts` |
+| 24 | Complex doubt produces handoff_events+mode_changes+awaiting_human (atomic) | ✓ VERIFIED (was FAILED) | `handoff-intents.test.ts` Teste 2; handoff-service.ts single transaction |
 
-**Score:** 16/24 truths verified
+**Score:** 24/24 truths verified (8 previously FAILED → now VERIFIED; 0 regressions in truths 1-16)
 
 ## Required Artifacts (key presence)
 - FSM/orchestrator: `src/domain/orchestrator/transitions.ts` — ✓
@@ -246,6 +256,7 @@ verified_trues:
 - Post-gate: `src/domain/llm/post-gate.ts` — ✓
 - CLI: `src/cli/shadow.ts`, `src/cli/mode.ts`, `src/cli/status.ts`, `src/cli/handoff.ts` — ✓
 - Scripts: `scripts/shadow-report.ts`, `scripts/bake-off.ts` — ✓
+- 02-04 gap-closure surface: `src/application/event-bus.ts` (`EventoInbound.senderPhoneE164`), `src/channel/baileys/runtime.ts` (`criarEventoInbound` stamp), `src/application/inbound-handler.ts` (emitter predicate + `INTENCOES_HANDOFF`), `src/index.ts` (`canalSelfJid` wiring + LID warn) — ✓
 
 ## Key Link Verification (highlights)
 - shadow.ts → messages (ai_suggestion/suggested): ✓
@@ -253,35 +264,55 @@ verified_trues:
 - handoff-service → handoff_events+mode_changes+conversations in one transaction: ✓
 - CLI shadow → review_events append-only: ✓
 - CLI mode → event_log operational_mode_changed + settings.operational_mode wired to gate: ✓
+- **runtime.ts → inbound-handler (emitter stamp → Guard 0 predicate):** ✓ (CR-01 close) — `runtime.ts:109-114/163` stamps `senderPhoneE164`; `inbound-handler.ts:120-128/621-628` consumes it.
+- **inbound-handler → handoff-service for `duvida_complexa`:** ✓ (CR-02 close) — set membership at `:82-91`, mapping to `dispararHandoff`.
+
+## Data-Flow Trace (Level 4) — Guard 0 first-contact path
+| Artifact | Data Variable | Source | Produces Real Data | Status |
+| -------- | ------------- | ------ | ------------------ | ------ |
+| `inbound-handler.ts` (Guard 0) | `senderPhoneE164` | `runtime.ts` `criarEventoInbound` from `sock.user.id` (boot getter) for `fromMe`; else `remoteJid` | Yes when `sock.user.id` resolves to E.164 | ✓ FLOWING (tests) / ? HUMAN at real pairing |
+
+> The `fromMe` branch is fed by `normalizeJid(canalSelfJid).e164`. Tests inject an E.164-shaped `canalSelfJid`. In production this value depends on the real pairing form (see Human Verification). The LID branch is fail-closed with a one-time warn.
+
+## Behavioral Spot-Checks
+| Behavior | Command | Result | Status |
+| -------- | ------- | ------ | ------ |
+| Guard 0 + emitter stamp + handoff-intent contract | `npx vitest run tests/application/inbound-fromme.test.ts tests/channel/evento-inbound.test.ts tests/application/handoff-intents.test.ts` | 3 files / 16 tests passed | ✓ PASS |
+| Full suite (regression) | `npm test` | 51 files / 274 tests passed | ✓ PASS |
+
+## Probe Execution
+No phase-declared probes found (`scripts/*/tests/probe-*.sh` absent; no probe references in PLAN/SUMMARY). Skipped.
 
 ## Requirements Coverage (Phase 2 set)
-Requirements from plans: OPRE-04, OPRE-05, LEAD-05, LEAD-06, CONV-01–CONV-06, CONV-08–CONV-10, CONV-12, FLUP-04, FLUP-05, FLUP-07, FLUP-09, FLUP-10, CRM-02, COMP-01, NFRQ-03.  
-- **Verified/satisfied by code**: OPRE-04, OPRE-05, LEAD-05, LEAD-06, CONV-02–CONV-06, CONV-08–CONV-10, CONV-12, FLUP-04, FLUP-05, FLUP-07, FLUP-10, CRM-02, COMP-01, NFRQ-03 (core mechanics present).  
-- **Blocked/missing wiring**: CONV-01 (Guard 0), FLUP-09 (duvida_complexa mapping).
+Requirements from plans: OPRE-04, OPRE-05, LEAD-05, LEAD-06, CONV-01–CONV-10, CONV-12, FLUP-04, FLUP-05, FLUP-07, FLUP-09, FLUP-10, CRM-02, COMP-01, NFRQ-03.
+- **Satisfied by code (evidence in truths 1-24):** OPRE-04, OPRE-05, LEAD-05, LEAD-06, CONV-01–CONV-10, CONV-12, FLUP-04, FLUP-05, FLUP-07, FLUP-09, FLUP-10, CRM-02, COMP-01, NFRQ-03.
+- **Previously blocked, now wired:** CONV-01 (Guard 0/emitter) and FLUP-09 (duvida_complexa mapping) — both closed by 02-04.
+- **No orphaned requirements** for Phase 2 (all declared IDs appear in a plan's `requirements`).
 
 ## Anti-Patterns Found
-- None major in modified files (shadow.ts does not import dispatcher; append-only enforced; PII masking centralized).  
-- The two blockers are wiring/logic gaps (missing mapping + Guard 0 comparison), not placeholders/debt markers.
+- No debt markers (`TBD`/`FIXME`/`XXX`/`TODO`/`HACK`/`PLACEHOLDER`) in the 02-04-modified files. (The single grep hit was the Portuguese word "todos" in an `event-bus.ts` comment — not a marker.)
+- No stubs/placeholder returns in the modified surface. Guard 0 is fail-closed by design (not a stub). `deps.llm` gating is intentional (see Informational note).
 
-## Behavioral/Execution Checks
-- Behavioral spot-checks not run (no server started).  
-- Probe execution: no phase-declared probes found in phase dir; conventional probes absent. Skipped.  
-- Existing tests: phase 2 test suites cover shadow/matcher/handoff/qualification/CLI/post-gate/adversarial/report as per summaries (verified by file presence).
+## Informational (not a gap) — LLM not wired at the production boot
+`src/index.ts:221-223` calls `processInboundFromMe(conn.db, sock, evt)` with **no `deps`**, so `deps.llm` is `undefined` in the live boot and the running process does not produce `ai_suggestion` drafts (`inbound-handler.ts:693` gates the shadow sandwich on `deps.llm`). Drafts are produced only when an `LlmPort` is injected (tests, `scripts/bake-off.ts`, and the CLI path). This is consistent with (a) `02-01-PLAN.md` `user_setup` — "o LLM é **opcional** nesta fase; a fase roda inteira no `ScriptedLlmAdapter`", and (b) the accepted state "no shadow operation yet" (D-18). It was NOT among this phase's must-have truths and is not a CR. **Flag for the shadow-operation/deployment step:** wire an `LlmPort` (bake-off winner) into the boot before the D-18 shadow gate can accumulate ≥14 days / ≥100 drafts.
 
 ## Exit Gate Note (ACCEPTED)
 Phase 2 exit is D-17/D-18 (shadow report from DB with PASS/FAIL; promotion shadow→active requires explicit Admin approval). Current `shadow:report` returns FAIL with 0 evidence; Admin selected `manter-shadow`. This is the **ACCEPTED outcome per plan/checkpoint**, not a verification gap.
 
 ## Gaps Summary
-Two BLOCKERS identified (CR-01, CR-02) prevent the phase goal from being fully achieved in production behavior:
-1. **CR-01 (CONV-01/R-002):** Guard 0 detection uses incorrect comparison (chatId vs CHANNEL_PHONE_E164). Fix required so Admin’s first message sets `first_contact_by_human` true and enables `novo → aquecimento`.
-2. **CR-02 (FLUP-09/R-065):** `INTENCOES_HANDOFF` missing `duvida_complexa`. Add mapping so complex doubt triggers `dispararHandoff` (atomic) with silence.
+No gaps remain. Both root causes are closed in code, covered by tests, and committed:
+1. **CR-01 (CONV-01/R-002)** — Guard 0 now compares the dedicated-number **emitter** E.164 (`senderPhoneE164`, stamped by the runtime) instead of `chatId`; Admin's first manual message sets `first_contact_by_human` and drives `novo → aquecimento` (atomic). `aacaa69`.
+2. **CR-02 (FLUP-09/R-065)** — `duvida_complexa` is in `INTENCOES_HANDOFF`, with atomic e2e handoff + total silence. `2e3c56d`.
 
-Six additional related gaps stem from these two (reachability/wiring). All 8 failed truths are traceable to CR-01 or CR-02.
+All 8 previously-failed truths (17-24) are now VERIFIED. Truths 1-16 show no regressions.
 
 ## Human Verification Required
-None identified by automated checks. The items above are code fixes (deterministic), not UI/visual behavior requiring human testing.
+1. **Real pairing (P-004) — emitter form for Guard 0**
+   - **Test:** On the real dedicated number pairing, record the form of `sock.user.id` (E.164 `@s.whatsapp.net` vs LID `@lid`); with the bot in `shadow`, send the first manual Admin message to a lead and observe `leads.first_contact_by_human` and the conversation `state`.
+   - **Expected:** `normalizeJid(sock.user.id).e164` non-null → `first_contact_by_human=true` and `novo → aquecimento`. If LID: the boot logs exactly one `jid_proprio_sem_e164` and Guard 0 stays fail-closed (no transition) — pairing must be resolved before shadow is meaningful.
+   - **Why human:** Only a real WhatsApp pairing reveals the id form. Tests inject a fixed E.164-shaped `canalSelfJid` and by construction do not exercise the LID branch — the exact CR-01 class.
 
 ---
 
-_Verified: 2026-10-14T12:48:00Z_  
+_Verified: 2026-10-14T13:45:00Z_
 _Verifier: goal-backward verification (gsd-verifier)_
