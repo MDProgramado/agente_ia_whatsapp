@@ -294,7 +294,7 @@ describe("shadow — fatia ponta-a-ponta (02-01 Task 3)", () => {
 		});
 	});
 
-	it("sinal de handoff (pedido_preco) → registra event_log, 0 rascunho, geração pulada", async () => {
+	it("sinal de handoff (pedido_preco) → 1 handoff_events, 0 rascunho, geração pulada", async () => {
 		await emTransacaoRevertida(async (tx) => {
 			const fx = await semear(tx);
 			const { chamadas } = await rodar(tx, fx, {
@@ -313,9 +313,11 @@ describe("shadow — fatia ponta-a-ponta (02-01 Task 3)", () => {
 
 			expect(await contarAiSuggestion(tx, fx.conversationId)).toBe(0);
 			expect(chamadas).toEqual(["extract"]);
+			// 02-02 substituiu o stub do 02-01 pelo HandoffService real: o registro
+			// agora é uma linha de `handoff_events` (append-only), não um evento.
 			const r = await tx.execute(sql`
-				select count(*)::int as n from event_log
-				where conversation_id = ${fx.conversationId} and event_type = 'handoff_stub'
+				select count(*)::int as n from handoff_events
+				where conversation_id = ${fx.conversationId}
 			`);
 			expect(primeiro(rows<{ n: number }>(r)).n).toBe(1);
 		});

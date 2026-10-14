@@ -46,6 +46,7 @@ import { recordLlmRun } from "../infra/db/queries/llm-runs.js";
 import { leads } from "../infra/db/schema.js";
 import { childLogger } from "../infra/logger.js";
 import type { EventoInbound } from "./event-bus.js";
+import { dispararHandoff, type HandoffTriggeredBy } from "./handoff-service.js";
 import { type LlmRunMeta, persistDraft } from "./shadow.js";
 
 const log = childLogger("inbound");
@@ -198,6 +199,8 @@ const registrarMidiaRecebida = async (
 	conversa: ConversaLida,
 	leadId: string,
 	evt: EventoInbound,
+	deps: InboundDeps,
+	agora: Date,
 ): Promise<void> => {
 	const excerpt = evt.mediaType ?? "midia";
 	const detalhe =
@@ -221,22 +224,21 @@ const registrarMidiaRecebida = async (
 		)
 	`);
 
-	await db.execute(sql`
-		insert into handoff_events (
-			conversation_id, lead_id, channel_account_id, triggered_by,
-			trigger_detail, excerpt, simultaneous_send_blocked, bot_stopped_at
-		)
-		values (
-			${conversa.id},
-			${leadId},
-			${conversa.channel_account_id},
-			'message_type',
-			${`midia recebida (${excerpt})`},
-			${excerpt},
-			true,
-			now()
-		)
-	`);
+	// O handoff é UMA coisa só, e é o mesmo `dispararHandoff` do caminho de texto:
+	// mídia não tem um "handoff paralelo" com metade das escritas.
+	await dispararHandoff(
+		db,
+		{
+			conversationId: conversa.id,
+			reason: `midia recebida (${excerpt})`,
+			triggeredBy: "message_type",
+			triggerDetail: `midia recebida (${excerpt})`,
+			excerpt,
+			actor: "bot",
+			agora,
+		},
+		{ notifier: deps.notifier },
+	);
 
 	await db.execute(sql`
 		update conversations
@@ -310,33 +312,26 @@ const falhaFechada = async (
 };
 
 /**
- * Stub do handoff (D-12). O `HandoffService` real é o plano 02-02; aqui o sinal
- * é apenas registrado e a geração é pulada — nada sai, nada é rascunhado.
+ * Mapeia o gatilho detectado para o `triggered_by` do schema. `pedido_optout`
+ * vira `opt_out` (o CHECK tem o valor próprio), mídia vira `message_type`, e os
+ * sinais de palavra-chave (preço/irritação/opt-out implícito) viram `keyword`;
+ * o resto é `intent`. É a tradução do vocabulário da LLM para o vocabulário da
+ * auditoria — um lugar só.
  */
-const registrarHandoffStub = async (
-	db: Db,
-	conversationId: string,
-	leadId: string,
+const triggeredByDoGatilho = (
 	intent: string,
-	payload: unknown,
-): Promise<void> => {
-	await db.execute(sql`
-		insert into event_log (
-			event_type, entity_type, conversation_id, lead_id, payload, severity
-		)
-		values (
-			'handoff_stub',
-			'conversation',
-			${conversationId},
-			${leadId},
-			${JSON.stringify({ intent, sinais: payload })}::jsonb,
-			'warn'
-		)
-	`);
-	log.info(
-		{ event: "handoff_stub", conversation_id: conversationId, intent },
-		"sinal de handoff detectado — geração pulada (stub do 02-01)",
-	);
+	signals: {
+		readonly pricingAsked: boolean;
+		readonly irritation: boolean;
+		readonly optOutIntent: boolean;
+	},
+): HandoffTriggeredBy => {
+	if (intent === "pedido_optout") return "opt_out";
+	if (intent === "midia_recebida") return "message_type";
+	if (signals.pricingAsked || signals.irritation || signals.optOutIntent) {
+		return "keyword";
+	}
+	return "intent";
 };
 
 /**
@@ -419,7 +414,20 @@ const rascunharShadow = async (
 		signals.mediaReceived;
 
 	if (precisaHandoff) {
-		await registrarHandoffStub(db, conversa.id, lead.id, intent, signals);
+		await dispararHandoff(
+			db,
+			{
+				conversationId: conversa.id,
+				reason: `gatilho de handoff: ${intent}`,
+				triggeredBy: triggeredByDoGatilho(intent, signals),
+				triggerDetail: intent,
+				triggerValue: intent,
+				excerpt: evt.body,
+				actor: "bot",
+				agora,
+			},
+			{ notifier: deps.notifier },
+		);
 		return;
 	}
 
@@ -499,7 +507,7 @@ export const processInboundFromMe = async (
 		(evt.kind !== undefined && evt.kind !== "text" && evt.kind !== "link");
 	if (ehMidia) {
 		const conversa = await pegarOuCriarConversa(db, lead.id);
-		await registrarMidiaRecebida(db, conversa, lead.id, evt);
+		await registrarMidiaRecebida(db, conversa, lead.id, evt, deps, agora);
 		return;
 	}
 
