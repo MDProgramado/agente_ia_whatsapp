@@ -74,8 +74,12 @@ export interface InboundDeps {
 	readonly agora?: Date;
 }
 
-/** Intenções que disparam handoff (D-12) — o stub do 02-01 registra e cala. */
-const INTENCOES_HANDOFF: ReadonlySet<string> = new Set([
+/**
+ * Intenções que disparam handoff na Camada 2 (D-12). Exportado para o teste de
+ * CONTRATO (`handoff-intents.test.ts`): a lista é a especificação de FLUP-09/R-065
+ * e omitir qualquer um destes intents deve falhar o teste, não passar em silêncio.
+ */
+export const INTENCOES_HANDOFF: ReadonlySet<string> = new Set([
 	"pedido_preco",
 	"intencao_agendar",
 	"bot_suspicion",
