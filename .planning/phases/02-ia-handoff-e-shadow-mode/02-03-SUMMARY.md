@@ -106,7 +106,7 @@ Cada task foi commitada atomicamente:
 2. **Task 2: Pós-gate de conteúdo (CONV-07) + corpus adversário** — `c1ad40e` (test, RED) → `4ad4514` (feat, GREEN)
 3. **Task 3: Relatório de shadow (D-17) e harness de bake-off (D-10)** — `d8975d1` (feat)
 
-**Plan metadata:** `<pendente>` (docs: complete plan)
+**Plan metadata:** `f179ab8` (docs: complete plan) + `b0c5824` (docs: STATE/ROADMAP/REQUIREMENTS)
 
 _Nota: a Task 2 é `tdd="true"` → 2 commits (test → feat)._
 
