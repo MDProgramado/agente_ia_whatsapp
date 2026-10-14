@@ -93,7 +93,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 02-03-PLAN.md — Shadow review e gate de saída: CLI `shadow:list/approve/edit/discard` (decisões append-only) + kill switch global de 1 comando (`mode`), pós-gate de conteúdo L4 (CONV-07) validado por corpus adversário, relatório shadow gerado do banco (D-17) e promoção explícita shadow→ativo (D-18)
+- [x] 02-03-PLAN.md — Shadow review e gate de saída: CLI `shadow:list/approve/edit/discard` (decisões append-only) + kill switch global de 1 comando (`mode`), pós-gate de conteúdo L4 (CONV-07) validado por corpus adversário, relatório shadow gerado do banco (D-17) e promoção explícita shadow→ativo (D-18). **Gate de saída: `manter-shadow` — `shadow:report` = FAIL (0 evidência); promoção NÃO aprovada.**
 
 ### Phase 3: Cadência, Operação e Painel
 
@@ -147,7 +147,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Fundação, Canal e Gate de Envio | 4/5 | In Progress (01-03 deferido — P-004) |  |
-| 2. IA, Handoff e Shadow Mode | 2/3 | In Progress|  |
+| 2. IA, Handoff e Shadow Mode | 3/3 | In Progress (3/3 planos; gate `manter-shadow` — D-18) |  |
 | 3. Cadência, Operação e Painel | 0/3 | Not started | - |
 | 4. Piloto, Calibração e Apuração | 0/2 | Not started | - |
 

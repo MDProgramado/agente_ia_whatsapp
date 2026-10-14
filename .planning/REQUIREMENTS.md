@@ -40,7 +40,7 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 - [ ] **CONV-04**: Persona consultiva, educada e direta — foca em entender a dor antes de oferecer solução (R-010)
 - [ ] **CONV-05**: Condução dinâmica, sem script rígido, alternando ouvir/comentar/validar/contextualizar/perguntar (R-011)
 - [x] **CONV-06**: Reconhece objeções (preço, tempo, fornecedor, "vou pensar") e tenta contornar com argumentos (R-041)
-- [ ] **CONV-07**: Gera argumentos de contorno de objeções autonomamente, dentro de limites rígidos (sem valores, prazos, descontos, proposta ou agendamento) (R-042)
+- [x] **CONV-07**: Gera argumentos de contorno de objeções autonomamente, dentro de limites rígidos (sem valores, prazos, descontos, proposta ou agendamento) (R-042)
 - [ ] **CONV-08**: IA age como o Admin humano, sem revelar automação espontaneamente (R-055)
 - [x] **CONV-09**: Pergunta direta se é bot/robô/IA → handoff imediato, sem negar, admitir ou desviar (R-056)
 - [x] **CONV-10**: Suspeita de automação → silêncio total até o Admin assumir; nenhuma mensagem de transição (R-057)
@@ -65,7 +65,7 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 ### CRM Local e Pipeline (CRM)
 
 - [ ] **CRM-01**: Pipeline completo de status: Novo → Contatado → Respondeu → Qualificado → Aquecido → Reunião agendada → Proposta → Fechado → Perdido (com motivo) (R-021)
-- [ ] **CRM-02**: IA atualiza status automaticamente com transições de critérios claros e auditáveis; status críticos com justificativa e timestamp; Admin corrige manualmente (R-022)
+- [x] **CRM-02**: IA atualiza status automaticamente com transições de critérios claros e auditáveis; status críticos com justificativa e timestamp; Admin corrige manualmente (R-022)
 - [ ] **CRM-03**: CRMS intermediário: lista de leads, status, histórico (imutável), busca, tags, filtros, notas, tarefas, lembretes e responsável; Admin cria notas/tarefas e a IA cria notas automáticas (resumo, objeções, próximos passos) (R-043)
 
 ### Integrações (INTR)
@@ -179,7 +179,7 @@ Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/0
 | CONV-04 | Phase 2 | Pending |
 | CONV-05 | Phase 2 | Pending |
 | CONV-06 | Phase 2 | Complete |
-| CONV-07 | Phase 2 | Pending |
+| CONV-07 | Phase 2 | Complete |
 | CONV-08 | Phase 2 | Pending |
 | CONV-09 | Phase 2 | Complete |
 | CONV-10 | Phase 2 | Complete |
@@ -198,7 +198,7 @@ Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/0
 | FLUP-09 | Phase 2 | Complete |
 | FLUP-10 | Phase 2 | Complete |
 | CRM-01 | Phase 3 | Pending |
-| CRM-02 | Phase 2 | Pending |
+| CRM-02 | Phase 2 | Complete |
 | CRM-03 | Phase 3 | Pending |
 | INTR-01 | Phase 1 | Complete |
 | COMP-01 | Phase 2 | Complete |
@@ -227,7 +227,8 @@ Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/0
   - **5 Pending por deferimento do 01-03 (P-004):** LEAD-01, LEAD-02, LEAD-03, LEAD-04, WHS-05 — escopo do plano 01-03, cuja automação está commitada; falta o checkpoint humano do pareamento QR antes do piloto.
   - **✅ EQUP-01 resolvido em 2026-10-13 (P-005):** linha do Admin seedada pela migration `0005_seed_admin.sql` (idempotente) + prova em `tests/ops/seed-admin.test.ts` (`app_users >= 1` após a migration).
   - **→ Parcela deferida para a Fase 2 (P-006):** transição `engagement_mode = awaiting_human` + escrita de `handoff_active` (truth do must_have do 01-05), pertencente ao plano 02-02 — a mecânica de NFRQ-04 (logs + notificação + guarda AR-010 que lê o sinal) está entregue.
+- **Fase 2 — plano 02-03 concluído (2026-10-14):** `CONV-07` (pós-gate de conteúdo L4) e `CRM-02` (correção manual de status + transições auditáveis) marcados **Complete**. A implementação da Fase 2 está completa (3/3 planos). **Gate de saída = `manter-shadow`** (D-18): `npm run shadow:report` = FAIL (0 evidência) ⇒ promoção shadow→ativo **NÃO** aprovada; `ACTIVA` adiada até o relatório atingir PASS. A Fase 2 permanece em shadow por decisão explícita do Admin.
 
 ---
 *Requirements defined: 2026-09-28*
-*Last updated: 2026-10-13 after correções pós-verificação da Fase 1 (18/23 Complete; 01-03 deferido — P-004; EQUP-01 resolvido — P-005; handoff`awaiting_human` deferido — P-006)*
+*Last updated: 2026-10-14 após plano 02-03 (CONV-07, CRM-02 → Complete; gate de saída = manter-shadow — D-18; Fase 2 com implementação completa 3/3)*

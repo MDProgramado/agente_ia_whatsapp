@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-10-14T10:58:38.270Z"
+last_updated: "2026-10-14T11:15:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
   percent: 0
 ---
 
@@ -19,14 +19,14 @@ progress:
 Ver: `.planning/PROJECT.md` (atualizado 2026-09-28)
 
 **Valor central:** Quando o bot assume uma conversa, conduz com naturalidade suficiente para gerar reuniões agendadas sem nunca cruzar uma fronteira proibida — e para no instante exato em que o humano precisa assumir.
-**Foco atual:** Phase 2 — IA, Handoff e Shadow Mode
+**Foco atual:** Phase 2 (IA, Handoff e Shadow Mode) — implementação completa (3/3); Fase 3 a seguir
 
 ## Posição Atual
 
-Fase: 2 de 4 (IA, Handoff e Shadow Mode) — Fase 1 com 01-03 deferido (P-004)
-Plano: 2 de 3 na fase atual (02-01 e 02-02 concluídos; 02-03 pendente)
-Status: Executing Phase 02
-Última atividade: 2026-10-13 — Wave 4: plano 01-05 (Operação e humanização) concluído com 3/3 tasks, incluindo o checkpoint humano de backup. `humanize.ts` (atraso determinístico por hash + digitação + quebra preservando a concatenação) ligado **dentro** do branch `send` do `dispatch` (mantém o choke-point único de `sendText` do 01-04) + fila **por lead** (`queue-per-lead.ts`); `health-monitor` (croner 30s, severidade warn/critical, notificação só por transição); `daily-report` apurando os 2 objetivos do piloto a partir de `status_history`; `env-check` com 8 códigos nomeados no boot; `backup.ps1` com `pg_dump -Fc` carimbado `_pg18` e `-Verify` restaurado de verdade (4 contagens batendo: leads 2=2, conversations 0=0, messages 0=0, daily_counters 0=0). Suíte 32 arquivos / 139 testes verdes, `tsc` e biome limpos. 01-03 segue deferido (P-004 `CREDS_INVALID`) e 5 requisitos da fase permanecem Pending até o canal parear.
+Fase: 2 de 4 (IA, Handoff e Shadow Mode) — **todos os 3 planos implementados**; Fase 1 com 01-03 deferido (P-004)
+Plano: 3 de 3 na fase atual (02-01, 02-02 e 02-03 concluídos; **Fase 2 com implementação completa**)
+Status: Phase 02 plan 03 complete — gate de saída = `manter-shadow` (promoção NÃO aprovada)
+Última atividade: 2026-10-14 — Wave 3: plano 02-03 (Shadow review e gate de saída) concluído com 3/3 tasks. Entregues: CLI de revisão em shadow (`shadow:list/approve/edit/discard`; decisões append-only em `review_events`, nunca `UPDATE messages`), kill switch global de 1 comando (`mode pause/resume` → `settings.operational_mode` + trilha append-only em `event_log` com `event_type='operational_mode_changed'`), correção de status pelo Admin (`status:corrigir`), confirmação humana de handoff (`handoff:ack` idempotente + auditoria, D-15), pós-gate de conteúdo L4 (`src/domain/llm/post-gate.ts`; CONV-07) validado por corpus adversário (falso-negativo = 0), relatório de shadow gerado do banco (`npm run shadow:report`, gate D-17) e harness de bake-off (`npm run bake-off`, D-10) com veredito JSON commitado. Suíte **49 arquivos / 268 testes verdes**; `tsc` e biome limpos. **Gate de saída: `npm run shadow:report` = FAIL (0 evidência) → Admin decidiu `manter-shadow`, promoção shadow→ativo NÃO aprovada (D-18).** 01-03 segue deferido (P-004 `CREDS_INVALID`).
 
 Verificação de fase (2026-10-13, gsd-verifier): **PASS_WITH_NOTES** / `gaps_found` — 3/5 Success Criteria ✓ (SC2, SC3, SC4); SC1 deferido (01-03); SC5 parcial à época (encarregado) — **nomeado em 2026-10-13** (`docs/lgpd/encarregado-dpo.md`). Relatório: `.planning/phases/01-funda-o-canal-e-gate-de-envio/VERIFICATION.md`.
 
@@ -50,7 +50,7 @@ Progresso: [████████░░] 80% (4 de 5 planos concluídos; 5 de
 | Fase | Planos | Planejados | Executados | Média/Plano |
 |------|--------|-------------|------------|-------------|
 | 1. Fundação, Canal e Gate | 5 | 5 | 3 | 218 min |
-| 2. IA, Handoff e Shadow | 3 | 0 | 0 | — |
+| 2. IA, Handoff e Shadow | 3 | 3 | 3 | ~90 min |
 | 3. Cadência, Operação e Painel | 3 | 0 | 0 | — |
 | 4. Piloto, Calibração e Apuração | 2 | 0 | 0 | — |
 
@@ -149,6 +149,17 @@ Discussão em modo `--auto` (passada única, 5 áreas). Decisões D-01..D-18 em 
 - **`handoff:ack` permanece textual:** nenhum script em `package.json` (fora de `files_modified`); a CLI é escopo do 02-03 (`src/cli/handoff.ts`).
 - **Desvio Rule 2 em `tests/application/shadow.test.ts`:** a asserção de handoff passou do stub removido (`event_log event_type='handoff_stub'`) para a linha real (`handoff_events`), fora de `files_modified`.
 
+### Decisões do Plano 02-03 (2026-10-14, shadow review e gate de saída)
+
+- **Kill switch global auditado em `event_log`, não em `mode_changes`.** `mode_changes` é per-conversa (`conversation_id NOT NULL` + FK); o kill switch é global. A decisão de contexto D-02 previa "ou equivalente já existente de `mode_changes`"; o equivalente entregue é `event_log` com `event_type='operational_mode_changed'` (`entity_type='settings'`, `conversation_id=null`, `payload={from,to,actor,reason,source}`), na **mesma transação** do upsert de `settings.operational_mode`. **Decisão explícita do Admin em 2026-10-14.** O PLAN.md/`key_links`/D-19 ainda citam `mode_changes` — este é o registro do desvio (o plano não foi reescrito).
+- **Limiares do gate de saída como CONSTANTES, não `settings`.** `LIMIARES_PADRAO` em `scripts/shadow-report.ts` (ADR-010: `minDaysOfOperation≥14`, `minSuggestionsReviewed≥100`, `minApprovalRate≥0.80`, `maxCriticalHallucinations=0`, `maxAutomationReveals=0`). Expor via `settings` permitiria relaxar o gate ao vivo (T-02-16). Inclusivo nas bordas (`>=`/`<=` → valores exatos no limiar ⇒ PASS).
+- **Gate de saída (D-17/D-18) = `manter-shadow`.** Em 2026-10-14 o Admin resolveu o checkpoint `decision` com **`manter-shadow`**: a promoção shadow→ativo **NÃO** foi aprovada. `npm run shadow:report` retornou **FAIL** com 0 evidência (0 dias, 0 rascunhos, 0 revisados). `ACTIVA` fica adiada até o relatório atingir PASS; nenhum caminho de código se auto-promove (D-18). O gate é satisfeito pela **existência do veredicto PASS/FAIL computado do banco + teste de borda**, não pela ativação.
+- **Pós-gate de conteúdo determinístico (L4) é a barreira (CONV-07).** `scanPostGate` (valor monetário, percentual/desconto/promo, mídia, promessa de agenda) roda **antes** de persistir o rascunho; bloqueio → `recordBlockedAttempt` + sem rascunho. Corpus adversário: falso-negativo = 0; contorno legítimo (`objecao_preco`) não bloqueado.
+- **`snapshot.ts`/`kill-switch.ts` NÃO foram alterados.** Já computavam o kill switch a partir de `settings.operational_mode` + `is_active`; o plano os listava em `files`, mas a entrega foi no-op (documentado no SUMMARY).
+- **Correção Rule 1 em `automation-disclosure.ts`.** `MEDIA_TERM` passou de `\b[áa]udio\b` para `(?<!\w)[áa]udio(?!\w)` (fronteira `\b` não funciona com acento em pt-BR).
+- **Mapeamento de `reason` no pós-gate:** AR-002→proposta, AR-003→agendamento; "R-042" descartado como não-conteúdo (não é `GateReason`).
+- **Teste extra + doc-fix na Task 3:** `tests/ops/bake-off.test.ts` (6 testes, além do `<files>` do plano) e correção do doc-comment de `shadow-report.ts` (só `messages.created_at` é sem timezone; `llm_runs.created_at` é `timestamptz`).
+
 ### Todos Pendentes
 
 De `.planning/todos/pending/`:
@@ -159,6 +170,7 @@ Nenhum ainda.
 
 - ⚠️ **API do caça-leads não especificada** (schema, auth, rate limit) — bloqueia LEAD-01 na integração (não a arquitetura); decidir forma do insert antes (AR-011 exige `legal_registered_at` na criação).
 - ⚠️ **R-059 (número único, sem redundância)** — risco dominante aceito e documentado; mitigação: shadow mode, kill switch, appeal preparado, exportação contínua do CRM.
+- 🟡 **Gate de saída da Fase 2 = `manter-shadow` (2026-10-14).** A promoção shadow→ativo **NÃO** foi aprovada. `npm run shadow:report` = **FAIL** com 0 evidência (0 dias de operação, 0 rascunhos, 0 revisados). A Fase 2 está **implementada** (3/3 planos, suíte 49/268 verde), mas o sistema **permanece em shadow** até o relatório atingir PASS (≥14 dias, ≥100 rascunhos revisados, ≥80% aprovação, 0 alucinação crítica, 0 revelação de automação). O envio real não foi implementado nesta fase de qualquer forma — a promoção é uma ação futura explícita (D-18).
 - ✅ **R-013 (notificação local) — RESOLVIDO em 2026-10-05 (verificação humana).** A exibição do toast estava ligada ao registro do **AUMID**, não ao `WpnUserService`: com o AUMID `WhatsAppProspect.Automacao` registrado em `HKCU\SOFTWARE\Classes\AppUserModelId`, o `npm run notify` exibiu o toast "WhatsApp Prospecção" de verdade. Histórico: em 2026-09-30 a gravação passava (`Show()` sem erro, linha em `wpndatabase.db`, `toast_sent`) mas a entrega nunca ocorria (`LastNotificationAddedTime` não atualizado); a hipótese era serviço do SO (`WpnUserService` template por usuário), e a causa raiz real era o AUMID desconhecido — o Windows descarta em silêncio um toast emitido para AUMID não registrado. O `notify.ps1` sempre esteve correto. Detalhes em P-001/P-002 (`docs/pendencias.md`). O **som** segue confirmado como canal primário (`Hand.Play()` OK) com o toast como complemento.
 - ⚠️ **`CHANNEL_PHONE_E164` no `.env` está com o placeholder `+5511999999999`.** O número dedicado real precisa entrar **antes do pareamento QR** (Task 3 do plano 01-03). O CHECK do banco aceita o placeholder, então nada quebra até lá — mas número errado no canal é erro sem recuperação barata.
 - ⚠️ **`fetchNewChatMessageCap()` / `fetchAccountReachoutTimelock()`** — confirmadas nos typings do `@whiskeysockets/baileys@7.0.0-rc14` durante o plano 01-03 (ADR-001); ver `capabilities.ts`.
@@ -191,6 +203,7 @@ Nenhum ainda.
 |-----------|------|--------|-----------|
 | Infra/Canal | Pareamento do número dedicado (plano 01-03) — **P-004 `CREDS_INVALID`**; automação commitada, checkpoint humano não concluído | Aberto | 2026-10-13 |
 | Fase 2 | Transição de handoff → `engagement_mode = awaiting_human` + escrita de `handoff_active` (truth 01-05) — **P-006**; escritor entregue no 02-02 (`HandoffService` + `mode_changes`) | ✅ Concluído (02-02) | 2026-10-14 |
+| Fase 2 | Promoção shadow→ativo (D-18) — **`manter-shadow`**: `shadow:report` = FAIL (0 evidência); aguarda ≥14 dias / ≥100 rascunhos / ≥80% aprovação | Aberto (decisão do Admin) | 2026-10-14 |
 | Pesquisa | Procedimento de appeal de ban (fonte secundária) — confirmar antes de depender | Aberto | 2026-09-28 |
 | Pesquisa | Onboarding da API oficial (migração R-016) — não pesquisado | Aberto | 2026-09-28 |
 | Produto | Break-up message (FLUP-11 v2) — decidir com dado do piloto | Aberto | 2026-09-28 |
@@ -198,11 +211,12 @@ Nenhum ainda.
 ## Continuidade de Sessão
 
 Última sessão: 2026-10-14
-Parou em: Fase 2, plano **02-02** concluído (3/3 tasks) — `HandoffService` atômico (`dispararHandoff`: `handoff_events` + `mode_changes` + `engagement_mode='awaiting_human'` + `status_history` numa transação, com guarda `handoff_active` de idempotência e silêncio total), matcher determinístico pt-BR de opt-out como autoridade (`classifyOptout` FORTE/AMBIGUO/NAO, FORTE → `applyOptOut` + ledger irreversível), qualificação acumulativa auditável (`updateQualification`; verba+decisão → `aquecido`) e fiação no `inbound-handler` (matcher ANTES da Camada 1, `status_history` nas transições bot/admin, mídia via `dispararHandoff`). **P-006 quitado.** Suíte 41 arquivos / 206 testes verdes; `tsc` e biome limpos.
-Próximo passo: **executar o plano 02-03** (último da Fase 2) — CLI `shadow:list/approve/edit/discard` + kill switch (`mode`), pós-gate de conteúdo L4 (CONV-07) por corpus adversário, relatório shadow do banco (D-17) e promoção explícita shadow→ativo (D-18).
+Parou em: Fase 2, plano **02-03** concluído (3/3 tasks) — CLI de revisão em shadow (`shadow:list/approve/edit/discard`; decisões append-only em `review_events`), kill switch global de 1 comando (`mode pause/resume` → `settings.operational_mode` + `event_log event_type='operational_mode_changed'`), `status:corrigir` (CRM-02), `handoff:ack` idempotente (D-15), pós-gate de conteúdo L4 (`src/domain/llm/post-gate.ts`, CONV-07) validado por corpus adversário, relatório de shadow (`npm run shadow:report`, gate D-17) e harness de bake-off (`npm run bake-off`, D-10). **Fase 2 com implementação completa (3/3).** Suíte 49 arquivos / 268 testes verdes; `tsc` e biome limpos.
+Marco (D-18): **gate de saída = `manter-shadow`** — `shadow:report` = FAIL (0 evidência); promoção shadow→ativo NÃO aprovada; `ACTIVA` adiada até PASS.
+Próximo passo: **Fase 3 (Cadência, Operação e Painel)** — `Scheduler` + cadência FLUP + painel único (R-046, Fastify/SSE + React localhost) + CRM operacional/copiloto. Requisitos da Fase 2 (`CONV-07`, `CRM-02`) marcados Complete em `REQUIREMENTS.md`. A promoção shadow→ativo depende de dados reais de operação (permanece pendente por decisão do Admin).
 Pendente (deferido — P-004): fechar o checkpoint de pareamento do 01-03 — `CHANNEL_PHONE_E164` precisa do número real (hoje `+5511999999999`) e o QR precisa parear (`CREDS_INVALID` em `01-03-DIAG.md` / `docs/pendencias.md`).
 Pós-reboot: revalidar com `npm run notify -- -Title "Teste R-013" -Message "Verificacao" -Urgent` e fechar a Task 6 do plano 01-01 (toast já exibido por humano em 2026-10-05, P-001).
-Arquivo de retomada: `.planning/phases/02-ia-handoff-e-shadow-mode/02-02-SUMMARY.md`
+Arquivo de retomada: `.planning/phases/02-ia-handoff-e-shadow-mode/02-03-SUMMARY.md`
 
 ---
 *Atualizado: 2026-10-14*
