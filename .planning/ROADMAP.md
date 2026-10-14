@@ -95,6 +95,10 @@ Plans:
 
 - [x] 02-03-PLAN.md — Shadow review e gate de saída: CLI `shadow:list/approve/edit/discard` (decisões append-only) + kill switch global de 1 comando (`mode`), pós-gate de conteúdo L4 (CONV-07) validado por corpus adversário, relatório shadow gerado do banco (D-17) e promoção explícita shadow→ativo (D-18). **Gate de saída: `manter-shadow` — `shadow:report` = FAIL (0 evidência); promoção NÃO aprovada.**
 
+**Wave 4 — fechamento de lacunas** *(verificação da fase: `gaps_found`, 16/24)*
+
+- [ ] 02-04-PLAN.md — Fechamento de lacunas (CR-01 + CR-02): Guard 0 passa a comparar o **emissor** E.164 (`EventoInbound.senderPhoneE164`, carimbado pelo runtime a partir de `sock.user.id` via `normalizeJid`) com `CHANNEL_PHONE_E164` em vez do `chatId` (que num `fromMe` é o JID do lead) — primeira mensagem manual do Admin volta a setar `first_contact_by_human` e a disparar `novo → aquecimento`; `duvida_complexa` entra em `INTENCOES_HANDOFF` (R-065/FLUP-09) com e2e atômico e silêncio total; WR-03 (caminho admin) dobrado em transação única (CONV-01, FLUP-09)
+
 ### Phase 3: Cadência, Operação e Painel
 
 **Goal**: O bot roda sozinho dentro da janela e dos limites, mantém cadência conservadora de follow-up e o Admin opera, audita e corrige tudo em um único painel local — com o modo exibido em tempo real.
