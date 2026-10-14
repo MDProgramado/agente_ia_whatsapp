@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-10-14T10:25:34.057Z"
+last_updated: "2026-10-14T10:58:38.270Z"
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 8
-  completed_plans: 5
+  completed_plans: 7
   percent: 0
 ---
 
@@ -23,8 +23,8 @@ Ver: `.planning/PROJECT.md` (atualizado 2026-09-28)
 
 ## Posição Atual
 
-Fase: 1 de 4 (Fundação, Canal e Gate de Envio)
-Plano: 5 de 5 na fase atual (01-01, 01-02, 01-04 e 01-05 concluídos; 01-03 deferido — P-004)
+Fase: 2 de 4 (IA, Handoff e Shadow Mode) — Fase 1 com 01-03 deferido (P-004)
+Plano: 2 de 3 na fase atual (02-01 e 02-02 concluídos; 02-03 pendente)
 Status: Executing Phase 02
 Última atividade: 2026-10-13 — Wave 4: plano 01-05 (Operação e humanização) concluído com 3/3 tasks, incluindo o checkpoint humano de backup. `humanize.ts` (atraso determinístico por hash + digitação + quebra preservando a concatenação) ligado **dentro** do branch `send` do `dispatch` (mantém o choke-point único de `sendText` do 01-04) + fila **por lead** (`queue-per-lead.ts`); `health-monitor` (croner 30s, severidade warn/critical, notificação só por transição); `daily-report` apurando os 2 objetivos do piloto a partir de `status_history`; `env-check` com 8 códigos nomeados no boot; `backup.ps1` com `pg_dump -Fc` carimbado `_pg18` e `-Verify` restaurado de verdade (4 contagens batendo: leads 2=2, conversations 0=0, messages 0=0, daily_counters 0=0). Suíte 32 arquivos / 139 testes verdes, `tsc` e biome limpos. 01-03 segue deferido (P-004 `CREDS_INVALID`) e 5 requisitos da fase permanecem Pending até o canal parear.
 
@@ -137,6 +137,18 @@ Discussão em modo `--auto` (passada única, 5 áreas). Decisões D-01..D-18 em 
 - **PII/saída do shadow** (D-16/17/18): mascarar telefone+endereço antes de qualquer chamada de LLM (choke-point único do prompt-builder), manter nome (negócio B2B); `npm run shadow:report` gera relatório do banco (alucinações/revelações de automação/latência/custo); promoção shadow→ativo exige **aprovação explícita** — o programa não se auto-promove.
 - **Conflito de roadmap resolvido:** o chime Web Audio (citado como redundância em 02-02) fica para a **Fase 3** (não há painel/Web Audio até lá); a notificação na Fase 2 é só `notify.ps1`.
 
+### Decisões do Plano 02-02 (2026-10-14, handoff, opt-out e qualificação)
+
+- **Matcher de opt-out roda ANTES da Camada 1, não "após".** O plano dizia "após a Camada 1", mas rodar depois deixa um opt-out explícito invisível com a LLM fora do ar — o modo de falha que R-024/AR-005 proíbem. `classifyOptout` roda no topo de `rascunharShadow`, logo após as guardas locais (fail-closed + economiza tokens).
+- **`dispararHandoff` grava `status_history` internamente; falha ao gravar NÃO é engolida.** Auditoria (R-022) é parte da atomicidade — se o histórico não grava, o handoff reverte.
+- **Notificação local best-effort FORA da transação:** um `notify` que lança não desfaz o handoff já commitado (R-013 é para avisar; o silêncio é o invariante mais forte).
+- **Idempotência por guarda `handoff_active` + `FOR UPDATE OF c`:** disparar o mesmo gatilho de novo não duplica `handoff_events` nem notifica duas vezes.
+- **Opt-out é irreversível por TRIGGER, não CHECK:** `trg_leads_opt_out_irreversivel` levanta `'opt_out nao pode ser revertido (R-024, AR-005)'` em `true→false`. Drizzle embrulha o erro do Postgres — o texto real vive em `error.cause.message`.
+- **`optout_ledger` é chaveado por `lead_id` (prova do titular), não por conversa.**
+- **`transitions.ts` NÃO foi alterado:** a extensão `ctx.qualification` → `aquecido` já veio do 02-01; listá-lo em `files_modified` foi ruído.
+- **`handoff:ack` permanece textual:** nenhum script em `package.json` (fora de `files_modified`); a CLI é escopo do 02-03 (`src/cli/handoff.ts`).
+- **Desvio Rule 2 em `tests/application/shadow.test.ts`:** a asserção de handoff passou do stub removido (`event_log event_type='handoff_stub'`) para a linha real (`handoff_events`), fora de `files_modified`.
+
 ### Todos Pendentes
 
 De `.planning/todos/pending/`:
@@ -178,19 +190,19 @@ Nenhum ainda.
 | Categoria | Item | Status | Adiado Em |
 |-----------|------|--------|-----------|
 | Infra/Canal | Pareamento do número dedicado (plano 01-03) — **P-004 `CREDS_INVALID`**; automação commitada, checkpoint humano não concluído | Aberto | 2026-10-13 |
-| Fase 2 | Transição de handoff → `engagement_mode = awaiting_human` + escrita de `handoff_active` (truth 01-05) — **P-006**; escritor é escopo do 02-02 (`HandoffService` + `mode_changes`) | Deferido (02-02) | 2026-10-13 |
+| Fase 2 | Transição de handoff → `engagement_mode = awaiting_human` + escrita de `handoff_active` (truth 01-05) — **P-006**; escritor entregue no 02-02 (`HandoffService` + `mode_changes`) | ✅ Concluído (02-02) | 2026-10-14 |
 | Pesquisa | Procedimento de appeal de ban (fonte secundária) — confirmar antes de depender | Aberto | 2026-09-28 |
 | Pesquisa | Onboarding da API oficial (migração R-016) — não pesquisado | Aberto | 2026-09-28 |
 | Produto | Break-up message (FLUP-11 v2) — decidir com dado do piloto | Aberto | 2026-09-28 |
 
 ## Continuidade de Sessão
 
-Última sessão: 2026-10-13
-Parou em: Fase 2 **discutida** — `02-CONTEXT.md` + `02-DISCUSSION-LOG.md` escritos (modo `--auto`, passada única, 5 áreas; D-01..D-18) e commitados (`eba87b7`). Decisões-chave: Admin CLI-first; rascunho em `messages` + `llm_runs`; FSM hintada com sanduíche de 3 camadas (código decide, texto gerado depois); handoff/silêncio/opt-out com autoridade determinística e silêncio total + notificação local; PII mascarada e saída do shadow com aprovação explícita. **P-006 quitado** (o escritor `HandoffService` é o plano 02-02). Chime Web Audio adiado para a Fase 3 (conflito de ROADMAP 02-02 resolvido). Fase 1 permanece 18/23 requisitos; suíte 33 arquivos / 141 testes verdes.
-Próximo passo: **planejar a Fase 2** (`/gsd-plan-phase 2`) a partir de `02-CONTEXT.md` — planos 02-01 (LlmPort + FSM hintada), 02-02 (Handoff + silêncio, quita P-006), 02-03 (Shadow mode + relatório como gate de saída). Fechar antes do piloto: 01-03 (pareamento — P-004).
+Última sessão: 2026-10-14
+Parou em: Fase 2, plano **02-02** concluído (3/3 tasks) — `HandoffService` atômico (`dispararHandoff`: `handoff_events` + `mode_changes` + `engagement_mode='awaiting_human'` + `status_history` numa transação, com guarda `handoff_active` de idempotência e silêncio total), matcher determinístico pt-BR de opt-out como autoridade (`classifyOptout` FORTE/AMBIGUO/NAO, FORTE → `applyOptOut` + ledger irreversível), qualificação acumulativa auditável (`updateQualification`; verba+decisão → `aquecido`) e fiação no `inbound-handler` (matcher ANTES da Camada 1, `status_history` nas transições bot/admin, mídia via `dispararHandoff`). **P-006 quitado.** Suíte 41 arquivos / 206 testes verdes; `tsc` e biome limpos.
+Próximo passo: **executar o plano 02-03** (último da Fase 2) — CLI `shadow:list/approve/edit/discard` + kill switch (`mode`), pós-gate de conteúdo L4 (CONV-07) por corpus adversário, relatório shadow do banco (D-17) e promoção explícita shadow→ativo (D-18).
 Pendente (deferido — P-004): fechar o checkpoint de pareamento do 01-03 — `CHANNEL_PHONE_E164` precisa do número real (hoje `+5511999999999`) e o QR precisa parear (`CREDS_INVALID` em `01-03-DIAG.md` / `docs/pendencias.md`).
 Pós-reboot: revalidar com `npm run notify -- -Title "Teste R-013" -Message "Verificacao" -Urgent` e fechar a Task 6 do plano 01-01 (toast já exibido por humano em 2026-10-05, P-001).
-Arquivo de retomada: `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-05-SUMMARY.md`
+Arquivo de retomada: `.planning/phases/02-ia-handoff-e-shadow-mode/02-02-SUMMARY.md`
 
 ---
-*Atualizado: 2026-10-13*
+*Atualizado: 2026-10-14*

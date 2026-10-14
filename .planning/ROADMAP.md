@@ -89,7 +89,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-02-PLAN.md — Handoff e silêncio: `HandoffService` atômico (handoff_events + mode_changes + engagement_mode='awaiting_human' numa transação) + gatilhos R-012/R-056/R-065/R-038 + silêncio total (D-13), `NotifyPort` (som + pop-up), matcher determinístico de opt-out pt-BR (autoridade) + reforço por sinal da LLM, qualificação auditável (verba + decisão) com histórico de status corrigível (P-006 descarregado)
+- [x] 02-02-PLAN.md — Handoff e silêncio: `HandoffService` atômico (handoff_events + mode_changes + engagement_mode='awaiting_human' numa transação) + gatilhos R-012/R-056/R-065/R-038 + silêncio total (D-13), `NotifyPort` (som + pop-up), matcher determinístico de opt-out pt-BR (autoridade) + reforço por sinal da LLM, qualificação auditável (verba + decisão) com histórico de status corrigível (P-006 descarregado)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -147,7 +147,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Fundação, Canal e Gate de Envio | 4/5 | In Progress (01-03 deferido — P-004) |  |
-| 2. IA, Handoff e Shadow Mode | 1/3 | In Progress|  |
+| 2. IA, Handoff e Shadow Mode | 2/3 | In Progress|  |
 | 3. Cadência, Operação e Painel | 0/3 | Not started | - |
 | 4. Piloto, Calibração e Apuração | 0/2 | Not started | - |
 

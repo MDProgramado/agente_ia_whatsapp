@@ -39,13 +39,13 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 - [ ] **CONV-03**: Usa API externa de LLM; o sistema local controla fluxo, limites e handoff; minimiza/mascara dados sensíveis antes do envio (R-009)
 - [ ] **CONV-04**: Persona consultiva, educada e direta — foca em entender a dor antes de oferecer solução (R-010)
 - [ ] **CONV-05**: Condução dinâmica, sem script rígido, alternando ouvir/comentar/validar/contextualizar/perguntar (R-011)
-- [ ] **CONV-06**: Reconhece objeções (preço, tempo, fornecedor, "vou pensar") e tenta contornar com argumentos (R-041)
+- [x] **CONV-06**: Reconhece objeções (preço, tempo, fornecedor, "vou pensar") e tenta contornar com argumentos (R-041)
 - [ ] **CONV-07**: Gera argumentos de contorno de objeções autonomamente, dentro de limites rígidos (sem valores, prazos, descontos, proposta ou agendamento) (R-042)
 - [ ] **CONV-08**: IA age como o Admin humano, sem revelar automação espontaneamente (R-055)
-- [ ] **CONV-09**: Pergunta direta se é bot/robô/IA → handoff imediato, sem negar, admitir ou desviar (R-056)
-- [ ] **CONV-10**: Suspeita de automação → silêncio total até o Admin assumir; nenhuma mensagem de transição (R-057)
+- [x] **CONV-09**: Pergunta direta se é bot/robô/IA → handoff imediato, sem negar, admitir ou desviar (R-056)
+- [x] **CONV-10**: Suspeita de automação → silêncio total até o Admin assumir; nenhuma mensagem de transição (R-057)
 - [x] **CONV-11**: Envia apenas texto e links; jamais imagens, PDFs, áudios, vídeos ou documentos (R-037)
-- [ ] **CONV-12**: Mídia recebida (áudio, imagem, PDF, vídeo) é apenas registrada; notifica e aciona handoff; não finge entendimento (R-038)
+- [x] **CONV-12**: Mídia recebida (áudio, imagem, PDF, vídeo) é apenas registrada; notifica e aciona handoff; não finge entendimento (R-038)
 - [x] **CONV-13**: Humaniza o envio com delays aleatórios, simulação de "digitando…" e quebra de mensagens longas em varias mensagens curtas (R-067)
 - [x] **CONV-14**: Anti-requisitos (AR-001 a AR-012) impõem-se como invariantes de estado via um único gate de envio mecânico (`evaluatePolicy`), com 1 property test por AR; nenhum caminho de mensagem escapa do gate (derivado da pesquisa — mecânica transversal)
 
@@ -54,13 +54,13 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 - [ ] **FLUP-01**: Se o lead não responde, envia follow-up curto após tempo configurável (R-003)
 - [ ] **FLUP-02**: Cadência de follow-up 1h → 1d → 3d → 7d; cadência interrompida se responder, opt-out, handoff ou pausa manual (R-004)
 - [ ] **FLUP-03**: Máximo de 4 tentativas (1h, 1d, 3d, 7d); após 7 dias sem resposta, encerra e marca "sem resposta"; follow-up de 15 dias NÃO é executado (R-005)
-- [ ] **FLUP-04**: Handoff acionado em pedido de preço/proposta/orçamento OU intenção de agendar reunião/chamada; automação pausa e notifica (R-012)
-- [ ] **FLUP-05**: Notificação local (som + pop-up) em handoff, identificando lead, motivo e ação rápida (R-013)
+- [x] **FLUP-04**: Handoff acionado em pedido de preço/proposta/orçamento OU intenção de agendar reunião/chamada; automação pausa e notifica (R-012)
+- [x] **FLUP-05**: Notificação local (som + pop-up) em handoff, identificando lead, motivo e ação rápida (R-013)
 - [ ] **FLUP-06**: Após handoff quando o Admin assume, bot entra em modo copiloto: sugere respostas sem enviar nada (R-014)
-- [ ] **FLUP-07**: Bot nunca agenda sozinho; apenas avisa; sem link, horários ou confirmação (R-025)
+- [x] **FLUP-07**: Bot nunca agenda sozinho; apenas avisa; sem link, horários ou confirmação (R-025)
 - [ ] **FLUP-08**: Após o Admin registrar agendamento, o bot envia confirmação e lembrete antes da reunião, com opção de confirmar/remarcar/cancelar, respeitando janela e limite (R-026)
-- [ ] **FLUP-09**: Handoff também em irritação, ameaça de denúncia/bloqueio, pedido de opt-out e dúvida técnica complexa (R-065)
-- [ ] **FLUP-10**: Em irritação/ameaça: pausa automação, notifica, silêncio total, aguarda decisão; bot não se desculpa nem ameniza sozinho (R-066)
+- [x] **FLUP-09**: Handoff também em irritação, ameaça de denúncia/bloqueio, pedido de opt-out e dúvida técnica complexa (R-065)
+- [x] **FLUP-10**: Em irritação/ameaça: pausa automação, notifica, silêncio total, aguarda decisão; bot não se desculpa nem ameniza sozinho (R-066)
 
 ### CRM Local e Pipeline (CRM)
 
@@ -74,7 +74,7 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 
 ### Compliance, Segurança e LGPD (COMP)
 
-- [ ] **COMP-01**: Detecta opt-out automaticamente; registra base legal/finalidade/consentimento; oferece comando manual de opt-out e exclusão; aplica política de retenção (R-024)
+- [x] **COMP-01**: Detecta opt-out automaticamente; registra base legal/finalidade/consentimento; oferece comando manual de opt-out e exclusão; aplica política de retenção (R-024)
 - [x] **COMP-02**: Trata base de contato sem opt-in explícito (fontes públicas/terceiros) com risco declarado de MUITO ALTO (R-063)
 - [x] **COMP-03**: Base legal de legítimo interesse para contato B2B: registra origem, base legal e finalidade; opt-out imediato; exclusão sob solicitação (R-064)
 - [x] **COMP-04**: Sem criptografia adicional nesta fase; confiança no controle de acesso do PC (risco aceito e documentado) (R-033)
@@ -84,7 +84,7 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 
 - [x] **NFRQ-01**: Banco PostgreSQL local com script/migração de criação e atualização de schema; sem servidor externo (R-031)
 - [x] **NFRQ-02**: Backup manual para pasta local, versionado por data/hora, com restauração sem serviços externos (R-032)
-- [ ] **NFRQ-03**: Modo automático total após a 1ª mensagem manual; bot conduz sozinho e só chama nos handoffs; após handoff → modo copiloto (R-034)
+- [x] **NFRQ-03**: Modo automático total após a 1ª mensagem manual; bot conduz sozinho e só chama nos handoffs; após handoff → modo copiloto (R-034)
 - [x] **NFRQ-04**: Logs em arquivo + painel de erros + notificação local imediata em falhas críticas (WhatsApp desconectado, API de IA fora, PostgreSQL parado, suspeita de banimento) (R-045) — **parcela deferida para a Fase 2 (plano 02-02, P-006):** a transição `engagement_mode = awaiting_human` + escrita de `handoff_active` na mesma transação do evento de handoff (truth do must_have do 01-05). A mecânica (logs pino + `event_log` + notificação local + guarda AR-010 que LÊ o sinal) está entregue nesta fase.
 - [ ] **NFRQ-05**: Painel de controle: lista de leads + chat + sugestões da IA + histórico + botões de ação rápida (pausar bot, assumir, devolver ao bot, copiloto); exibe modo em tempo real; sugestões só enviadas com ação explícita (R-046)
 - [x] **NFRQ-06**: Roda em Windows: PostgreSQL local, sessão WhatsApp, painel e notificações nativas compatíveis (R-047)
@@ -178,37 +178,37 @@ Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/0
 | CONV-03 | Phase 2 | Pending |
 | CONV-04 | Phase 2 | Pending |
 | CONV-05 | Phase 2 | Pending |
-| CONV-06 | Phase 2 | Pending |
+| CONV-06 | Phase 2 | Complete |
 | CONV-07 | Phase 2 | Pending |
 | CONV-08 | Phase 2 | Pending |
-| CONV-09 | Phase 2 | Pending |
-| CONV-10 | Phase 2 | Pending |
+| CONV-09 | Phase 2 | Complete |
+| CONV-10 | Phase 2 | Complete |
 | CONV-11 | Phase 1 | Complete |
-| CONV-12 | Phase 2 | Pending |
+| CONV-12 | Phase 2 | Complete |
 | CONV-13 | Phase 1 | Complete |
 | CONV-14 | Phase 1 | Complete |
 | FLUP-01 | Phase 3 | Pending |
 | FLUP-02 | Phase 3 | Pending |
 | FLUP-03 | Phase 3 | Pending |
-| FLUP-04 | Phase 2 | Pending |
-| FLUP-05 | Phase 2 | Pending |
+| FLUP-04 | Phase 2 | Complete |
+| FLUP-05 | Phase 2 | Complete |
 | FLUP-06 | Phase 3 | Pending |
-| FLUP-07 | Phase 2 | Pending |
+| FLUP-07 | Phase 2 | Complete |
 | FLUP-08 | Phase 3 | Pending |
-| FLUP-09 | Phase 2 | Pending |
-| FLUP-10 | Phase 2 | Pending |
+| FLUP-09 | Phase 2 | Complete |
+| FLUP-10 | Phase 2 | Complete |
 | CRM-01 | Phase 3 | Pending |
 | CRM-02 | Phase 2 | Pending |
 | CRM-03 | Phase 3 | Pending |
 | INTR-01 | Phase 1 | Complete |
-| COMP-01 | Phase 2 | Pending |
+| COMP-01 | Phase 2 | Complete |
 | COMP-02 | Phase 1 | Complete |
 | COMP-03 | Phase 1 | Complete |
 | COMP-04 | Phase 1 | Complete |
 | COMP-05 | Phase 1 | Complete |
 | NFRQ-01 | Phase 1 | Complete |
 | NFRQ-02 | Phase 1 | Complete |
-| NFRQ-03 | Phase 2 | Pending |
+| NFRQ-03 | Phase 2 | Complete |
 | NFRQ-04 | Phase 1 | Complete (transição `awaiting_human` deferida — Fase 2, P-006) |
 | NFRQ-05 | Phase 3 | Pending |
 | NFRQ-06 | Phase 1 | Complete |
