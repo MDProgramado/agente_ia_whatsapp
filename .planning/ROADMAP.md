@@ -85,7 +85,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — LlmPort e FSM hintada + migração 0006: `ScriptedLlmAdapter` primeiro; sanduíche de 3 camadas (LLM extrai intent → código decide → LLM responde com a decisão), schema Zod com campos-canário, `resolveNextState()` com guardas locais vencendo a hint, mascaramento de PII em todo egresso, rascunho append-only em `messages(origin='ai_suggestion')` + `llm_runs` (CONV-01/CONV-02)
+- [x] 02-01-PLAN.md — LlmPort e FSM hintada + migração 0006: `ScriptedLlmAdapter` primeiro; sanduíche de 3 camadas (LLM extrai intent → código decide → LLM responde com a decisão), schema Zod com campos-canário, `resolveNextState()` com guardas locais vencendo a hint, mascaramento de PII em todo egresso, rascunho append-only em `messages(origin='ai_suggestion')` + `llm_runs` (CONV-01/CONV-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -147,7 +147,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Fundação, Canal e Gate de Envio | 4/5 | In Progress (01-03 deferido — P-004) |  |
-| 2. IA, Handoff e Shadow Mode | 0/3 | Not started | - |
+| 2. IA, Handoff e Shadow Mode | 1/3 | In Progress|  |
 | 3. Cadência, Operação e Painel | 0/3 | Not started | - |
 | 4. Piloto, Calibração e Apuração | 0/2 | Not started | - |
 
