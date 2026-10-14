@@ -19,7 +19,14 @@
 		"lint:verify": "node scripts/lint-verify-chains.mjs .planning/phases/01-funda-o-canal-e-gate-de-envio",
 		"db:generate": "drizzle-kit generate",
 		"backup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup.ps1",
-		"notify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/notify.ps1"
+		"notify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/notify.ps1",
+		"shadow:list": "tsx src/cli/shadow.ts list",
+		"shadow:approve": "tsx src/cli/shadow.ts approve",
+		"shadow:edit": "tsx src/cli/shadow.ts edit",
+		"shadow:discard": "tsx src/cli/shadow.ts discard",
+		"mode": "tsx src/cli/mode.ts",
+		"status:corrigir": "tsx src/cli/status.ts corrigir",
+		"handoff:ack": "tsx src/cli/handoff.ts ack"
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "4.0.79",
