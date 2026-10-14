@@ -388,8 +388,9 @@ describe("CONV-01 — 1ª mensagem manual do Admin move novo → aquecimento", (
 				state: "novo",
 			});
 			await processInboundFromMe(tx, makeSock(), {
-				chatId: env.CHANNEL_PHONE_E164,
+				chatId: `${fx.phone.replace(/^\+/, "")}@s.whatsapp.net`,
 				fromMe: true,
+				senderPhoneE164: env.CHANNEL_PHONE_E164,
 				body: "oi, aqui é o consultor",
 				kind: "text",
 				providerMsgId: "admin-1",

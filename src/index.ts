@@ -18,6 +18,7 @@ import { Client } from "pg";
 import { BarramentoEventos } from "./application/event-bus.js";
 import { processInboundFromMe } from "./application/inbound-handler.js";
 import { readCapabilities } from "./channel/baileys/capabilities.js";
+import { normalizeJid } from "./channel/baileys/jid-resolver.js";
 import {
 	abrirSocketDoCanal,
 	criarHandlersDoCanal,
@@ -268,8 +269,23 @@ const main = async (): Promise<void> => {
 
 	// Registro explícito dos handlers nomeados do contrato do checkpoint.
 	const { onBaileysConnectionUpdate, onBaileysMessage } = criarHandlersDoCanal({
+		// `sock.user` só existe após o registro, por isso um GETTER: o runtime o
+		// reavalia por mensagem para carimbar o emissor do `fromMe` (CR-01). Acesso
+		// a propriedade — nenhum import do pacote Baileys aqui (T-01-12).
+		canalSelfJid: () => sock.user?.id,
 		aoConectar: () => {
 			canalEstado = "open";
+			// O emissor do número dedicado precisa de E.164 para o Gate 0 (R-001).
+			// Id próprio em forma LID não tem número: o Guard 0 fica fail-closed. UM
+			// warn por abertura de conexão (nunca por mensagem) para o operador ver no
+			// pareamento real (P-004) em vez de a guarda falhar em silêncio.
+			const idProprio = sock.user?.id;
+			if (idProprio && normalizeJid(idProprio).e164 === null) {
+				log.warn(
+					{ event: "jid_proprio_sem_e164", step: "channel_session" },
+					"o id proprio do numero dedicado nao tem E.164 (forma LID): o Gate 0 do primeiro contato fica fail-closed ate o pareamento real",
+				);
+			}
 			void lerCapacidades();
 		},
 		aoDesconectar: (status) => {

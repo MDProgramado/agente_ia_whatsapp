@@ -466,8 +466,9 @@ describe("status_history cobre a transição do Admin (CONV-01/R-022)", () => {
 				firstContactByHuman: false,
 			});
 			await processInboundFromMe(tx, makeSock(), {
-				chatId: env.CHANNEL_PHONE_E164,
+				chatId: `${fx.phone.replace(/^\+/, "")}@s.whatsapp.net`,
 				fromMe: true,
+				senderPhoneE164: env.CHANNEL_PHONE_E164,
 				body: "oi, aqui e o consultor",
 				kind: "text",
 				providerMsgId: "admin-1",

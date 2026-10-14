@@ -10,6 +10,12 @@
  * extrair `key.id` aqui é o que torna a dedup possível. Mídia é DETECTADA, nunca
  * baixada (AR-009/R-038) — nenhuma função de download de mídia é importada em
  * lugar nenhum do projeto.
+ *
+ * Desde o 02-04 (CR-01) a normalização também CARIMBA o emissor E.164
+ * (`senderPhoneE164`): num evento `fromMe` o `remoteJid` é o JID do LEAD (o
+ * destinatário), nunca o emissor — o emissor é o próprio socket dedicado
+ * (`canalSelfJid`, derivado de `sock.user.id`). Sem esse carimbo, o Gate 0
+ * compara o número errado e nunca libera o outbound (R-001/CONV-01).
  */
 import {
 	type BaileysEventMap,
@@ -19,6 +25,7 @@ import {
 } from "@whiskeysockets/baileys";
 import type { EventoInbound } from "../../application/event-bus.js";
 import { childLogger } from "../../infra/logger.js";
+import { normalizeJid } from "./jid-resolver.js";
 import { type SessionState, socketConfigOverrides } from "./session.js";
 import { statusHttpDoErro } from "./signals.js";
 
@@ -78,8 +85,16 @@ const midiaDe = (
  * `kind: 'text'` sempre — quem separa texto de mídia é `isMedia`. Uma mensagem
  * de mídia com legenda ainda é mídia (AR-009), então o texto da legenda NÃO é
  * enviado como corpo.
+ *
+ * `canalSelfJid` é o JID do número dedicado (`sock.user.id`). Só ele é o emissor
+ * quando `fromMe === true`; quando `fromMe` é falso/null, o emissor é o par
+ * (`chatId`). O E.164 sai de `normalizeJid` — nunca chutado. `canalSelfJid`
+ * ausente ou em forma LID → `senderPhoneE164: undefined` (fail-closed, R-001).
  */
-export const criarEventoInbound = (m: WAMessage): EventoInbound | null => {
+export const criarEventoInbound = (
+	m: WAMessage,
+	canalSelfJid?: string,
+): EventoInbound | null => {
 	const chatId = m.key.remoteJid;
 	const conteudo = m.message;
 	if (!chatId || !conteudo) return null;
@@ -90,13 +105,22 @@ export const criarEventoInbound = (m: WAMessage): EventoInbound | null => {
 
 	if (midia === null && textoBruto === undefined) return null;
 
+	const fromMe = m.key.fromMe ?? undefined;
+	const senderPhoneE164 =
+		fromMe === true
+			? canalSelfJid
+				? normalizeJid(canalSelfJid).e164
+				: undefined
+			: normalizeJid(chatId).e164;
+
 	return {
-		fromMe: m.key.fromMe ?? undefined,
+		fromMe,
 		chatId,
 		body: midia === null ? (textoBruto ?? "") : "",
 		kind: "text",
 		providerMsgId: m.key.id ?? undefined,
 		timestamp: comoNumero(m.messageTimestamp),
+		senderPhoneE164,
 		isMedia: midia !== null,
 		mediaType: midia,
 	};
@@ -109,6 +133,12 @@ export interface DepsHandlersCanal {
 	readonly aoDesconectar: (status: number | null) => void;
 	/** Um `EventoInbound` por mensagem acionável. */
 	readonly aoEventoInbound: (evt: EventoInbound) => void;
+	/**
+	 * Getter do JID próprio (`() => sock.user?.id`): `sock.user` só existe após o
+	 * registro, então o valor precisa ser reavaliado por mensagem, não capturado
+	 * no boot. Ausente → sem carimbo de emissor em `fromMe` (fail-closed).
+	 */
+	readonly canalSelfJid?: () => string | undefined;
 }
 
 /**
@@ -130,7 +160,7 @@ export const criarHandlersDoCanal = (deps: DepsHandlersCanal) => {
 
 	const onBaileysMessage = (upsert: UpsertMensagens): void => {
 		for (const mensagem of upsert.messages) {
-			const evt = criarEventoInbound(mensagem);
+			const evt = criarEventoInbound(mensagem, deps.canalSelfJid?.());
 			if (evt) deps.aoEventoInbound(evt);
 		}
 	};

@@ -16,8 +16,12 @@
  *      `providerMsgId ?? (chatId + timestamp + body)` (Armadilha 7: reroll de retry
  *      do provider duplicaria a linha e inflaria a contagem).
  *  (d) **Aqui, e só aqui**, o `first_contact_by_human` vira `true` — e só quando
- *      `fromMe === true` E o `chatId` é o número dedicado. É o guard 0 do gate
- *      (R-001): o bot só admite a conversa depois que o humano mandou a primeira.
+ *      `fromMe === true` E o EMISSOR E.164 (`senderPhoneE164`, carimbado pelo
+ *      runtime a partir de `sock.user.id`) é o número dedicado. É o guard 0 do
+ *      gate (R-001): o bot só admite a conversa depois que o humano mandou a
+ *      primeira. Num `fromMe` o `chatId` é o JID do LEAD e NUNCA entra na
+ *      comparação — comparar `chatId` com E.164 foi o bug CR-01, que mantinha o
+ *      flag sempre falso (CONV-01 quebrado).
  *  (e) Upsert de `conversations` e avanço da watermark `last_processed_at`.
  */
 import { createHash } from "node:crypto";
@@ -102,15 +106,20 @@ interface ConversaLida {
  * Função pura do gate de `fromMe` (a mesma forma que o property test exercita).
  * Estrito maior: os `id` são estáticos e não vêm de config; só o número do canal
  * entra por parâmetro, e a igualdade é exata.
+ *
+ * O sinal é o EMISSOR da mensagem, não o `chatId`: num evento `fromMe` o `chatId`
+ * é o JID do LEAD (destinatário), então comparar `chatId` com o E.164 do canal
+ * nunca é verdadeiro (o bug CR-01). O emissor E.164 é carimbado pelo runtime
+ * (`senderPhoneE164`). Sem emissor derivável → fail-closed (R-001).
  */
 export const deveMarcarPrimeiroContatoHumano = (opts: {
 	readonly fromMe: boolean | null | undefined;
-	readonly chatId: string;
+	readonly senderPhoneE164: string | null | undefined;
 	readonly channelPhoneE164: string;
 }): boolean => {
 	if (opts.fromMe !== true) return false;
-	if (!opts.chatId || !opts.channelPhoneE164) return false;
-	return opts.chatId === opts.channelPhoneE164;
+	if (!opts.senderPhoneE164 || !opts.channelPhoneE164) return false;
+	return opts.senderPhoneE164 === opts.channelPhoneE164;
 };
 
 const acharConversa = async (
@@ -608,11 +617,13 @@ export const processInboundFromMe = async (
 	if (
 		deveMarcarPrimeiroContatoHumano({
 			fromMe: evt.fromMe,
-			chatId: evt.chatId,
+			senderPhoneE164: evt.senderPhoneE164,
 			channelPhoneE164: env.CHANNEL_PHONE_E164,
 		})
 	) {
 		// Só ATIVA (`false`→`true`); o trigger do banco barra qualquer reversão (R-024).
+		// Fora da transação abaixo de propósito: é idempotente por construção
+		// (`/* ... and first_contact_by_human = false */`) e o trigger R-024 a protege.
 		await db.execute(sql`
 			update leads set first_contact_by_human = true
 			where phone_number = ${e164} and first_contact_by_human = false
@@ -623,18 +634,23 @@ export const processInboundFromMe = async (
 			adminPrimeiraMensagem: true,
 		});
 		if (estadoAdmin !== conversa.state) {
-			await db.execute(sql`
-				update conversations set state = ${estadoAdmin}
-				where id = ${conversa.id}
-			`);
-			// CONV-01 auditável: a transição tem autor (`admin`) e motivo (R-022).
-			await recordStatusChange(db, {
-				conversationId: conversa.id,
-				fromState: conversa.state,
-				toState: estadoAdmin,
-				changedBy: "admin",
-				reason: "primeira mensagem manual do Admin (CONV-01)",
-				changedAt: agora,
+			// WR-03: o UPDATE do estado e a auditoria (R-022) são uma coisa só —
+			// se o segundo write falhar, o primeiro reverte (savepoint).
+			await db.transaction(async (txBruto) => {
+				const tx = txBruto as unknown as Db;
+				await tx.execute(sql`
+					update conversations set state = ${estadoAdmin}
+					where id = ${conversa.id}
+				`);
+				// CONV-01 auditável: a transição tem autor (`admin`) e motivo (R-022).
+				await recordStatusChange(tx, {
+					conversationId: conversa.id,
+					fromState: conversa.state,
+					toState: estadoAdmin,
+					changedBy: "admin",
+					reason: "primeira mensagem manual do Admin (CONV-01)",
+					changedAt: agora,
+				});
 			});
 		}
 	}
