@@ -153,7 +153,7 @@ Explicitamente excluídos. Documentado para prevenir escopo creep.
 
 ## Traceability
 
-Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/01-05; 01-03 deferido como P-004).
+Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/01-05; 01-03 deferido — `P-004` (corrida `requestPairingCode` x WS open) corrigido em `2d64728`. Bloqueio atual: `P-007` (socket cai após `channel_ready`; rc14 vs servidor WhatsApp). Ambos deferidos; não bloqueiam Fase 3.)
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -224,7 +224,7 @@ Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/0
 - Unmapped: 0 ✓
 - Nota: a contagem "67" (R-001…R-067) inclui 7 IDs v2/fora de escopo (R-029, R-030, R-035, R-036, R-039, R-040, R-048); todos os 60 requisitos v1 em REQ-IDs estão mapeados, sem órfãos nem duplicatas.
 - **Fase 1 — fechamento parcial (pós-correções 2026-10-13, `PASS_WITH_NOTES`):** 18 de 23 requisitos da fase Complete.
-  - **5 Pending por deferimento do 01-03 (P-004):** LEAD-01, LEAD-02, LEAD-03, LEAD-04, WHS-05 — escopo do plano 01-03, cuja automação está commitada; falta o checkpoint humano do pareamento QR antes do piloto.
+  - **5 Pending por deferimento do 01-03:** LEAD-01, LEAD-02, LEAD-03, LEAD-04, WHS-05 — escopo do plano 01-03, cuja automação está commitada; falta o checkpoint humano do pareamento QR antes do piloto. `P-004` (corrida `requestPairingCode` x WS open) corrigido em `2d64728`. Bloqueio atual: `P-007` (socket cai após `channel_ready`; rc14 vs servidor WhatsApp). Ambos deferidos; não bloqueiam Fase 3.
   - **✅ EQUP-01 resolvido em 2026-10-13 (P-005):** linha do Admin seedada pela migration `0005_seed_admin.sql` (idempotente) + prova em `tests/ops/seed-admin.test.ts` (`app_users >= 1` após a migration).
   - **→ Parcela deferida para a Fase 2 (P-006):** transição `engagement_mode = awaiting_human` + escrita de `handoff_active` (truth do must_have do 01-05), pertencente ao plano 02-02 — a mecânica de NFRQ-04 (logs + notificação + guarda AR-010 que lê o sinal) está entregue.
 - **Fase 2 — plano 02-03 concluído (2026-10-14):** `CONV-07` (pós-gate de conteúdo L4) e `CRM-02` (correção manual de status + transições auditáveis) marcados **Complete**. A implementação da Fase 2 está completa (3/3 planos). **Gate de saída = `manter-shadow`** (D-18): `npm run shadow:report` = FAIL (0 evidência) ⇒ promoção shadow→ativo **NÃO** aprovada; `ACTIVA` adiada até o relatório atingir PASS. A Fase 2 permanece em shadow por decisão explícita do Admin.
