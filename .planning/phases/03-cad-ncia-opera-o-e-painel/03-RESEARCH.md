@@ -517,20 +517,24 @@ await app.listen({ host: "127.0.0.1", port: env.PANEL_PORT });   // nunca 0.0.0.
 
 ## Open Questions
 
-1. **O `dispatcher` já devolve um resultado estruturado que o scheduler possa consumir?**
+1. **O `dispatcher` já devolve um resultado estruturado que o scheduler possa consumir?** **(RESOLVIDO no plano 03-02)**
    - What we know: `outbox-worker.ts` tem `DrainResult`; `dispatcher.ts` é o choke-point.
    - What's unclear: o contrato exato (`{status, reason, messageId}`) — não foi lido linha a linha nesta sessão.
    - Recommendation: o plano 03-01 abre lendo `src/application/dispatcher.ts` e `outbox-worker.ts` integralmente antes de escrever o scheduler.
+   - **Resolução (03-02):** a Task 1 lê `dispatcher.ts`/`outbox-worker.ts` integralmente antes de codar; `outbox-worker` consome `resultado.action` (não `.status`) — o scheduler e o dreno não importam `dispatch`, apenas `enqueue`/`abandon`/`markDeferred`.
 
-2. **Sintaxe exata do Tailwind v4 + Vite (`@import "tailwindcss"`, plugin `@tailwindcss/vite`)** — A1.
+2. **Sintaxe exata do Tailwind v4 + Vite (`@import "tailwindcss"`, plugin `@tailwindcss/vite`)** — A1. **(RESOLVIDO no plano 03-04)**
    - Recommendation: consultar a doc oficial do Tailwind v4 ao implementar 03-02; não copiar config do v3.
+   - **Resolução (03-04):** a Task 1 fixa a configuração (`@import "tailwindcss";` + `@tailwindcss/vite` plugin em `vite.config.ts`, sem `tailwind.config.js`/`content`) e o executor confirma na doc oficial ao implementar (aposta A1).
 
-3. **Como o scheduler cancela jobs já enfileirados quando o lead responde?**
+3. **Como o scheduler cancela jobs já enfileirados quando o lead responde?** **(RESOLVIDO no plano 03-02)**
    - What we know: o gate reavalia por job, mas não conhece "cadência interrompida"; `inbound-handler` grava `last_inbound_at`.
    - Recommendation: decidir no plano entre (a) um `gate reason` novo derivado de `last_inbound_at` vs. (b) cancelamento transacional dos jobs pendentes no registro do inbound. (Pitfall 3.)
+   - **Resolução (03-02):** opção (b) — a Task 2 estende `inbound-handler.ts` para, na MESMA transação do registro do inbound de texto, marcar `scheduled_tasks` pendentes como `abandoned` (+`cancelled_reason`) e `abandon` dos jobs; o tick também reconcilia o interrompido. Não depende de o gate "conhecer" a interrupção.
 
-4. **`follow_up_index` em `scheduled_tasks` vs. derivação por `task_type`** — a coluna de D-05 não existe em `scheduled_tasks`.
+4. **`follow_up_index` em `scheduled_tasks` vs. derivação por `task_type`** — a coluna de D-05 não existe em `scheduled_tasks`. **(RESOLVIDO no plano 03-01)**
    - Recommendation: adicionar `follow_up_index` na migração `0007` (mais simples e casa com o índice único parcial pedido).
+   - **Resolução (03-01):** a Task 1 adiciona `follow_up_index smallint NOT NULL DEFAULT 0` na migração `0007_scheduler_cadence.sql` + índice único parcial `(conversation_id, follow_up_index) WHERE status='pending'`.
 
 ---
 
