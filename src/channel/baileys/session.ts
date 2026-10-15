@@ -10,7 +10,9 @@
  *    vazia em pasta que já tinha credenciais = novo pedido de pareamento, e o
  *    WhatsApp conta isso como um dispositivo a mais (T-01-02). O `catch` abaixo
  *    CONVERTE o erro de leitura em `AuthCorruptedError` e o repropaga — converter
- *    não é engolir; seguir com `state` vazio seria.
+ *    não é engolir; seguir com `state` vazio seria. **Ressalva P-004:** creds com
+ *    `pairingCode` e `registered=false` são um pareamento em andamento/abandonado
+ *    — re-pareável, não corrupção — e NÃO abortam (ver `avaliarGuardDeAuth`).
  *
  * 2. **`BufferJSON.replacer` e `BufferJSON.reviver` são conferidos ANTES de
  *    qualquer `useMultiFileAuthState`.** No rc14 o próprio `useMultiFileAuthState`
@@ -72,6 +74,67 @@ export class AuthCorruptedError extends Error {
 	}
 }
 
+/** Veredicto de `avaliarGuardDeAuth`: o que fazer diante do estado em disco. */
+export type VeredictoAuth =
+	| { readonly acao: "sessao_registrada" }
+	| { readonly acao: "pareamento_pendente"; readonly motivo: string }
+	| { readonly acao: "corrompido"; readonly motivo: string };
+
+/**
+ * Classifica o estado de auth em disco — o guard que separa três estados que o
+ * plano original tratava como um só (P-004, achado do 01-03-DIAG).
+ *
+ * O guard antigo abortava com `CREDS_INVALID` sempre que havia `.json` em disco
+ * e `registered !== true`. Mas `requestPairingCode` grava `creds.json` com
+ * `registered=false` e um `pairingCode` **durante** o pareamento: abandonar a
+ * tentativa (Ctrl+C) deixava esse resíduo e o boot seguinte abortava antes de
+ * qualquer nova tentativa — um pareamento abandonado envenenava todo retry.
+ *
+ * - `registered === true` → sessão válida, nada a fazer.
+ * - pasta nova/vazia → primeiro pareamento (decisão do Admin no celular).
+ * - `.json` + `registered=false` + `pairingCode` → pareamento em andamento ou
+ *   abandonado: **re-pareável**, não é corrupção.
+ * - `.json` + `registered=false` **sem** `pairingCode` → auth corrompido, pela
+ *   metade ou de outra conta: abortar (degradar para sessão vazia é o vetor de ban).
+ */
+export const avaliarGuardDeAuth = (entrada: {
+	readonly pastaExistiaAntes: boolean;
+	readonly arquivosJson: number;
+	readonly registered: boolean;
+	readonly pairingCode: string | undefined;
+}): VeredictoAuth => {
+	const { pastaExistiaAntes, arquivosJson, registered, pairingCode } = entrada;
+
+	if (registered) {
+		return { acao: "sessao_registrada" };
+	}
+
+	// Pasta nova ou sem nenhum json: não há credencial para considerar corrompida.
+	if (!pastaExistiaAntes || arquivosJson === 0) {
+		return {
+			acao: "pareamento_pendente",
+			motivo: "sem credenciais em disco: primeiro pareamento",
+		};
+	}
+
+	// Json em disco, sem registro, MAS com `pairingCode`: resíduo de um
+	// `requestPairingCode` abandonado. Re-pareável — não corrompe nem envenena.
+	if (typeof pairingCode === "string" && pairingCode.length > 0) {
+		return {
+			acao: "pareamento_pendente",
+			motivo:
+				"creds.json com pairingCode e registered=false: pareamento em andamento/abandonado",
+		};
+	}
+
+	return {
+		acao: "corrompido",
+		motivo:
+			`${arquivosJson} arquivo(s) json em ${PASTA_AUTH}, mas as credenciais ` +
+			"carregaram sem registro (registered !== true) e sem pairingCode",
+	};
+};
+
 /**
  * Falha alto se o par de serializadores estiver ausente. Chamado antes de
  * qualquer `useMultiFileAuthState`: é mais barato abortar no boot do que
@@ -127,29 +190,46 @@ export const createSession = async (): Promise<SessionState> => {
 	}
 
 	// (d) O ponto mais importante do arquivo: pasta com JSONs em disco e state que
-	//     não veio como registrado = auth corrompido, pela metade, ou de outra
-	//     conta. Abortar. Degradar para sessão vazia aqui é o vetor de ban.
-	const sessaoRegistrada = carregado.state.creds.registered === true;
-	if (pastaExistiaAntes && jsonsAntes.length > 0 && !sessaoRegistrada) {
+	//     não veio como registrado pode ser corrupção (abortar) OU o resíduo de um
+	//     pareamento em andamento/abandonado (re-pareável — P-004). A classificação
+	//     distingue os dois; degradar para sessão vazia em corrupção real é o vetor
+	//     de ban, e abortar em pareamento abandonado é o que travava todo retry.
+	const veredicto = avaliarGuardDeAuth({
+		pastaExistiaAntes,
+		arquivosJson: jsonsAntes.length,
+		registered: carregado.state.creds.registered === true,
+		pairingCode: carregado.state.creds.pairingCode,
+	});
+	if (veredicto.acao === "corrompido") {
 		throw new AuthCorruptedError(
-			`${PASTA_AUTH} tem ${jsonsAntes.length} arquivo(s) json, mas as credenciais ` +
-				"carregaram sem registro (registered !== true) — restaure de um backup de auth " +
-				"e nao pare por cima",
+			`${veredicto.motivo} — restaure de um backup de auth e nao pare por cima`,
 		);
 	}
 
-	// (e) `restoreRequired` cobre o único caminho restante: pasta nova ou vazia =
-	//     pareamento necessário, decisão do Admin no celular.
-	const restoreRequired = !sessaoRegistrada;
+	// (e) `restoreRequired` cobre os dois caminhos re-pareáveis: pasta nova/vazia
+	//     (primeiro pareamento) e creds com `pairingCode` sem registro (tentativa
+	//     abandonada). Decisão do Admin no celular, nunca automática.
+	const restoreRequired = veredicto.acao === "pareamento_pendente";
 	log.info(
 		{
 			step: "session",
 			pasta_existia: pastaExistiaAntes,
 			arquivos_json: jsonsAntes.length,
 			restore_required: restoreRequired,
+			veredicto: veredicto.acao,
 		},
 		"sessao do Baileys carregada",
 	);
+	if (veredicto.acao === "pareamento_pendente" && jsonsAntes.length > 0) {
+		log.warn(
+			{
+				step: "session",
+				event: "pareamento_abandonado",
+				motivo: veredicto.motivo,
+			},
+			"creds de pareamento em andamento no disco: re-pareavel, nao e corrupcao",
+		);
+	}
 
 	return {
 		authState: carregado.state,

@@ -146,10 +146,13 @@ boot aborta com `CREDS_INVALID`.
 (`lib/Utils/generics.js`) e **não é usado**, então o socket pode anunciar uma revisão desatualizada
 que o servidor recusa em silêncio no `link_code_companion_reg`.
 
-**Bug nosso confirmado (relacionado):** `requestPairingCode` persiste `creds.json` com
-`registered=false`; no próximo boot `src/channel/baileys/session.ts` vê JSON em disco +
-`registered !== true` e lança `CREDS_INVALID`. Um pareamento abandonado envenena o boot seguinte. A
-guarda precisa distinguir "creds corrompido" de "pareamento em andamento".
+**Bug nosso confirmado (relacionado) — ✅ CORRIGIDO:** `requestPairingCode` persiste `creds.json`
+com `registered=false`; o boot seguinte via JSON em disco + `registered !== true` e lançava
+`CREDS_INVALID`, de modo que um pareamento abandonado (Ctrl+C) envenenava todo retry. A guarda
+agora distingue "creds corrompido" de "pareamento em andamento": a função pura
+`avaliarGuardDeAuth` (`src/channel/baileys/session.ts`) trata `.json` + `registered=false` +
+`pairingCode` como **re-pareável** (não aborta) e só aborta quando não há `pairingCode`. Coberto por
+`tests/channel/session-auth-guard.test.ts`.
 
 **Aplicado como mitigação (commit T3):** `BAILEYS_LOG_LEVEL` (default `warn`) controla o logger do
 socket; `BAILEYS_LOG_LEVEL=debug` no `.env` torna a próxima tentativa auditável no `app.log` em vez
