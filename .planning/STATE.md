@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
+current_phase: 3
 status: completed
-last_updated: "2026-10-14T18:35:00.000Z"
+last_updated: "2026-10-15T17:38:56.435Z"
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 1
   total_plans: 9
-  completed_plans: 9
-  percent: 50
+  completed_plans: 8
+  percent: 25
 ---
 
 # Estado do Projeto
@@ -19,15 +20,16 @@ progress:
 Ver: `.planning/PROJECT.md` (atualizado 2026-09-28)
 
 **Valor central:** Quando o bot assume uma conversa, conduz com naturalidade suficiente para gerar reuniões agendadas sem nunca cruzar uma fronteira proibida — e para no instante exato em que o humano precisa assumir.
-**Foco atual:** Phase 2 (IA, Handoff e Shadow Mode) — implementação completa (4/4), lacunas CR-01/CR-02 fechadas; Fase 3 a seguir
+**Foco atual:** Phase 3 (Cadência, Operação e Painel) — contexto capturado (`03-CONTEXT.md`, 2026-10-15); próximo passo = `plan-phase 3`
 
 ## Posição Atual
 
-Fase: 2 de 4 (IA, Handoff e Shadow Mode) — **4 planos implementados (02-01..02-04); lacunas CR-01/CR-02 fechadas**; Fase 1 com 01-03 deferido (P-004)
-Plano: 4 de 4 na fase atual (02-01, 02-02, 02-03 e 02-04 concluídos; **Fase 2 com implementação completa e lacunas do gate de saída fechadas**)
-Status: Phase 02 plan 04 complete (fechamento de lacunas CR-01 + CR-02) — gate de saída segue `manter-shadow` (promoção NÃO aprovada)
+Current Phase: 3
+Fase: 3 de 4 (Cadência, Operação e Painel) — **contexto capturado em `03-CONTEXT.md` (2026-10-15); 3 planos a planejar**; Fase 2 com implementação completa (4/4, gate `manter-shadow`); Fase 1 com 01-03 deferido (P-004 ✅ corrigido em `2d64728`; bloqueio atual **P-007** — ambos deferidos, não bloqueiam a Fase 3)
+Plano: 0 de 3 na fase atual (nenhum plano ainda planejado; `03-CONTEXT.md` é o artefato de retomada)
+Status: Phase 03 context captured (`03-CONTEXT.md`, 2026-10-15) — aguardando `plan-phase 3`; gate de saída da Fase 2 segue `manter-shadow` (promoção NÃO aprovada, D-18)
 Última atividade: 2026-10-14 — Wave 4 (fechamento de lacunas): plano 02-04 concluído com 3/3 tasks (TDD). Entregues: **CR-01** — Guard 0 (`deveMarcarPrimeiroContatoHumano`) passa a comparar o **emissor** E.164 (`EventoInbound.senderPhoneE164`, carimbado pelo runtime Baileys a partir de `sock.user.id` via `normalizeJid`) com `env.CHANNEL_PHONE_E164`, não o `chatId` (que num `fromMe` é o JID do lead) — a 1ª mensagem manual do Admin volta a setar `first_contact_by_human` e a mover `novo → aquecimento`; **CR-02** — `duvida_complexa` entra em `INTENCOES_HANDOFF` (R-065/FLUP-09) com e2e atômico + silêncio total; **WR-03** — passo (d) do inbound dobrado em transação única; warn único `jid_proprio_sem_e164` no boot (pareamento LID). Suíte **51 arquivos / 274 testes verdes**; `tsc` exit 0 e biome exit 0 (0 erros). Commits: `757f728`/`aacaa69` (T1), `0a51cc5`/`2e3c56d` (T2), `1b40695` (format).
-Última atividade anterior: 2026-10-14 — Wave 3: plano 02-03 (Shadow review e gate de saída) concluído com 3/3 tasks. Entregues: CLI de revisão em shadow (`shadow:list/approve/edit/discard`; decisões append-only em `review_events`, nunca `UPDATE messages`), kill switch global de 1 comando (`mode pause/resume` → `settings.operational_mode` + trilha append-only em `event_log` com `event_type='operational_mode_changed'`), correção de status pelo Admin (`status:corrigir`), confirmação humana de handoff (`handoff:ack` idempotente + auditoria, D-15), pós-gate de conteúdo L4 (`src/domain/llm/post-gate.ts`; CONV-07) validado por corpus adversário (falso-negativo = 0), relatório de shadow gerado do banco (`npm run shadow:report`, gate D-17) e harness de bake-off (`npm run bake-off`, D-10) com veredito JSON commitado. Suíte **49 arquivos / 268 testes verdes**; `tsc` e biome limpos. **Gate de saída: `npm run shadow:report` = FAIL (0 evidência) → Admin decidiu `manter-shadow`, promoção shadow→ativo NÃO aprovada (D-18).** 01-03 segue deferido (P-004 `CREDS_INVALID`).
+Última atividade anterior: 2026-10-14 — Wave 3: plano 02-03 (Shadow review e gate de saída) concluído com 3/3 tasks. Entregues: CLI de revisão em shadow (`shadow:list/approve/edit/discard`; decisões append-only em `review_events`, nunca `UPDATE messages`), kill switch global de 1 comando (`mode pause/resume` → `settings.operational_mode` + trilha append-only em `event_log` com `event_type='operational_mode_changed'`), correção de status pelo Admin (`status:corrigir`), confirmação humana de handoff (`handoff:ack` idempotente + auditoria, D-15), pós-gate de conteúdo L4 (`src/domain/llm/post-gate.ts`; CONV-07) validado por corpus adversário (falso-negativo = 0), relatório de shadow gerado do banco (`npm run shadow:report`, gate D-17) e harness de bake-off (`npm run bake-off`, D-10) com veredito JSON commitado. Suíte **49 arquivos / 268 testes verdes**; `tsc` e biome limpos. **Gate de saída: `npm run shadow:report` = FAIL (0 evidência) → Admin decidiu `manter-shadow`, promoção shadow→ativo NÃO aprovada (D-18).** 01-03 segue deferido (P-004 `CREDS_INVALID` — ✅ corrigido em `2d64728` em 2026-10-15; bloqueio atual **P-007**).
 
 Verificação de fase (2026-10-13, gsd-verifier): **PASS_WITH_NOTES** / `gaps_found` — 3/5 Success Criteria ✓ (SC2, SC3, SC4); SC1 deferido (01-03); SC5 parcial à época (encarregado) — **nomeado em 2026-10-13** (`docs/lgpd/encarregado-dpo.md`). Relatório: `.planning/phases/01-funda-o-canal-e-gate-de-envio/VERIFICATION.md`.
 
@@ -38,7 +40,7 @@ Verificação de fase 2 (2026-10-14, `362cedc`): **gaps_found** — 2 achados Cr
 - ✅ **Toast R-013 exibido de verdade (2026-10-05):** após o registro manual do AUMID `WhatsAppProspect.Automacao` em `HKCU\SOFTWARE\Classes\AppUserModelId`, o `npm run notify -- -Title "Teste R-013" -Message "Verificacao" -Urgent` exibiu o toast "WhatsApp Prospecção" — atestado por humano. Causa raiz confirmada: ausência do registro do AUMID (o `CreateToastNotifier($Aumid)` emite para um AUMID que o Windows desconhece e descarta em silêncio). Fecha a Task 6 do plano 01-01 (P-001, `docs/pendencias.md`).
 - ✅ **Restauração de backup validada (2026-10-13):** `backup.ps1 -Verify` terminou com exit 0 — `pg_restore` numa base temporária com as 4 contagens conferidas contra a origem: leads 2=2, conversations 0=0, messages 0=0, daily_counters 0=0 (NFRQ-02, R-032). Um `pg_dump` que ninguém restaurou é uma hipótese; este foi restaurado.
 
-Progresso: [█████████░] 9 planos executados — **Fase 2 completa (4/4)**; Fase 1 com 4 de 5 efetivos (01-03 deferido — P-004 `CREDS_INVALID`); Fases 3-4 não iniciadas.
+Progresso: [████████░░] 8 de 9 planos com SUMMARY (25%) — **Fase 2 completa (4/4)**; Fase 1 com 4 de 5 efetivos (01-03 deferido); **Fase 3 registrada e em contexto (0/3)**; Fase 4 não iniciada.
 
 ## Métricas de Desempenho
 
@@ -105,7 +107,7 @@ Decisões completas em PROJECT.md (tabela Key Decisions). Recentes que afetam o 
 
 ### Decisões dos Planos 01-03 e 01-04 (2026-10-09)
 
-- **Plano 01-03 (canal e ingestão) — automação commitada, checkpoint de pareamento aberto.** `session.ts` (`CREDS_INVALID`), `capabilities.ts` (`fetchNewChatMessageCap`/`fetchAccountReachoutTimelock`), `jid-resolver.ts` (LID↔PN), `signals.ts` (463 sem retry), `adapter.ts` (sendText-only), `inbound-handler` (`first_contact_by_human` só por `fromMe`) e `lead-importer` entregues. O pareamento QR real **não** foi concluído: **P-004 `CREDS_INVALID`** (ver `01-03-DIAG.md` e `docs/pendencias.md`).
+- **Plano 01-03 (canal e ingestão) — automação commitada, checkpoint de pareamento aberto.** `session.ts` (`CREDS_INVALID`), `capabilities.ts` (`fetchNewChatMessageCap`/`fetchAccountReachoutTimelock`), `jid-resolver.ts` (LID↔PN), `signals.ts` (463 sem retry), `adapter.ts` (sendText-only), `inbound-handler` (`first_contact_by_human` só por `fromMe`) e `lead-importer` entregues. O pareamento QR real **não** foi concluído: **P-004 `CREDS_INVALID`** (✅ corrigido em `2d64728`, 2026-10-15; bloqueio atual **P-007** — ambos deferidos) (ver `01-03-DIAG.md` e `docs/pendencias.md`).
 - **Plano 01-04 — os 12 anti-requisitos fechados por teste.** 5 guardas restantes (AR-002, AR-005, AR-009, AR-010, AR-012) + `lead-number-invalid` (R-019/LEAD-03); `evaluatePolicy` com **15** invariantes em ordem fixa e `AR_MAP` de 18 entradas.
 - **Ordem do gate é contrato executável:** `GUARD_SLOTS` (execução) e `GUARD_ORDER` (contrato do plano) são comparados por teste; par a par prova-se que o menor índice vence. Um motivo só existe no código se existir na ordem.
 - **Choke-point por varredura de fonte, não por guard de runtime.** "Todo envio passa pelo dispatcher" é uma afirmação sobre *ausência de segundo caminho*; o teste varre `src/**/*.ts` por **chamada** `\.sendText\s*\(` e exige exatamente `src/application/dispatcher.ts`. O AC literal (proibir a *declaração* de `sendText(`) é insatisfatível — a porta declara o método.
@@ -187,7 +189,7 @@ Nenhum ainda.
 - ✅ **R-013 (notificação local) — RESOLVIDO em 2026-10-05 (verificação humana).** A exibição do toast estava ligada ao registro do **AUMID**, não ao `WpnUserService`: com o AUMID `WhatsAppProspect.Automacao` registrado em `HKCU\SOFTWARE\Classes\AppUserModelId`, o `npm run notify` exibiu o toast "WhatsApp Prospecção" de verdade. Histórico: em 2026-09-30 a gravação passava (`Show()` sem erro, linha em `wpndatabase.db`, `toast_sent`) mas a entrega nunca ocorria (`LastNotificationAddedTime` não atualizado); a hipótese era serviço do SO (`WpnUserService` template por usuário), e a causa raiz real era o AUMID desconhecido — o Windows descarta em silêncio um toast emitido para AUMID não registrado. O `notify.ps1` sempre esteve correto. Detalhes em P-001/P-002 (`docs/pendencias.md`). O **som** segue confirmado como canal primário (`Hand.Play()` OK) com o toast como complemento.
 - ✅ **`CHANNEL_PHONE_E164` no `.env` já é o número dedicado real `+5571989211292`** (não é mais o placeholder `+5511999999999`). Entra no canal no pareamento QR (Task 3 do plano 01-03/retomada).
 - ⚠️ **`fetchNewChatMessageCap()` / `fetchAccountReachoutTimelock()`** — confirmadas nos typings do `@whiskeysockets/baileys@7.0.0-rc14` durante o plano 01-03 (ADR-001); ver `capabilities.ts`.
-- ⚠️ **P-004 — pareamento do 01-03 não concluído.** A automação do canal está commitada, mas o número dedicado ainda não pareou. Diagnóstico em `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-03-DIAG.md`. **Retomada (T1–T3 + guard):** protocolo ainda anuncia a revisão hardcoded `[2,3000,1043857760]` (`fetchLatestBaileysVersion()` disponível e não usado); `companion_platform_display` é enviado e já anuncia `"Chrome (Windows)"` (T2); `companion_reg_refresh` é ignorado em silêncio pelo rc14 (T3). **Guard de auth corrigido:** `avaliarGuardDeAuth` distingue pareamento abandonado (re-pareável) de corrupção real — um `Ctrl+C` não envenena mais o boot (`tests/channel/session-auth-guard.test.ts`). Falta a tentativa física de pareamento com `BAILEYS_LOG_LEVEL=debug` — T2/T3/guard ainda **não** validados contra o servidor. Não bloqueia 01-04/01-05.
+- 🟡 **P-004 ✅ CORRIGIDO (2d64728) / P-007 ⚠️ aberto — pareamento do 01-03 não concluído.** A automação do canal está commitada, a corrida `requestPairingCode` × abertura do WS foi fechada (o boot chega a `connected to WA` → `pairing_code` → `channel_ready`) e o número dedicado ainda não pareou porque o socket cai logo depois (P-007, `7.0.0-rc14` × servidor atual). **Ambos deferidos; não bloqueiam a Fase 3.** Diagnóstico em `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-03-DIAG.md`. **Retomada (T1–T3 + guard):** protocolo ainda anuncia a revisão hardcoded `[2,3000,1043857760]` (`fetchLatestBaileysVersion()` disponível e não usado); `companion_platform_display` é enviado e já anuncia `"Chrome (Windows)"` (T2); `companion_reg_refresh` é ignorado em silêncio pelo rc14 (T3). **Guard de auth corrigido:** `avaliarGuardDeAuth` distingue pareamento abandonado (re-pareável) de corrupção real — um `Ctrl+C` não envenena mais o boot (`tests/channel/session-auth-guard.test.ts`). Falta a tentativa física de pareamento com `BAILEYS_LOG_LEVEL=debug` — T2/T3/guard ainda **não** validados contra o servidor. Não bloqueia 01-04/01-05.
 - 🔴 **P-005 — `app_users` vazia (verificação de fase, 2026-10-13) — ✅ RESOLVIDO no mesmo dia.** A verificação da Fase 1 (`PASS_WITH_NOTES`) encontrou `SELECT count(*) FROM app_users` = **0** e **nenhum INSERT** da linha de admin em todo o repositório; a verdade literal do plano 01-02 ("Admin existe como linha", EQUP-01/R-027) não era observável. Resolvido com a migration de seed idempotente **`0005_seed_admin`** (`name='Admin'`, `email='admin@whatsapp-prospect.local'`, `ON CONFLICT (email) DO NOTHING`; sem `role` — a coluna não existe, R-027 adia perfis) + `tests/ops/seed-admin.test.ts` (prova `app_users >= 1` após `openDb`/`migrate()`). Commit `fix(01-02)`. EQUP-01 fechado → Fase 1 em **18/23**. Detalhes em `docs/pendencias.md` (P-005).
 - ⚠️ **Verificação da Fase 1 = `PASS_WITH_NOTES` / `gaps_found`** (2026-10-13). Escopo: 01-01/01-02/01-04/01-05; 01-03 deferido (P-004). SC2/SC3/SC4 ✓ (o gate único, a ordem canônica, o choke-point e a fila durável estão provados em código/migrations/banco). Gaps: P-005 (EQUP-01, **já resolvido** — migration `0005`), SC5 parcial à época (encarregado) — **✅ nomeado em 2026-10-13** (`docs/lgpd/encarregado-dpo.md`, Opção A: Admin como encarregado), e a transição de handoff→`awaiting_human` pertence ao plano 02-02 (Fase 2 — **registrada como P-006**). Relatório em `.planning/phases/01-funda-o-canal-e-gate-de-envio/VERIFICATION.md`. Comando `user-story.validate` = `false` (o goal não é User Story) → `Mode: mvp` removido do ROADMAP.
 - ⚠️ **`icacls.exe` falha no Scope 2 de `scripts/pg-hba-apply.ps1`** (2026-10-01, Task 3 do plano 01-02): o temporário em `%TEMP%` é deletado antes da chamada, o script aborta e a senha do role teve de ser trocada manualmente via `psql`. Bug de ordenação, não de conceito. Rastreado como **P-002** em `docs/pendencias.md`. Não bloqueia nada — o efeito desejado foi alcançado manualmente.
@@ -214,7 +216,7 @@ Nenhum ainda.
 
 | Categoria | Item | Status | Adiado Em |
 |-----------|------|--------|-----------|
-| Infra/Canal | Pareamento do número dedicado (plano 01-03) — **P-004 `CREDS_INVALID`**; automação commitada, checkpoint humano não concluído | Aberto | 2026-10-13 |
+| Infra/Canal | Pareamento do número dedicado (plano 01-03) — **P-004 corrigido (`2d64728`); bloqueio atual P-007**; automação commitada, checkpoint humano não concluído. Ambos deferidos, não bloqueiam a Fase 3 | Aberto | 2026-10-13 |
 | Fase 2 | Transição de handoff → `engagement_mode = awaiting_human` + escrita de `handoff_active` (truth 01-05) — **P-006**; escritor entregue no 02-02 (`HandoffService` + `mode_changes`) | ✅ Concluído (02-02) | 2026-10-14 |
 | Fase 2 | Promoção shadow→ativo (D-18) — **`manter-shadow`**: `shadow:report` = FAIL (0 evidência); aguarda ≥14 dias / ≥100 rascunhos / ≥80% aprovação | Aberto (decisão do Admin) | 2026-10-14 |
 | Pesquisa | Procedimento de appeal de ban (fonte secundária) — confirmar antes de depender | Aberto | 2026-09-28 |
@@ -223,14 +225,15 @@ Nenhum ainda.
 
 ## Continuidade de Sessão
 
-Última sessão: 2026-10-14
-Parou em: Fase 2, plano **02-04** (fechamento de lacunas) concluído (3/3 tasks) — **CR-01** (Guard 0 pelo emissor E.164 via `EventoInbound.senderPhoneE164` carimbado pelo runtime; `novo → aquecimento` volta a funcionar) e **CR-02** (`duvida_complexa` em `INTENCOES_HANDOFF`, e2e atômico + silêncio), WR-03 (passo (d) transacional) e warn `jid_proprio_sem_e164` no boot. Suíte **51 arquivos / 274 testes verdes**; `tsc` exit 0 e biome exit 0. Commits `757f728`/`aacaa69`/`0a51cc5`/`2e3c56d`/`1b40695`.
-Parou em (anterior): Fase 2, plano **02-03** concluído (3/3 tasks) — CLI de revisão em shadow (`shadow:list/approve/edit/discard`; decisões append-only em `review_events`), kill switch global de 1 comando (`mode pause/resume` → `settings.operational_mode` + `event_log event_type='operational_mode_changed'`), `status:corrigir` (CRM-02), `handoff:ack` idempotente (D-15), pós-gate de conteúdo L4 (`src/domain/llm/post-gate.ts`, CONV-07) validado por corpus adversário, relatório de shadow (`npm run shadow:report`, gate D-17) e harness de bake-off (`npm run bake-off`, D-10). **Fase 2 com implementação completa (4/4).**
+Última sessão: 2026-10-15
+Parou em: **Fase 3 (Cadência, Operação e Painel)** — contexto capturado em `03-CONTEXT.md` (`--auto`, passada única, decisões D-01..D-26); tensão do ROADMAP resolvida como supersession D-02. Próximo passo = `plan-phase 3`.
+Parou em (anterior): Fase 2, plano **02-04** (fechamento de lacunas) concluído (3/3 tasks) — **CR-01** (Guard 0 pelo emissor E.164 via `EventoInbound.senderPhoneE164` carimbado pelo runtime; `novo → aquecimento` volta a funcionar) e **CR-02** (`duvida_complexa` em `INTENCOES_HANDOFF`, e2e atômico + silêncio), WR-03 (passo (d) transacional) e warn `jid_proprio_sem_e164` no boot. Suíte **51 arquivos / 274 testes verdes**; `tsc` exit 0 e biome exit 0. Commits `757f728`/`aacaa69`/`0a51cc5`/`2e3c56d`/`1b40695`.
+Parou em (anterior-2): Fase 2, plano **02-03** concluído (3/3 tasks) — CLI de revisão em shadow (`shadow:list/approve/edit/discard`; decisões append-only em `review_events`), kill switch global de 1 comando (`mode pause/resume` → `settings.operational_mode` + `event_log event_type='operational_mode_changed'`), `status:corrigir` (CRM-02), `handoff:ack` idempotente (D-15), pós-gate de conteúdo L4 (`src/domain/llm/post-gate.ts`, CONV-07) validado por corpus adversário, relatório de shadow (`npm run shadow:report`, gate D-17) e harness de bake-off (`npm run bake-off`, D-10). **Fase 2 com implementação completa (4/4).**
 Marco (D-18): **gate de saída = `manter-shadow`** — `shadow:report` = FAIL (0 evidência); promoção shadow→ativo NÃO aprovada; `ACTIVA` adiada até PASS.
 Próximo passo: **Fase 3 (Cadência, Operação e Painel)** — `Scheduler` + cadência FLUP + painel único (R-046, Fastify/SSE + React localhost) + CRM operacional/copiloto. As 2 Critical da verificação da Fase 2 (CR-01, CR-02) foram **fechadas** pelo 02-04; a verificação da Fase 2 (`362cedc`, gaps_found) pode ser reverificada. A promoção shadow→ativo depende de dados reais de operação (permanece pendente por decisão do Admin, D-18).
-Pendente (deferido — P-004): fechar o checkpoint de pareamento do 01-03 — `CHANNEL_PHONE_E164` precisa do número real (hoje `+5511999999999`) e o QR precisa parear (`CREDS_INVALID` em `01-03-DIAG.md` / `docs/pendencias.md`).
+Pendente (deferido — P-004 ✅ corrigido / P-007 ⚠️ aberto): fechar o checkpoint de pareamento do 01-03. A corrida `requestPairingCode` × WS foi corrigida em `2d64728` (boot chega a `channel_ready`), mas o socket cai logo depois (P-007, `7.0.0-rc14` × servidor atual). **Ambos deferidos; não bloqueiam a Fase 3** (`01-03-DIAG.md` / `docs/pendencias.md`).
 Pós-reboot: revalidar com `npm run notify -- -Title "Teste R-013" -Message "Verificacao" -Urgent` e fechar a Task 6 do plano 01-01 (toast já exibido por humano em 2026-10-05, P-001).
-Arquivo de retomada: `.planning/phases/02-ia-handoff-e-shadow-mode/02-04-SUMMARY.md`
+Arquivo de retomada: `.planning/phases/03-cad-ncia-opera-o-e-painel/03-CONTEXT.md`
 
 ---
-*Atualizado: 2026-10-14*
+*Atualizado: 2026-10-15*

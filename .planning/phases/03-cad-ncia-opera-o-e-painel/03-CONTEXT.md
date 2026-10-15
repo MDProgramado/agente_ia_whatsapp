@@ -17,7 +17,7 @@ Fazer o bot **rodar sozinho dentro dos limites** e dar ao Admin **um único luga
 
 **Entra nesta fase:** WHS-02, FLUP-01, FLUP-02, FLUP-03, FLUP-06, FLUP-08, CRM-01, CRM-03, NFRQ-05.
 
-**NÃO entra nesta fase:** envio real do 1º contato / canal físico já pareado (P-004, Fase 1 — dependência, não escopo); break-up message (FLUP-11, v2/Fase 4); migração para API oficial (v2); multiusuário ativo (v2/EQUP); analytics avançado e relatórios além do contador diário (v2); aquecimento controlado (v2); Electron/Tauri (fase futura); contrato visual detalhado do painel (`/gsd-ui-phase` é o próximo passo de UI, não esta discussão).
+**NÃO entra nesta fase:** envio real do 1º contato / canal físico já pareado (**P-004 corrigido em `2d64728`; bloqueio atual P-007** — Fase 1, dependência, não escopo); break-up message (FLUP-11, v2/Fase 4); migração para API oficial (v2); multiusuário ativo (v2/EQUP); analytics avançado e relatórios além do contador diário (v2); aquecimento controlado (v2); Electron/Tauri (fase futura); contrato visual detalhado do painel (`/gsd-ui-phase` é o próximo passo de UI, não esta discussão).
 
 **Regra-mestra herdada (invariante de ordem):** `evaluatePolicy` continua sendo o **único** gate e roda **antes** de qualquer envio; `sendText` continua existindo **só** no choke-point `src/application/dispatcher.ts`. A Fase 3 **não** cria caminho de envio novo — o painel envia **pelo gate**, com `origin='admin'`.
 </domain>
@@ -175,7 +175,7 @@ Fazer o bot **rodar sozinho dentro dos limites** e dar ao Admin **um único luga
 - **Electron/Tauri** como shell desktop — fase futura; o painel é localhost no browser.
 - **Contrato visual detalhado do painel** — tratado pelo `/gsd-ui-phase` (UI hint = yes), não nesta discussão.
 
-**Dependência operacional (não é escopo, é risco):** o pareamento físico do número dedicado (P-004, `01-03` deferido) ainda está pendente. A Fase 3 assume o canal operacional; o dreno de misfire e a cadência só têm valor com o número pareado.
+**Dependência operacional (não é escopo, é risco):** o pareamento do número dedicado (`01-03` deferido) ainda não completa. A corrida `requestPairingCode` × abertura do WebSocket (**P-004**) foi **corrigida em `2d64728`** — o boot agora chega a `connected to WA` → `pairing_code` → `channel_ready`; o bloqueio atual é **P-007** (socket cai logo após `channel_ready`, `7.0.0-rc14` × servidor atual). **P-004 e P-007 estão deferidos e não bloqueiam a Fase 3.** A Fase 3 assume o canal operacional; o dreno de misfire e a cadência só têm valor com o número pareado.
 </deferred>
 
 ---

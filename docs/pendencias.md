@@ -118,13 +118,15 @@ vai abortar de novo — e isso precisa ser corrigido antes de depender dele.
 
 ---
 
-## P-004 — Pareamento companion do Baileys falha em silêncio ⚠️ ABERTO
+## P-004 — Pareamento companion do Baileys falha em silêncio ✅ CORRIGIDO (2026-10-15) — bloqueio restante → P-007
 
-**Status:** Parcialmente resolvido (2026-10-15). A **falha em silêncio** e a corrida que a causava
-foram corrigidas (commit `2d64728`); o pareamento em si **ainda não completa** — o bloqueio restante
-é **P-007** (socket cai logo após `channel_ready`). **Bloqueia a Task 3 do plano 01-03** (checkpoint
-humano de pareamento do número dedicado); **não** bloqueia 01-04/01-05, que não dependem de canal
-pareado (decisão do Admin, 2026-10-09). Registrado para não se perder o lastro técnico do diagnóstico.
+**Status:** **CORRIGIDO em 2026-10-15** (commit `2d64728`) — a corrida entre `requestPairingCode` e
+a abertura do WebSocket (a causa da falha em silêncio) foi fechada; o boot chega a `connected to WA` →
+`pairing_code` → `channel_ready`. O pareamento em si **ainda não completa**, mas o bloqueio restante é
+**P-007** (socket cai logo após `channel_ready`), não mais este item. **P-004 e P-007 estão deferidos e
+não bloqueiam a Fase 3.** Ainda assim bloqueia a Task 3 do plano 01-03 (checkpoint humano de pareamento
+do número dedicado); **não** bloqueia 01-04/01-05, que não dependem de canal pareado (decisão do Admin,
+2026-10-09). Registrado para não se perder o lastro técnico do diagnóstico.
 
 **Origem:** Task 3 do plano 01-03, 2026-10-08/09. Diagnóstico completo em
 `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-03-DIAG.md`.
