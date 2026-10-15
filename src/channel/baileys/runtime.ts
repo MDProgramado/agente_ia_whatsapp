@@ -55,6 +55,47 @@ export const abrirSocketDoCanal = (session: SessionState): WASocket => {
 	});
 };
 
+/**
+ * Espera o WebSocket do canal ABRIR antes de mandar qualquer nó de handshake.
+ *
+ * Existe por causa do P-004. `requestPairingCode` é chamado logo depois de
+ * `abrirSocketDoCanal`, quando o socket ainda está `CONNECTING`. O `sendRawMessage`
+ * do Baileys lança `Boom('Connection Closed')` sempre que `ws.isOpen` é falso
+ * (`Socket/socket.js:59-61`) — ele NÃO espera o open. Como `requestPairingCode`
+ * gasta ~240 ms no PBKDF2 de `generatePairingKey` (`Utils/crypto.js:112`) antes de
+ * enviar, o handshake de rede tinha exatamente essa janela para completar; quando
+ * perdia a corrida (rede fria ou máquina sob carga), o boot morria no throw — que
+ * `main().catch` só imprimia no console.
+ *
+ * `waitForSocketOpen` é API pública do socket (`Socket/socket.d.ts:33`): resolve
+ * imediatamente se o socket já está aberto (reconexão), rejeita se fechou, e aqui
+ * ganha um timeout como backstop para uma rede que nunca completa o handshake.
+ */
+export const aguardarSocketAberto = async (
+	sock: WASocket,
+	timeoutMs: number,
+): Promise<void> => {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		await Promise.race([
+			sock.waitForSocketOpen(),
+			new Promise<never>((_, reject) => {
+				timer = setTimeout(
+					() =>
+						reject(
+							new Error(
+								`socket do canal nao abriu em ${timeoutMs}ms (timeout de pareamento)`,
+							),
+						),
+					timeoutMs,
+				);
+			}),
+		]);
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+};
+
 /** `messageTimestamp` pode vir como number ou Long; normaliza para number. */
 const comoNumero = (valor: unknown): number => {
 	if (typeof valor === "number") return valor;
@@ -172,7 +213,8 @@ export const criarHandlersDoCanal = (deps: DepsHandlersCanal) => {
  * `requestPairingCode` NÃO é chamado aqui: quem pede o par é o `index.ts`, no
  * ponto do boot em que já tem o socket e a sessão em mãos — e escreve o código
  * só em `qr.txt` (arquivo sob `DATA_ROOT`, fora do OneDrive e do git), nunca no
- * log. Este arquivo termina na fábrica e nos handlers.
+ * log. Este arquivo termina na fábrica, nos handlers e no helper de abertura
+ * `aguardarSocketAberto` (P-004), que o `index.ts` chama ANTES de pedir o par.
  */
 
 export type { WASocket };

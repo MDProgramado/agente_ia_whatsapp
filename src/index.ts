@@ -21,6 +21,7 @@ import { readCapabilities } from "./channel/baileys/capabilities.js";
 import { normalizeJid } from "./channel/baileys/jid-resolver.js";
 import {
 	abrirSocketDoCanal,
+	aguardarSocketAberto,
 	criarHandlersDoCanal,
 	type WASocket,
 } from "./channel/baileys/runtime.js";
@@ -46,6 +47,13 @@ import { criarNotifier } from "./infra/notifier.js";
 const BOOT_CHECK_ONLY = process.env.BOOT_CHECK_ONLY === "1";
 
 /**
+ * Teto de espera do WebSocket abrir antes do pareamento (P-004). Cobre com folga um
+ * handshake frio (TLS medido em ~370 ms nesta máquina) e, se estourar, transforma o
+ * antigo throw silencioso do `requestPairingCode` numa falha VISÍVEL no `app.log`.
+ */
+const SOCKET_OPEN_TIMEOUT_MS = 30_000;
+
+/**
  * Handle que segura o processo vivo no boot de produção. Vive no escopo do módulo
  * para que `encerra` possa soltá-lo — um timer ref'd que ninguém limpa é justamente
  * o que impediria o processo de sair no Ctrl+C.
@@ -58,6 +66,14 @@ let keepAlive: NodeJS.Timeout | undefined;
  * lido pelo WhatsApp como dispositivo novo (Armadilha 4, T-01-02).
  */
 let canalSock: WASocket | undefined;
+
+/**
+ * Logger de boot no escopo do módulo para que `main().catch` registre a falha no
+ * `app.log` — e não só no console. Sem isto, um erro de boot posterior ao logger
+ * (ex.: o `Connection Closed` do `requestPairingCode`, P-004) morria mudo no
+ * arquivo, que é exatamente o que atrasou o diagnóstico.
+ */
+let bootLog: ReturnType<typeof childLogger> | undefined;
 
 /**
  * Estado do socket no último `connection.update`, lido pelo monitor de saúde.
@@ -108,6 +124,9 @@ const main = async (): Promise<void> => {
 
 	// (c) Logger com child por módulo.
 	const log = childLogger("boot");
+	// Publica o logger para o `main().catch` de nível de módulo: a partir daqui, uma
+	// falha de boot deixa rastro no `app.log` (P-004), não só no console.
+	bootLog = log;
 
 	// (d) Banco + `migrate()` (R-031). Falha de migration aborta o boot aqui.
 	const conn = await openDb(env.DATABASE_URL);
@@ -185,6 +204,20 @@ const main = async (): Promise<void> => {
 	);
 	keepAlive = setInterval(() => {}, 60_000);
 
+	// (i.0) Encerramento gracioso ANTES do pareamento (P-004). Kill abrupto corrompe o
+	//       `useMultiFileAuthState`, e um auth corrompido é lido pelo WhatsApp como
+	//       dispositivo novo — sinal de banimento. Registrar AQUI (e não no fim do
+	//       boot) garante que um Ctrl+C durante o `await` do pareamento ainda feche o
+	//       socket e o pool e drene o log, em vez de matar sem shutdown registrado.
+	const sinal = (nome: NodeJS.Signals) => {
+		void encerra(conn, log, nome).then(() => {
+			flushLogSync();
+			process.exit(0);
+		});
+	};
+	process.on("SIGINT", sinal);
+	process.on("SIGTERM", sinal);
+
 	// (i) Etapa 4 do boot — CANAL, depois do banco. `createSession()` monta a sessão
 	//     a partir de `DATA_ROOT` (nunca do cwd) e `abrirSocketDoCanal` cria o socket
 	//     com `emitOwnEvents: true` (via `socketConfigOverrides`, WHS-05/R-001): é a
@@ -227,6 +260,11 @@ const main = async (): Promise<void> => {
 	// segredo de sessão: vai SÓ para `logs\qr.txt`, nunca para o log estruturado.
 	if (sessao.restoreRequired) {
 		const destino = join(logsDir(), "qr.txt");
+		// O WS precisa estar ABERTO antes do handshake (P-004): `requestPairingCode`
+		// -> `sendRawMessage` lança `Connection Closed` se `ws.isOpen` for falso, e sem
+		// esta espera o pareamento competia com o handshake de rede (~240 ms de PBKDF2
+		// contra TLS frio) e morria no throw silencioso.
+		await aguardarSocketAberto(sock, SOCKET_OPEN_TIMEOUT_MS);
 		const par = await sock.requestPairingCode(
 			env.CHANNEL_PHONE_E164.replace(/^\+/, ""),
 		);
@@ -379,6 +417,9 @@ const main = async (): Promise<void> => {
 		// pedir par (pedir par com sessão corrompida conta como dispositivo novo).
 		credsValid: () => !sessao.restoreRequired,
 		requestPairingCode: async () => {
+			// Mesma guarda do pareamento inicial (P-004): o socket pode ter caído e
+			// reaberto; só se pede par com o WS aberto, senão o `sendRawMessage` lança.
+			await aguardarSocketAberto(sock, SOCKET_OPEN_TIMEOUT_MS);
 			const par = await sock.requestPairingCode(
 				env.CHANNEL_PHONE_E164.replace(/^\+/, ""),
 			);
@@ -437,18 +478,6 @@ const main = async (): Promise<void> => {
 		{ step: "daily_report_cron", at: "23:55", tz: env.TZ },
 		"cron do relatorio diario armado",
 	);
-
-	// (l) Encerramento gracioso. Kill abrupto corrompe o `useMultiFileAuthState`, e um
-	//     auth corrompido é lido pelo WhatsApp como dispositivo novo — sinal de
-	//     banimento. Fechar o socket, o pool e drenar o log é o que torna o Ctrl+C seguro.
-	const sinal = (nome: NodeJS.Signals) => {
-		void encerra(conn, log, nome).then(() => {
-			flushLogSync();
-			process.exit(0);
-		});
-	};
-	process.on("SIGINT", sinal);
-	process.on("SIGTERM", sinal);
 };
 
 const encerra = async (
@@ -494,7 +523,16 @@ main().catch((erro: unknown) => {
 	// Última linha de defesa: um boot que falha tem que PARAR, nunca seguir meio
 	// inicializado (fail-closed — R-031 e a segurança de R-042 dependem disso).
 	const mensagem = erro instanceof Error ? erro.message : String(erro);
+	// Console SEMPRE: é o que o operador vê na janela do launcher.
 	console.error(`[boot] FALHA: ${mensagem}`);
+	// E no `app.log` quando o logger já subiu. Um throw depois do logger não pode
+	// morrer mudo no arquivo — foi o que escondeu o `Connection Closed` do
+	// `requestPairingCode` (P-004).
+	try {
+		bootLog?.error({ event: "boot_falhou" }, `boot falhou: ${mensagem}`);
+	} catch {
+		// Sem logger acessível, o `console.error` acima já cumpriu o papel.
+	}
 	try {
 		flushLogSync();
 	} catch {

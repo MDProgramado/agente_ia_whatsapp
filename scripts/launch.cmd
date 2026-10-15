@@ -20,6 +20,13 @@ REM  sempre, e um gate pendurado nao e um gate.
 REM ============================================================================
 setlocal
 
+REM  O CWD do chamador nao e confiavel (duplo clique, Agendador de Tarefas, ou
+REM  `cmd /c` a partir de outra pasta): fixa a raiz do repo para que
+REM  `npx tsx src\index.ts` resolva `src\` a partir daqui, e nao da pasta de onde
+REM  o usuario chamou -- sem isso, um boot de outro diretorio morre com
+REM  "Cannot find module src\index.ts".
+cd /d "%~dp0.."
+
 set "PGBIN=C:\Program Files\PostgreSQL\18\bin"
 set "PGDATA=C:\Program Files\PostgreSQL\18\data"
 set "DATA_ROOT=C:\whatsapp_prospecao"
