@@ -113,14 +113,16 @@ Plans:
   4. O Admin busca, filtra, tagueia, anota e cria tarefas/lembretes; move o lead pelo pipeline (Novo → Contatado → Respondeu → Qualificado → Aquecido → Reunião agendada → Proposta → Fechado → Perdido com motivo) e corrige status manualmente, com histórico imutável (CRM-01, CRM-03); após registrar um agendamento, o bot envia confirmação e lembrete antes da reunião com opção de confirmar/remarcar/cancelar — remarcar ou cancelar vira handoff, respeitando janela e limite (FLUP-08; nota: a pesquisa sugere reagendar/cancelar → handoff por R-025/AR-003).
   5. Depois de o Admin assumir um handoff, o bot entra em modo copiloto: sugere respostas no painel e **nunca envia nada sozinho** (FLUP-06); nenhuma mensagem automática sai fora de dias úteis 7h–17h e nada ultrapassa os limites diários — a fila espera o próximo dia útil (reforça WHS-01/WHS-04, cuja mecânica veio na Fase 1).
 
-**Plans**: 3 plans
+**Plans**: 5 plans
 **UI hint**: yes
 
 Plans:
 
-- [ ] 03-01: Cadência e scheduler — `Scheduler` tick 30s + `FOR UPDATE SKIP LOCKED` + lease + reconciliador + idempotência `(lead_id, follow_up_index)`, misfire policies por tipo (`CATCH_UP` proibido), `business-hours.ts` com feriados BR + "próximo dia útil", detecção de não-resposta (read receipts/watermark), default conservador (máx. 2 toques automáticos sem resposta → handoff)
-- [ ] 03-02: Painel de controle — `ApiHttp` (Fastify + SSE, bind `127.0.0.1`, `Host` header validado, token por request) + React localhost; R-046 completo (lista + chat + sugestões + histórico + ações rápidas + modo em tempo real + contador + janela + motivo do silêncio + fila de handoff); comando kill switch global
-- [ ] 03-03: CRM operacional e copiloto — pipeline com motivos de "Perdido", busca/filtros/tags/notas/tarefas/lembretes, histórico imutável, notas automáticas da IA, modo copiloto pós-handoff (sugere, nunca envia), confirmação/lembrete pós-agendamento; migração do doc `01-requisitos-funcionais.md` (R-004/R-005, R-058) + ADRs (R-019 revertido, dreno R-007, `isCatchupDrain` como parâmetro)
+- [ ] 03-01-PLAN.md — Cadência (fundação): migration `0007_scheduler_cadence.sql` (`follow_up_index` + índice parcial único `(conversation_id, follow_up_index) WHERE status='pending'`) + `feriados-br.ts` + `business-hours.ts` (feriados BR + "próximo dia útil 07:00") + `cadence.ts` (1h→1d→3d→7d, máx 4) + `queries/settings.ts` (FLUP-01, FLUP-02, FLUP-03)
+- [ ] 03-02-PLAN.md — Scheduler + catch-up: `scheduler.ts` (tick 30s produtor de `outbox`, idempotência `flup:{conv}:{idx}`, cancelamento auditável) + `catchup-drain.ts` (`FIRE_ONCE`, ≤3/10min, 1/lead/dia, jitter, adiado nunca descartado) + encerramento "sem resposta" + boot do motor em `index.ts` (WHS-02, FLUP-01/02/03)
+- [ ] 03-03-PLAN.md — Painel backend: Fastify bind `127.0.0.1` + `Host` guard + token Bearer (`timingSafeEqual`) + `@fastify/static` + REST read-only (leads/chat/histórico) + ações auditadas + envio pelo gate (`origin='admin'`) + kill switch unificado + SSE (NFRQ-05)
+- [ ] 03-04-PLAN.md — Painel frontend: React 19 + Vite + Tailwind v4, layout denso 4 painéis, cabeçalho em tempo real ("BOT ATIVO" vs "MÃO HUMANA ATIVA — BOT EM SILÊNCIO" + motivo + contador + janela + fila de handoff), sugestões só com ação explícita, kill switch confirmado, notificação/chime (NFRQ-05)
+- [ ] 03-05-PLAN.md — CRM + copiloto + agendamento: migration `0008_pipeline_crm.sql` (pipeline 9 status com backfill + tags/notas/tarefas) + `pipeline.ts` + `copilot.ts` (sugere nunca envia) + `appointment.ts` (confirmação/lembrete; remarcar/cancelar → handoff) + rotas/UI de CRM + ADRs 014/015 e reconciliação de docs (FLUP-06, FLUP-08, CRM-01, CRM-03)
 
 ### Phase 4: Piloto, Calibração e Apuração
 
