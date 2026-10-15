@@ -250,12 +250,14 @@ export const createSession = async (): Promise<SessionState> => {
  *   do 01-03: no rc14 `messages` não é chave de `SocketConfig` (`Types/Socket.d.ts`)
  *   e nenhum arquivo do pacote lê `config.messages` — a chave é mantida via cast
  *   único e documentado, inerte em runtime neste pacote.
- * - `browser: Browsers.windows("Chrome")` (T2 do 01-03-DIAG): o default do pacote é
- *   `Browsers.macOS("Chrome")`, que anuncia `companion_platform_display` como
- *   `"Chrome (Mac OS)"` (`Socket/socket.js:640-643`). Em Windows, anunciar o SO
- *   hospedeiro é o valor que o servidor espera no vínculo companion. O
- *   `companion_platform_id` (getCompanionWebClientType) segue CHROME (1) — só o
- *   display muda; a trava de pareamento é o display.
+ * - `browser` controlado por `BAILEYS_BROWSER_MODE` (T2 + T4b do 01-03-DIAG):
+ *   `custom` → `Browsers.windows("Chrome")` (`"Chrome (Windows)"`); `default` →
+ *   a chave é **omitida**, e o `{ ...DEFAULT_CONNECTION_CONFIG, ...config }` do
+ *   `makeWASocket` (`Socket/index.js:4-9`) mantém `Browsers.macOS("Chrome")`. A
+ *   chave é omitida de propósito: passar `browser: undefined` explícito
+ *   sobrescreveria o default com `undefined`. Verificado que o browser default já
+ *   completou o handshake antes (29/09) e o custom fechou antes de "connected to
+ *   WA" (15/10) — a flag isola a hipótese.
  * - nível do logger = `BAILEYS_LOG_LEVEL` (T3 do 01-03-DIAG): as falhas internas do
  *   vendor (`companion_reg_refresh`, 463, recusa de `link_code_companion_reg`) só
  *   saem neste logger. Com `debug`/`trace`, uma falha de pareamento antes muda de
@@ -265,12 +267,15 @@ export const socketConfigOverrides = (
 	logger: SocketConfig["logger"],
 ): Partial<SocketConfig> => {
 	logger.level = env.BAILEYS_LOG_LEVEL;
-	return {
+	const overrides: Partial<SocketConfig> = {
 		emitOwnEvents: true,
-		browser: Browsers.windows("Chrome"),
 		logger,
 		...({
 			messages: { ack: { auto: "all" } },
 		} as unknown as Partial<SocketConfig>),
 	};
+	if (env.BAILEYS_BROWSER_MODE === "custom") {
+		overrides.browser = Browsers.windows("Chrome");
+	}
+	return overrides;
 };

@@ -1,13 +1,17 @@
 /**
- * `socketConfigOverrides` — plataforma anunciada no vínculo companion (T2 do 01-03-DIAG).
+ * `socketConfigOverrides` — plataforma anunciada no vínculo companion
+ * (T2 + T4b do 01-03-DIAG).
  *
- * O default do pacote (`Browsers.macOS("Chrome")`) anuncia
- * `companion_platform_display` como `"Chrome (Mac OS)"`. Em Windows, o valor
- * coerente com o SO hospedeiro é `"Chrome (Windows)"`. O display é montado pelo
- * pacote como `` `${browser[1]} (${browser[0]})` `` (`Socket/socket.js:640-643`),
- * então a asserção reconstrói a string a partir da tupla de `browser` do config.
+ * `BAILEYS_BROWSER_MODE` isola o browser anunciado no `link_code_companion_reg`:
+ * - `custom`  → `Browsers.windows("Chrome")` → `"Chrome (Windows)"`
+ * - `default` → a chave `browser` é OMITIDA, e o
+ *   `{ ...DEFAULT_CONNECTION_CONFIG, ...config }` do `makeWASocket`
+ *   (`Socket/index.js:4-9`) mantém o `Browsers.macOS("Chrome")` interno.
+ *
+ * A omissão (e não `browser: undefined`) é o ponto: um `undefined` explícito
+ * sobrescreveria o default e o pacote leria `browser[1]` de `undefined`.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { socketConfigOverrides } from "../../src/channel/baileys/session.js";
 import { env } from "../../src/config/env.js";
 
@@ -16,11 +20,24 @@ const loggerFake = {} as Parameters<typeof socketConfigOverrides>[0];
 const displayCompanion = (browser: readonly string[]): string =>
 	`${browser[1]} (${browser[0]})`;
 
+const modoOriginal = env.BAILEYS_BROWSER_MODE;
+
+afterEach(() => {
+	env.BAILEYS_BROWSER_MODE = modoOriginal;
+});
+
 describe("socketConfigOverrides — plataforma do pareamento companion", () => {
-	it("anuncia o SO hospedeiro (Windows) no formato 'Chrome (Windows)'", () => {
+	it("modo 'custom': anuncia o SO hospedeiro no formato 'Chrome (Windows)'", () => {
+		env.BAILEYS_BROWSER_MODE = "custom";
 		const cfg = socketConfigOverrides(loggerFake);
 		expect(cfg.browser).toEqual(["Windows", "Chrome", "10.0.22631"]);
 		expect(displayCompanion(cfg.browser ?? [])).toBe("Chrome (Windows)");
+	});
+
+	it("modo 'default': OMITE a chave browser (deixa o default do pacote)", () => {
+		env.BAILEYS_BROWSER_MODE = "default";
+		const cfg = socketConfigOverrides(loggerFake);
+		expect("browser" in cfg).toBe(false);
 	});
 
 	it("mantém emitOwnEvents ligado (R-001/WHS-05)", () => {

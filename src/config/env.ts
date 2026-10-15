@@ -100,6 +100,17 @@ export const envSchema = z.object({
 	BAILEYS_LOG_LEVEL: z
 		.enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"])
 		.default("warn"),
+
+	/**
+	 * Browser anunciado no vínculo companion (T4b do 01-03-DIAG).
+	 *
+	 * `default` (recomendado): OMITE `browser` do config, e o pacote usa o seu
+	 * próprio `DEFAULT_CONNECTION_CONFIG` (`Browsers.macOS("Chrome")`). `custom`:
+	 * anuncia `Browsers.windows("Chrome")`. A flag existe porque há evidência de
+	 * que o browser default completou o handshake antes (29/09) enquanto o custom
+	 * fecha a conexão antes de "connected to WA" (15/10) — hipótese a isolar.
+	 */
+	BAILEYS_BROWSER_MODE: z.enum(["default", "custom"]).default("default"),
 });
 
 export type Env = z.infer<typeof envSchema>;
