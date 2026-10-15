@@ -120,9 +120,11 @@ vai abortar de novo — e isso precisa ser corrigido antes de depender dele.
 
 ## P-004 — Pareamento companion do Baileys falha em silêncio ⚠️ ABERTO
 
-**Status:** Aberto. **Bloqueia a Task 3 do plano 01-03** (checkpoint humano de pareamento do número
-dedicado); **não** bloqueia 01-04/01-05, que não dependem de canal pareado (decisão do Admin,
-2026-10-09). Registrado para não se perder o lastro técnico do diagnóstico.
+**Status:** Parcialmente resolvido (2026-10-15). A **falha em silêncio** e a corrida que a causava
+foram corrigidas (commit `2d64728`); o pareamento em si **ainda não completa** — o bloqueio restante
+é **P-007** (socket cai logo após `channel_ready`). **Bloqueia a Task 3 do plano 01-03** (checkpoint
+humano de pareamento do número dedicado); **não** bloqueia 01-04/01-05, que não dependem de canal
+pareado (decisão do Admin, 2026-10-09). Registrado para não se perder o lastro técnico do diagnóstico.
 
 **Origem:** Task 3 do plano 01-03, 2026-10-08/09. Diagnóstico completo em
 `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-03-DIAG.md`.
@@ -164,6 +166,66 @@ de silenciosa.
 mínimo proposto em T4 do DIAG; (3) se nenhum resolver, tratar como risco do canal (R-059). Antes de
 trocar de fork, comparar a API (`makeWASocket`, `useMultiFileAuthState`, `Browsers`,
 `fetchNewChatMessageCap`, `fetchAccountReachoutTimelock`) e revalidar WHS-04/LEAD-03 (ADR-001).
+
+**Atualização (2026-10-15) — causa do silêncio encontrada e corrigida:** o boot morria no
+`requestPairingCode` com `Boom('Connection Closed')` sempre que o WebSocket ainda **não** estava
+aberto (`Socket/socket.js:59-61`), e `main().catch` só imprimia no console — daí "nada aparece no
+`app.log`". O `requestPairingCode` gasta ~240 ms no PBKDF2 de `generatePairingKey`
+(`Utils/crypto.js:112`) antes de enviar, então o handshake de rede tinha exatamente essa janela; com
+rede fria (TLS medido em ~370 ms) perdia a corrida e morria no throw. Corrigido com
+`aguardarSocketAberto` (`waitForSocketOpen` + timeout de 30 s) antes de todo pareamento, log de boot
+no `app.log`, `SIGINT`/`SIGTERM` registrados cedo e `cd /d "%~dp0.."` no launcher (commit `2d64728`).
+Boot ao vivo em 2026-10-15 11:41 chegou a `connected to WA` → `pairing_code` → `channel_ready`
+(antes morria em `loaded tctoken index`). **O suspeito de versão de protocolo foi descartado** (T4a:
+`fetchLatestBaileysVersion()` == hardcoded, `isLatest=true`). O bloqueio restante do pareamento é
+**P-007**.
+
+---
+
+## P-007 — Socket cai logo após `channel_ready`, antes do pareamento completar (T6) ⚠️ ABERTO
+
+**Status:** Aberto. Bloqueia a Task 3 do plano 01-03 (pareamento do número dedicado). É o **próximo
+bloqueio**, revelado depois de corrigir a corrida do P-004 — o boot agora chega a `channel_ready`.
+Diagnóstico em `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-03-DIAG.md` (§T6).
+
+**Numeração:** referido como **T6** no DIAG; registrado aqui como **P-007** porque P-005 (app_users)
+e P-006 (handoff) já existem neste arquivo.
+
+**Origem:** validação ao vivo do P-004, 2026-10-15 11:41.
+
+**Sintoma:** com a corrida do P-004 fechada, o boot chega a `connected to WA` → `pairing_code` →
+`channel_ready`, mas o socket cai logo depois — **antes** de qualquer humano conseguir digitar o par
+de 8 dígitos. Não há tempo útil para parear; `creds.json` segue `registered=false`.
+
+**Observação (os dois boots que chegaram a `channel_ready`):**
+
+| | 10/09 14:23 | 15/10 11:41 |
+|---|---|---|
+| evento após `channel_ready` | `Connection Terminated` (ws `close`, `socket.js:690`) | `Connection Failure` (stanza `CB:failure`, `socket.js:798-800`) |
+| statusCode | 428 `connectionClosed` | `+(node.attrs.reason \|\| 500)` → 500 `badSession` |
+| classificação | `connection_closed`, terminal=**false** | `logged_out`, terminal=**true**, critical |
+| desfecho | seguiu vivo até SIGINT (~87 s) | shutdown limpo ~2,5 s depois |
+
+O drop pós-pareamento **já existia** (10/09, 237 ms após `channel_ready`); o que muda é a
+classificação. O rc14 **não loga** o `reason` real do `CB:failure` (`socket.js:798` não loga
+`node.attrs`), então não há visibilidade do que o servidor recusou.
+
+**Por que bloqueia:** o fluxo do código de pareamento exige o socket VIVO até o telefone confirmar (a
+credencial chega pelo socket que pediu o par). 2,5 s (e 237 ms em 10/09) é curto demais para um
+humano digitar o par.
+
+**Pistas (não confirmadas):**
+
+1. Timeout/teardown do pré-pareamento — mas 2,5 s é curto demais para ser timeout de humano.
+2. Creds de "pareamento abandonado" (`registered=false` + `pairingCode`) podem induzir rejeição: a
+   sessão de 15/10 era um pareamento abandonado; a de 10/09 era nova (`pasta_existia=false`).
+3. `companion_reg_refresh` ignorado pelo rc14 (hipótese 2 do T4; patch T4c candidato).
+4. Falta de visibilidade do `reason` do `CB:failure` (`socket.js:798` não loga `node.attrs`).
+
+**Como fechar:** (Exp. 1) boot com auth 100% limpo para ver se o socket sobrevive ao pedido de par;
+(Exp. 2) se cair igual, aplicar o patch T4c (`case 'companion_reg_refresh'`) via `patch-package`;
+(fallback) se ambos falharem, tratar como bloqueio do rc14 contra o servidor atual (R-059) e
+considerar fork (`@ndikagatengg/baileys`) como **ADR-002** — sem bloquear a Fase 3.
 
 ---
 
@@ -234,12 +296,13 @@ Resultados atestados por **humano** (e não por teste automatizado), com data e 
 
 - **Antes de dar um plano por concluído:** ler este arquivo e conferir se alguma pendência mudou
   de estado.
-- **Ao tentar parear o canal (Task 3 do plano 01-03):** esperar a falha silenciosa descrita em
-  P-004; rodar com `BAILEYS_LOG_LEVEL=debug` para capturar a causa.
+- **Ao tentar parear o canal (Task 3 do plano 01-03):** a falha silenciosa do P-004 está corrigida
+  (`2d64728`); agora o boot chega a `channel_ready` e, se cair, aparece no `app.log`. O bloqueio
+  restante é **P-007** (socket cai logo após `channel_ready`); rodar com `BAILEYS_LOG_LEVEL=debug`.
 - **Ao ver `aumid_registration_skipped` no log:** não é regressão. Ver P-002.
 - **Ao rodar `pg-hba-apply.ps1`:** esperar o Scope 2 abortar. Ver P-003.
 - **Ao fechar uma pendência:** mudar o status para ✅, datar, e registrar a decisão tomada.
 
 ---
 
-*Criado em 2026-10-05 (Task 4 do plano 01-02). P-001, P-002, P-003, P-004 e P-005 (2026-10-13); P-006 (2026-10-13).*
+*Criado em 2026-10-05 (Task 4 do plano 01-02). P-001, P-002, P-003, P-004 e P-005 (2026-10-13); P-006 (2026-10-13); P-007 (2026-10-15).*
