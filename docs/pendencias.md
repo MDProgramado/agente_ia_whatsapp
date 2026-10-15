@@ -306,3 +306,49 @@ Resultados atestados por **humano** (e não por teste automatizado), com data e 
 ---
 
 *Criado em 2026-10-05 (Task 4 do plano 01-02). P-001, P-002, P-003, P-004 e P-005 (2026-10-13); P-006 (2026-10-13); P-007 (2026-10-15).*
+## P-007 — Socket cai logo após channel_ready, antes do pareamento completar (T6) ⚠️ ABERTO
+
+**Data descoberta:** 2026-10-15 11:41:27 (após correção P-004).  
+**Evidência:** .planning/phases/01-funda-o-canal-e-gate-de-envio/01-03-DIAG.md (§T6), logs pp.log com channel_ready seguido de fechamento WS.
+
+### Ocorrências (observadas)
+- **10/09:** ws close 428 transiente (237ms).
+- **15/10:** CB:failure sem reason → 500 → adSession → logged_out terminal (~2,5s).
+
+### Pistas (hipóteses)
+1. **Fluxo exige socket vivo até confirmação do telefone.** O handshake pode precisar permanecer aberto durante equestPairingCode até o pareamento ser confirmado no telefone (não apenas channel_ready).
+2. **companion_reg_refresh ignorado pelo rc14 (T4c candidato).** Possível evento de refresh de registro do companion não tratado no @whiskeysockets/baileys@7.0.0-rc14, causando queda logo após channel_ready.
+3. **Creds de pareamento abandonado podem induzir rejeição.** Resquícios de tentativa anterior podem levar o servidor a rejeitar nova tentativa rapidamente (badSession/logged_out).
+
+### Experimentos planejados (T6)
+- **Exp. 1 — Auth 100% limpo:** mover TODAS pastas uth_info_baileys* para uth_info_baileys.OLD-<ts> (incluir .failed-*, .stale-*), boot fresh. Observar: connected to WA → pairing_code → channel_ready → ??? (sobrevive ou cai). Classificar: 428 (transiente) ou 500 (terminal).
+- **Exp. 2 — T4c (patch vendor):** aplicar patch para tratar processNotification com case 'companion_reg_refresh' em src/channel/baileys/ via patch-package. Boot fresh + pareamento. Reportar sequência.
+
+### Critério de parada
+- Se **Exp. 1** falhar igual (cai em segundos) **E** **Exp. 2** também falhar: **PARAR**. Registrar P-007 como bloqueio do @whiskeysockets/baileys@7.0.0-rc14 frente ao servidor atual.
+- Considerar fork (@ndikagatengg/baileys) como **ADR-002** (avaliação futura).
+- Em caso de insucesso dos 2 experimentos, seguir para **Fase 3** (não bloqueia o roadmap).
+
+**Status:** ABERTO. Aguarda execução controlada (uma variável por vez).
+
+### Resultado dos experimentos (2026-10-15, executado)
+
+- **Experimento 1 (auth 100% limpo — pasta_existia=false):** FALHOU igual.
+  Sequência: connected to WA → pairing_code → channel_ready → **~1,2 s depois**
+  Connection Failure (stanza CB:failure sem eason) → logged_out, 	erminal=true,
+  severity=critical → shutdown(motivo=canal_logged_out). Não é 428 transiente; é 500 terminal.
+
+- **Experimento 2 (T4c — patch case 'companion_reg_refresh' no vendor):** FALHOU igual.
+  Sequência idêntica: connected to WA → pairing_code → channel_ready → ~4,6 s depois
+  Connection Failure → logged_out, 	erminal=true → shutdown. Nenhum evento
+  companion_reg_refresh chegou a ser logado (o handler não foi exercitado).
+
+**Conclusão (critério de parada atingido — time-box):** ambos os experimentos falharam.
+**P-007 (T6) confirmado como bloqueio do @whiskeysockets/baileys@7.0.0-rc14 contra o
+servidor WhatsApp atual** — o socket morre logo após channel_ready, antes do pareamento
+completar, com CB:failure sem eason (500 → adSession → logged_out).
+
+**Desfecho:** PARAR os experimentos. Registrar como bloqueio; considerar fork
+(@ndikagatengg/baileys ou similar) como **ADR-002** (avaliação futura, comparando exports
+e revalidando WHS-04/LEAD-03 antes de trocar). **Seguir para a Fase 3** (não bloqueia o
+roadmap) — o pareamento por este caminho permanece bloqueado até uma decisão de ADR-002.
