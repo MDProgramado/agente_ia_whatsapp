@@ -28,8 +28,8 @@ import {
 	type OpenDb,
 	openDb,
 } from "../../src/infra/db/client.js";
-import { criarFakeChannel } from "../../src/infra/fake-channel.js";
 import { loadGateSnapshot } from "../../src/infra/db/queries/snapshot.js";
+import { criarFakeChannel } from "../../src/infra/fake-channel.js";
 import { instanteEmZona, TZ } from "../gate/fixtures.js";
 
 /** Terça 29/09/2026 13h SP — dentro da janela e dia útil. */
@@ -162,6 +162,45 @@ describe("GET /api/* — guarda de token", () => {
 			headers: HOST_OK,
 		});
 		expect(r.statusCode).toBe(401);
+		await app.close();
+	});
+});
+
+describe("boot de integração do painel (Task 3)", () => {
+	// O mesmo `buildServer({ core })` que o `startPanel` do boot usa: serve o
+	// contrato REST inteiro. Aqui o foco é o cruzamento borda×rotas que o boot
+	// tem de garantir — Host inválido barrado, token exigido, leituras servidas.
+	it("Host inválido → 403; sem token → 401; com token /api/system e /api/leads → 200", async () => {
+		const app = buildServer({ core: montarCore(db) });
+
+		const hostInvalido = await app.inject({
+			method: "GET",
+			url: "/api/system",
+			headers: { host: "evil.com", ...AUTORIZADO },
+		});
+		expect(hostInvalido.statusCode).toBe(403);
+
+		const semToken = await app.inject({
+			method: "GET",
+			url: "/api/system",
+			headers: HOST_OK,
+		});
+		expect(semToken.statusCode).toBe(401);
+
+		const sistema = await app.inject({
+			method: "GET",
+			url: "/api/system",
+			headers: { ...HOST_OK, ...AUTORIZADO },
+		});
+		expect(sistema.statusCode).toBe(200);
+
+		const leads = await app.inject({
+			method: "GET",
+			url: "/api/leads",
+			headers: { ...HOST_OK, ...AUTORIZADO },
+		});
+		expect(leads.statusCode).toBe(200);
+
 		await app.close();
 	});
 });

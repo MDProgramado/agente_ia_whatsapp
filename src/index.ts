@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { Cron } from "croner";
 import { sql } from "drizzle-orm";
 import { Client } from "pg";
+import { type PanelCore, startPanel } from "./api/server.js";
 import { drenarCatchup } from "./application/catchup-drain.js";
 import { BarramentoEventos } from "./application/event-bus.js";
 import { processInboundFromMe } from "./application/inbound-handler.js";
@@ -105,6 +106,14 @@ let cronRelatorio: Cron | undefined;
  */
 let motorScheduler: ReturnType<typeof startScheduler> | undefined;
 let motorDreno: AbortController | undefined;
+
+/**
+ * Instância do painel HTTP (03-03). Vive no escopo do módulo para o `encerra`
+ * fechá-la ANTES do pool: `app.close()` encerra as conexões SSE penduradas e
+ * para de aceitar requests — um request que lesse o `db` depois do `closeDb`
+ * cairia no meio de um `pool.end()`.
+ */
+let painelApp: Awaited<ReturnType<typeof startPanel>> | undefined;
 
 /**
  * Contagem com `::int`: o driver devolve `count(*)` como `bigint`, que serializa
@@ -595,6 +604,38 @@ const main = async (): Promise<void> => {
 		},
 		"motor armado: scheduler 30s + drainLoop + catch-up",
 	);
+
+	// (m) PAINEL HTTP (03-03) — na MESMA instância/porta do processo (D-17), só
+	//     DEPOIS do `migrate()` (passo d) e do canal (passo i), que é quem o
+	//     `dispatchDeps.channel` espera. O painel NÃO é um segundo motor: as rotas
+	//     só LEEM estado e, para enviar, chamam o `dispatcher` — o único
+	//     choke-point de envio (NFRQ-05). A borda (Host guard + Bearer token, bind
+	//     literal 127.0.0.1) vive em `src/api/server.ts`.
+	const corePainel: PanelCore = {
+		db: conn.db,
+		bus: barramento,
+		dispatchDeps: {
+			db: conn.db,
+			channel: canal,
+			ctx: {
+				tz: env.TZ,
+				windowStartHour: env.WINDOW_START_HOUR,
+				windowEndHour: env.WINDOW_END_HOUR,
+				dailyMessageLimit: env.DAILY_MESSAGE_LIMIT,
+				dailyMessageCap: CAP_MENSAGENS,
+				newContactsToday: Number(
+					linhasContador.find((l) => l.kind === "new_contacts")?.count ?? 0,
+				),
+			},
+		},
+		feriados,
+		agora: () => new Date(),
+	};
+	painelApp = await startPanel({ core: corePainel });
+	log.info(
+		{ step: "panel_listening", host: "127.0.0.1", port: env.PANEL_PORT },
+		"painel HTTP no ar em 127.0.0.1",
+	);
 };
 
 const encerra = async (
@@ -622,6 +663,22 @@ const encerra = async (
 		// abrupto que este shutdown existe para evitar.
 		motorDreno.abort();
 		motorDreno = undefined;
+	}
+	// Fecha o painel HTTP ANTES do socket e do pool: `app.close()` encerra as
+	// conexões SSE penduradas e espera os requests em voo. Uma conexão SSE deixada
+	// aberta é exatamente o "pendurado no shutdown" que o plano proíbe — e um
+	// request que lesse o `db` após o `closeDb` cairia no `pool.end()`.
+	if (painelApp) {
+		log.info({ step: "panel_close" }, "fechando painel HTTP");
+		try {
+			await painelApp.close();
+		} catch (erro: unknown) {
+			log.warn(
+				{ event: "panel_close_falhou" },
+				`painel nao fechou limpo: ${erro instanceof Error ? erro.message : String(erro)}`,
+			);
+		}
+		painelApp = undefined;
 	}
 	// Fecha o socket ANTES do pool: é o fechamento gracioso que evita corromper o
 	// `useMultiFileAuthState` (Armadilha 4). `end(undefined)` encerra sem logout.
