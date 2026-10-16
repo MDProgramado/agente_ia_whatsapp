@@ -43,6 +43,7 @@ import {
 	reconciliar,
 } from "../infra/db/queries/scheduler.js";
 import { childLogger } from "../infra/logger.js";
+import { encerrarCadenciasSemResposta } from "./catchup-drain.js";
 import { abandon, enqueue } from "./outbox.js";
 
 const log = childLogger("scheduler");
@@ -256,12 +257,17 @@ const cancelarInterrompidos = async (
 };
 
 /**
- * Um tick: agendar → cancelar → reconciliar → re-agendar.
+ * Um tick: agendar → cancelar → reconciliar → encerrar → re-agendar.
  *
  * A re-agenda final só roda quando o reconciliador **mudou** o estado relevante
  * (fechou uma task `sent` e avançou o cursor, ou achou uma conversa em cadência
  * sem task). Sem isso, o toque recém-liberado esperaria um tick inteiro (30s de
  * latência aceitável, mas desnecessária quando o dado já está em mãos).
+ *
+ * O encerramento (D-13) roda **depois** do reconciliador de propósito: é o
+ * reconciliador que avança o cursor para o teto quando o 4º toque é enviado, e o
+ * encerramento só age sobre conversas que já alcançaram esse teto. Encerrar
+ * antes veria o cursor um passo atrás.
  *
  * O overlap guard (`emAndamento`) protege contra um tick lento ainda rodando
  * quando o cron dispara o próximo — sem ele, duas passadas leriam o mesmo estado
@@ -279,6 +285,10 @@ export const startScheduler = (deps: SchedulerDeps): Scheduler => {
 			await agendar(deps, agora);
 			await cancelarInterrompidos(deps, agora);
 			const { fechadas, orfas } = await reconciliar(deps.db, {
+				now: agora,
+				maxToques: deps.maxToques,
+			});
+			await encerrarCadenciasSemResposta(deps.db, {
 				now: agora,
 				maxToques: deps.maxToques,
 			});

@@ -52,6 +52,7 @@ import type { Db } from "../infra/db/client.js";
 import { applyOptOut, updateQualification } from "../infra/db/queries/leads.js";
 import { loadLlmContext } from "../infra/db/queries/llm-context.js";
 import { recordLlmRun } from "../infra/db/queries/llm-runs.js";
+import { cancelarCadenciaPendente } from "../infra/db/queries/scheduler.js";
 import { recordStatusChange } from "../infra/db/queries/status-history.js";
 import { leads } from "../infra/db/schema.js";
 import { childLogger } from "../infra/logger.js";
@@ -615,8 +616,36 @@ export const processInboundFromMe = async (
 	// (e, parte 1) conversa antes da mensagem: `messages.conversation_id` é NOT NULL/FK.
 	const conversa = await pegarOuCriarConversa(db, lead.id);
 
-	// (c) mensagem text/link com chave de dedup.
-	await gravarMensagem(db, conversa.id, evt);
+	// (c) Texto do LEAD: a mensagem e o cancelamento da cadência são UMA coisa só
+	// (Pitfall 3 / D-12). Um lead que respondeu não recebe follow-up — e o
+	// cancelamento tem de ser atômico com a gravação: fora da transação, uma
+	// falha deixaria a mensagem gravada e o follow-up a caminho de quem já
+	// respondeu. O eco do próprio número (`fromMe`) segue por outro ramo.
+	if (evt.fromMe !== true) {
+		await db.transaction(async (txBruto) => {
+			const tx = txBruto as unknown as Db;
+			await gravarMensagem(tx, conversa.id, evt);
+			await cancelarCadenciaPendente(tx, conversa.id, "resposta_do_lead");
+		});
+	} else {
+		// (c') Eco do número dedicado: grava a mensagem e REANCORA a cadência.
+		// D-01/D-02: a âncora é o último outbound que NÃO é follow-up — só a
+		// mensagem manual do Admin reancora; um follow-up não (senão o
+		// `scheduled_for` do próximo toque escorregaria a cada envio).
+		await gravarMensagem(db, conversa.id, evt);
+		if (
+			deveMarcarPrimeiroContatoHumano({
+				fromMe: evt.fromMe,
+				senderPhoneE164: evt.senderPhoneE164,
+				channelPhoneE164: env.CHANNEL_PHONE_E164,
+			})
+		) {
+			await db.execute(sql`
+				update conversations set last_outbound_at = now()
+				where id = ${conversa.id}
+			`);
+		}
+	}
 
 	// (d) O gate de `fromMe`: marcar o primeiro contato humano SÓ no número dedicado.
 	if (
@@ -707,9 +736,20 @@ export const processInboundFromMe = async (
 	}
 
 	// (e) Watermark: o cursor de "até onde já processei" (R-007/T-01-11).
-	await db.execute(sql`
-		update conversations
-		set last_inbound_at = now(), last_processed_at = now()
-		where id = ${conversa.id}
-	`);
+	// Um eco do PRÓPRIO número NÃO é inbound do lead: `last_inbound_at` mede a
+	// resposta do LEAD (D-12/D-13), e sobrescrevê-lo num `fromMe` mataria a
+	// cadência — o predicado `last_inbound_at < last_outbound_at` viraria falso
+	// logo após a mensagem manual do Admin. Só `last_processed_at` avança aqui.
+	if (evt.fromMe === true) {
+		await db.execute(sql`
+			update conversations set last_processed_at = now()
+			where id = ${conversa.id}
+		`);
+	} else {
+		await db.execute(sql`
+			update conversations
+			set last_inbound_at = now(), last_processed_at = now()
+			where id = ${conversa.id}
+		`);
+	}
 };

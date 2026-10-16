@@ -369,3 +369,186 @@ export const reconciliar = async (
 	const orfas = candidatos.filter((c) => c.taskPendenteId === null).length;
 	return { fechadas: linhas.length, orfas };
 };
+
+// ---------------------------------------------------------------------------
+// Dreno de catch-up (R-007, D-07) e cancelamento por resposta (D-12)
+// ---------------------------------------------------------------------------
+
+/** Um job de follow-up/catch-up já vencido, com o fuso da conversa. */
+export interface VencidoOutbox {
+	readonly outboxId: string;
+	readonly conversationId: string;
+	readonly timezone: string;
+	readonly origin: string;
+	/** Instante absoluto (epoch do naive `scheduled_for` interpretado no fuso). */
+	readonly scheduledFor: Date;
+}
+
+export interface VencidosOpts {
+	readonly now: Date;
+	/** Teto defensivo da varredura; o dreno nunca precisa de mais que isto. */
+	readonly limite?: number;
+}
+
+/**
+ * Jobs de cadência vencidos, FIFO por `scheduled_for` — a matéria-prima do dreno.
+ *
+ * O predicado `o.scheduled_for <= now AT TIME ZONE c.timezone` é o mesmo cuidado
+ * de fuso do resto do módulo: `scheduled_for` é `timestamp` sem fuso (wall time
+ * SP), então o `now()` tem de virar o wall time da conversa ANTES de comparar.
+ * Comparar um `now` UTC cru contra um naive adiantaria 3h de manhã.
+ */
+export const vencidosNoOutbox = async (
+	db: Db,
+	opts: VencidosOpts,
+): Promise<VencidoOutbox[]> => {
+	const limite = opts.limite ?? 500;
+	const resultado = await db.execute(sql`
+		SELECT
+			o.id AS outbox_id,
+			o.conversation_id,
+			c.timezone,
+			o.origin,
+			(extract(epoch from (o.scheduled_for AT TIME ZONE c.timezone)) * 1000)::bigint AS scheduled_ms
+		FROM outbox o
+		JOIN conversations c ON c.id = o.conversation_id
+		WHERE o.status = 'pending'
+			AND o.origin IN ('followup', 'catchup')
+			AND o.scheduled_for <= (${opts.now}::timestamptz AT TIME ZONE c.timezone)
+		ORDER BY o.scheduled_for, o.id
+		LIMIT ${limite}
+	`);
+	return (
+		resultado as unknown as {
+			rows: {
+				outbox_id: string;
+				conversation_id: string;
+				timezone: string;
+				origin: string;
+				scheduled_ms: string;
+			}[];
+		}
+	).rows.map((r) => ({
+		outboxId: r.outbox_id,
+		conversationId: r.conversation_id,
+		timezone: r.timezone,
+		origin: r.origin,
+		scheduledFor: new Date(Number(r.scheduled_ms)),
+	}));
+};
+
+/**
+ * Conversas que **já receberam** um follow-up hoje (no fuso da conversa).
+ *
+ * É o teto "1 follow-up por lead por dia": o dreno não manda dois no mesmo dia
+ * civil, mesmo que a cadência tenha dois toques vencidos. `messages.created_at`
+ * é naive (wall time SP) — por isso o `AT TIME ZONE` no `::date`.
+ */
+export const jaEnviouFollowUpHoje = async (
+	db: Db,
+	opts: { readonly now: Date },
+): Promise<Set<string>> => {
+	const resultado = await db.execute(sql`
+		SELECT DISTINCT o.conversation_id AS conversation_id
+		FROM outbox o
+		JOIN conversations c ON c.id = o.conversation_id
+		JOIN messages m ON m.id = o.message_id
+		WHERE o.origin IN ('followup', 'catchup')
+			AND o.status = 'sent'
+			AND (m.created_at AT TIME ZONE c.timezone)::date
+				= (${opts.now}::timestamptz AT TIME ZONE c.timezone)::date
+	`);
+	return new Set(
+		(resultado as unknown as { rows: { conversation_id: string }[] }).rows.map(
+			(r) => r.conversation_id,
+		),
+	);
+};
+
+/**
+ * Marca o job como catch-up **iminente**: muda a origem para `catchup` e o
+ * `scheduled_for` para o instante calculado (base + jitter acumulado). O
+ * `WHERE status='pending'` impede que um job já reservado seja reaproveitado.
+ */
+export const marcarCatchupIminente = async (
+	db: Db,
+	outboxId: string,
+	scheduledFor: Date,
+): Promise<void> => {
+	await db.execute(sql`
+		UPDATE outbox
+		SET origin = 'catchup', scheduled_for = ${scheduledFor}
+		WHERE id = ${outboxId} AND status = 'pending'
+	`);
+};
+
+/** Uma conversa que esgotou a cadência sem resposta — candidata a encerrar. */
+export interface ConversaParaEncerrar {
+	readonly conversationId: string;
+	readonly state: string;
+	readonly followUpIndex: number;
+}
+
+/**
+ * Conversas no teto de toques **sem resposta**: o cursor alcançou `maxToques` e
+ * o último inbound (se houve) é ANTERIOR ao último outbound. Read receipts não
+ * contam — só o watermark de inbound (D-12). Exclui estados terminais para que
+ * uma conversa já encerrada/pausada/handoff não seja reencerrada.
+ */
+export const conversasParaEncerrar = async (
+	db: Db,
+	opts: ReconciliarOpts,
+): Promise<ConversaParaEncerrar[]> => {
+	const resultado = await db.execute(sql`
+		SELECT c.id AS conversation_id, c.state, c.follow_up_index
+		FROM conversations c
+		WHERE c.follow_up_index >= ${opts.maxToques}
+			AND c.state NOT IN ('encerrado', 'pausado', 'awaiting_human', 'human', 'copilot')
+			AND c.closed_reason IS NULL
+			AND c.last_outbound_at IS NOT NULL
+			AND (c.last_inbound_at IS NULL OR c.last_inbound_at < c.last_outbound_at)
+	`);
+	return (
+		resultado as unknown as {
+			rows: {
+				conversation_id: string;
+				state: string;
+				follow_up_index: number | string;
+			}[];
+		}
+	).rows.map((r) => ({
+		conversationId: r.conversation_id,
+		state: r.state,
+		followUpIndex: Number(r.follow_up_index),
+	}));
+};
+
+/**
+ * Derruba a cadência pendente de uma conversa que respondeu (D-12). Cancela a
+ * `scheduled_tasks` pendente E o job `pending`/`reserved` do `outbox` — com o
+ * mesmo motivo auditável (`cancelled_reason` / `last_error`). Nada é apagado
+ * (Pattern 3): a task vira `abandoned` com rastro.
+ *
+ * Chamado dentro da transação do inbound (Pitfall 3): a mensagem do lead e o
+ * cancelamento são um só commit.
+ */
+export const cancelarCadenciaPendente = async (
+	db: Db,
+	conversationId: string,
+	motivo: string,
+): Promise<void> => {
+	await db.execute(sql`
+		UPDATE scheduled_tasks
+		SET status = 'abandoned', cancelled_at = now(), cancelled_reason = ${motivo}
+		WHERE conversation_id = ${conversationId}
+			AND status = 'pending'
+			AND task_type = 'followup'
+	`);
+	await db.execute(sql`
+		UPDATE outbox
+		SET status = 'abandoned', last_error = ${motivo}
+		WHERE conversation_id = ${conversationId}
+			AND status IN ('pending', 'reserved')
+			AND origin IN ('followup', 'catchup')
+	`);
+};
