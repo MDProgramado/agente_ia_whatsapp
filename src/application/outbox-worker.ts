@@ -109,6 +109,15 @@ export interface DrainLoopOpts extends DrainOpts {
 	 * WhatsApp lê isso como um dispositivo novo (STACK §Version Compatibility).
 	 */
 	readonly signal?: AbortSignal;
+	/**
+	 * Relógio fresco por iteração. Sem isto, quem fia o laço no boot passaria UM
+	 * `Date` fixo e todo job da vida do processo seria avaliado contra o instante
+	 * do boot — a janela operacional (AR-007) e a cota do dia (R-023) ficariam
+	 * congeladas, e `reserveNext` continuaria devolvendo jobs já vencidos
+	 * relativos àquele instante. O default (`deps.now`) preserva o comportamento
+	 * de quem já passa um relógio explícito nos testes.
+	 */
+	readonly agora?: () => Date;
 }
 
 /**
@@ -121,8 +130,9 @@ export const drainLoop = async (
 	opts: DrainLoopOpts = {},
 ): Promise<void> => {
 	const intervalMs = opts.intervalMs ?? 30_000;
+	const relogio = opts.agora ?? (() => deps.now);
 	while (!opts.signal?.aborted) {
-		await drainOnce(db, deps, opts);
+		await drainOnce(db, { ...deps, now: relogio() }, opts);
 		await sleep(intervalMs);
 	}
 };

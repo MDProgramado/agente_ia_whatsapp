@@ -15,8 +15,13 @@ import { join } from "node:path";
 import { Cron } from "croner";
 import { sql } from "drizzle-orm";
 import { Client } from "pg";
+import { drenarCatchup } from "./application/catchup-drain.js";
 import { BarramentoEventos } from "./application/event-bus.js";
 import { processInboundFromMe } from "./application/inbound-handler.js";
+import { drainLoop } from "./application/outbox-worker.js";
+import { startScheduler } from "./application/scheduler.js";
+import { CAP_MENSAGENS } from "./application/shadow.js";
+import { criarBaileysChannel } from "./channel/baileys/adapter.js";
 import { readCapabilities } from "./channel/baileys/capabilities.js";
 import { normalizeJid } from "./channel/baileys/jid-resolver.js";
 import {
@@ -28,8 +33,13 @@ import {
 import { createSession } from "./channel/baileys/session.js";
 import { translateDisconnect } from "./channel/baileys/signals.js";
 import { ensureDataDirs, env, logsDir } from "./config/env.js";
+import { feriadosNacionais } from "./domain/feriados-br.js";
 import { closeDb, openDb } from "./infra/db/client.js";
 import { dailyReport } from "./infra/db/queries/daily-report.js";
+import {
+	lerFeriadosOverride,
+	lerMaxToques,
+} from "./infra/db/queries/settings.js";
 import { checkEnv, falhasDeEnv, formatarFalhaEnv } from "./infra/env-check.js";
 import {
 	type Achado,
@@ -86,6 +96,15 @@ let canalEstado: BaileysState = "unknown";
 /** Handles do "motor" (monitor de saúde + cron do relatório), parados no encerra. */
 let monitorSaude: ReturnType<typeof startHealthMonitor> | undefined;
 let cronRelatorio: Cron | undefined;
+
+/**
+ * O "motor" da cadência (03-02): o scheduler é o produtor do `outbox`, e o
+ * `drainLoop` é quem o drena. Ambos escrevem no banco, então são parados ANTES
+ * do `closeDb` — um tick que disparasse durante o fechamento do pool cairia no
+ * meio de um `pool.end()` e gravaria `scheduled_tasks` pela metade.
+ */
+let motorScheduler: ReturnType<typeof startScheduler> | undefined;
+let motorDreno: AbortController | undefined;
 
 /**
  * Contagem com `::int`: o driver devolve `count(*)` como `bigint`, que serializa
@@ -478,6 +497,104 @@ const main = async (): Promise<void> => {
 		{ step: "daily_report_cron", at: "23:55", tz: env.TZ },
 		"cron do relatorio diario armado",
 	);
+
+	// (l) MOTOR DA CADÊNCIA (03-02) — dreno de catch-up + `drainLoop` + scheduler.
+	//     Depois do canal armado e do `migrate()`; antes de tudo, os três são
+	//     PRODUTORES e não senders: nenhum chama o método de envio do canal. O
+	//     único choke-point continua sendo o `dispatcher`, e o `drainLoop` só o
+	//     invoca — com o gate reavaliado a cada job (`outbox-worker.ts`).
+	const canal = criarBaileysChannel({
+		db: conn.db,
+		sock,
+		// `criarNotifier` devolve um objeto sem estado (um `spawn` por chamada);
+		// um segundo exemplar aqui custa nada e mantém o diff da etapa (j) intacto.
+		notifier: criarNotifier(),
+	});
+
+	// Feriados: nacionais (D-09, puros — `feriados-br.ts` nunca toca banco) +
+	// o override manual do `settings`, já validado por `lerFeriadosOverride`.
+	// Ano corrente + próximo: o processo pode atravessar a virada e ainda assim
+	// saber que 01-01 é feriado.
+	const ano = new Date().getFullYear();
+	const feriados = [
+		...feriadosNacionais(ano),
+		...feriadosNacionais(ano + 1),
+		...(await lerFeriadosOverride(conn.db)),
+	];
+	const tetoToques = await lerMaxToques(conn.db);
+
+	// O catch-up roda UMA vez, no boot. `isCatchupDrain` é decidido AQUI, como
+	// parâmetro — NUNCA lido de `settings`: um operador não pode religar um
+	// dreno que já rodou, ou o R-007 viraria um loop de reenvio. Vai em
+	// background para não atrasar o boot: ele só REAGENDA jobs (limite de 3
+	// iminentes + o resto adiado), e quem envia é o `drainLoop` abaixo.
+	const CATCHUP_DRAIN_FIRME = true;
+	void drenarCatchup(conn.db, {
+		now: new Date(),
+		isCatchupDrain: CATCHUP_DRAIN_FIRME,
+		feriados,
+	}).catch((erro: unknown) => {
+		log.error(
+			{ event: "catchup_drain_falhou" },
+			`dreno de catch-up falhou: ${erro instanceof Error ? erro.message : String(erro)}`,
+		);
+	});
+
+	// `ctx` do gate (D-05): os campos de CONFIGURAÇÃO, lidos uma vez no boot.
+	// `sentToday` é atualizado pelo próprio `dispatch` a cada job (via
+	// `channel.readQuota`); `newContactsToday` vem dos contadores do dia. O
+	// relógio do dreno é fresco a cada iteração (`agora`), senão a janela
+	// operacional e a cota congelariam no instante do boot.
+	const contadores = await conn.db.execute(sql`
+		select kind, count from daily_counters where day = ${diaEmSaoPaulo(new Date())}
+	`);
+	const linhasContador = contadores.rows as {
+		kind: string;
+		count: number | string;
+	}[];
+
+	motorDreno = new AbortController();
+	void drainLoop(
+		conn.db,
+		{
+			channel: canal,
+			now: new Date(),
+			ctx: {
+				tz: env.TZ,
+				windowStartHour: env.WINDOW_START_HOUR,
+				windowEndHour: env.WINDOW_END_HOUR,
+				dailyMessageLimit: env.DAILY_MESSAGE_LIMIT,
+				dailyMessageCap: CAP_MENSAGENS,
+				newContactsToday: Number(
+					linhasContador.find((l) => l.kind === "new_contacts")?.count ?? 0,
+				),
+			},
+		},
+		{ signal: motorDreno.signal, agora: () => new Date() },
+	).catch((erro: unknown) => {
+		log.error(
+			{ event: "drain_loop_falhou" },
+			`drainLoop do outbox caiu: ${erro instanceof Error ? erro.message : String(erro)}`,
+		);
+	});
+
+	// O scheduler é o PRODUTOR: lê estado e chama `enqueue`. Tick de 30s (D-04),
+	// single-instance — uma segunda instância correria contra o mesmo estado e
+	// competiria pelos mesmos `INSERT`.
+	motorScheduler = startScheduler({
+		db: conn.db,
+		now: () => new Date(),
+		feriados,
+		maxToques: tetoToques,
+	});
+	log.info(
+		{
+			step: "cadence_motor",
+			catchup_drain: CATCHUP_DRAIN_FIRME,
+			max_toques: tetoToques,
+		},
+		"motor armado: scheduler 30s + drainLoop + catch-up",
+	);
 };
 
 const encerra = async (
@@ -491,6 +608,20 @@ const encerra = async (
 	if (keepAlive) {
 		clearInterval(keepAlive);
 		keepAlive = undefined;
+	}
+	// O motor da cadência escreve no banco: para ANTES do socket e do pool.
+	// Um tick que disparasse depois do `closeDb` cairia no meio de um
+	// `pool.end()` e gravaria `scheduled_tasks` pela metade.
+	if (motorScheduler) {
+		motorScheduler.stop();
+		motorScheduler = undefined;
+	}
+	if (motorDreno) {
+		// Aborta o sinal: o laço termina a espera atual e não pega um job novo.
+		// `drainOnce` em andamento completa — matá-lo a meio envio seria o kill
+		// abrupto que este shutdown existe para evitar.
+		motorDreno.abort();
+		motorDreno = undefined;
 	}
 	// Fecha o socket ANTES do pool: é o fechamento gracioso que evita corromper o
 	// `useMultiFileAuthState` (Armadilha 4). `end(undefined)` encerra sem logout.
