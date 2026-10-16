@@ -86,7 +86,7 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 - [x] **NFRQ-02**: Backup manual para pasta local, versionado por data/hora, com restauração sem serviços externos (R-032)
 - [x] **NFRQ-03**: Modo automático total após a 1ª mensagem manual; bot conduz sozinho e só chama nos handoffs; após handoff → modo copiloto (R-034)
 - [x] **NFRQ-04**: Logs em arquivo + painel de erros + notificação local imediata em falhas críticas (WhatsApp desconectado, API de IA fora, PostgreSQL parado, suspeita de banimento) (R-045) — **parcela deferida para a Fase 2 (plano 02-02, P-006):** a transição `engagement_mode = awaiting_human` + escrita de `handoff_active` na mesma transação do evento de handoff (truth do must_have do 01-05). A mecânica (logs pino + `event_log` + notificação local + guarda AR-010 que LÊ o sinal) está entregue nesta fase.
-- [ ] **NFRQ-05**: Painel de controle: lista de leads + chat + sugestões da IA + histórico + botões de ação rápida (pausar bot, assumir, devolver ao bot, copiloto); exibe modo em tempo real; sugestões só enviadas com ação explícita (R-046)
+- [x] **NFRQ-05**: Painel de controle: lista de leads + chat + sugestões da IA + histórico + botões de ação rápida (pausar bot, assumir, devolver ao bot, copiloto); exibe modo em tempo real; sugestões só enviadas com ação explícita (R-046)
 - [x] **NFRQ-06**: Roda em Windows: PostgreSQL local, sessão WhatsApp, painel e notificações nativas compatíveis (R-047)
 
 ### Equipe e Arquitetura (EQUP)
@@ -210,7 +210,7 @@ Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/0
 | NFRQ-02 | Phase 1 | Complete |
 | NFRQ-03 | Phase 2 | Complete |
 | NFRQ-04 | Phase 1 | Complete (transição `awaiting_human` deferida — Fase 2, P-006) |
-| NFRQ-05 | Phase 3 | Pending |
+| NFRQ-05 | Phase 3 | Complete |
 | NFRQ-06 | Phase 1 | Complete |
 | EQUP-01 | Phase 1 | Complete |
 | EQUP-02 | Phase 1 | Complete |

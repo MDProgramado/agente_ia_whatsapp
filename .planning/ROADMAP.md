@@ -128,7 +128,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 03-03-PLAN.md — Painel backend: Fastify bind `127.0.0.1` + `Host` guard + token Bearer (`timingSafeEqual`) + `@fastify/static` + REST read-only (leads/chat/histórico) + ações auditadas + envio pelo gate (`origin='admin'`) + kill switch unificado + SSE (NFRQ-05)
+- [x] 03-03-PLAN.md — Painel backend: Fastify bind `127.0.0.1` + `Host` guard + token Bearer (`timingSafeEqual`) + `@fastify/static` + REST read-only (leads/chat/histórico) + ações auditadas + envio pelo gate (`origin='admin'`) + kill switch unificado + SSE (NFRQ-05)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -168,7 +168,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Fundação, Canal e Gate de Envio | 4/5 | In Progress (01-03 deferido — `P-004` (corrida `requestPairingCode` x WS open) corrigido em `2d64728`. Bloqueio atual: `P-007` (socket cai após `channel_ready`; rc14 vs servidor WhatsApp). Ambos deferidos; não bloqueiam Fase 3.) |  |
 | 2. IA, Handoff e Shadow Mode | 4/4 | Complete   | 2026-10-14 |
-| 3. Cadência, Operação e Painel | 2/5 | In Progress|  |
+| 3. Cadência, Operação e Painel | 3/5 | In Progress|  |
 | 4. Piloto, Calibração e Apuração | 0/2 | Not started | - |
 
 ## Notas de Cobertura e Decisões de Mapeamento
