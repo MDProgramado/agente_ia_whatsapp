@@ -5,9 +5,9 @@
  * guard AR-007 decide, e a fila pergunta "quando reprocessar?". Se fosse código
  * inline no guard, os dois divergiriam com o tempo.
  *
- * **A janela é do negócio, não da máquina.** Se o código usasse `getHours()`,
- * o mesmo instante aprobaria ou barraria dependendo do TZ do processo. Tudo aqui
- * formata explicitamente no fuso recebido.
+ * **A janela é do negócio, não da máquina.** Se o código usasse a hora local do
+ * processo (um `Date` sem fuso explícito), o mesmo instante aprobaria ou barraria
+ * dependendo do TZ da máquina. Tudo aqui formata explicitamente no fuso recebido.
  */
 
 import { ehFeriado } from "./feriados-br.js";
