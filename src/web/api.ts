@@ -249,9 +249,15 @@ export interface ContadoresDiarios {
 export interface ItemFilaHandoff {
 	id: string;
 	conversationId: string;
-	reason: string;
-	createdAt: string;
+	leadId: string;
 	leadName: string | null;
+	phoneNumber: string;
+	triggeredBy: string;
+	triggerDetail: string | null;
+	triggerValue: string | null;
+	excerpt: string;
+	botStoppedAt: string;
+	createdAt: string;
 }
 
 export interface ResumoSistema {
