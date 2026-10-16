@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 3
-status: completed
-last_updated: "2026-10-15T17:38:56.435Z"
+status: executing
+last_updated: "2026-10-16T11:55:02.695Z"
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 9
+  total_plans: 14
   completed_plans: 8
   percent: 25
 ---
@@ -27,7 +27,7 @@ Ver: `.planning/PROJECT.md` (atualizado 2026-09-28)
 Current Phase: 3
 Fase: 3 de 4 (Cadência, Operação e Painel) — **contexto capturado em `03-CONTEXT.md` (2026-10-15); 3 planos a planejar**; Fase 2 com implementação completa (4/4, gate `manter-shadow`); Fase 1 com 01-03 deferido (P-004 ✅ corrigido em `2d64728`; bloqueio atual **P-007** — ambos deferidos, não bloqueiam a Fase 3)
 Plano: 0 de 3 na fase atual (nenhum plano ainda planejado; `03-CONTEXT.md` é o artefato de retomada)
-Status: Phase 03 context captured (`03-CONTEXT.md`, 2026-10-15) — aguardando `plan-phase 3`; gate de saída da Fase 2 segue `manter-shadow` (promoção NÃO aprovada, D-18)
+Status: Ready to execute
 Última atividade: 2026-10-14 — Wave 4 (fechamento de lacunas): plano 02-04 concluído com 3/3 tasks (TDD). Entregues: **CR-01** — Guard 0 (`deveMarcarPrimeiroContatoHumano`) passa a comparar o **emissor** E.164 (`EventoInbound.senderPhoneE164`, carimbado pelo runtime Baileys a partir de `sock.user.id` via `normalizeJid`) com `env.CHANNEL_PHONE_E164`, não o `chatId` (que num `fromMe` é o JID do lead) — a 1ª mensagem manual do Admin volta a setar `first_contact_by_human` e a mover `novo → aquecimento`; **CR-02** — `duvida_complexa` entra em `INTENCOES_HANDOFF` (R-065/FLUP-09) com e2e atômico + silêncio total; **WR-03** — passo (d) do inbound dobrado em transação única; warn único `jid_proprio_sem_e164` no boot (pareamento LID). Suíte **51 arquivos / 274 testes verdes**; `tsc` exit 0 e biome exit 0 (0 erros). Commits: `757f728`/`aacaa69` (T1), `0a51cc5`/`2e3c56d` (T2), `1b40695` (format).
 Última atividade anterior: 2026-10-14 — Wave 3: plano 02-03 (Shadow review e gate de saída) concluído com 3/3 tasks. Entregues: CLI de revisão em shadow (`shadow:list/approve/edit/discard`; decisões append-only em `review_events`, nunca `UPDATE messages`), kill switch global de 1 comando (`mode pause/resume` → `settings.operational_mode` + trilha append-only em `event_log` com `event_type='operational_mode_changed'`), correção de status pelo Admin (`status:corrigir`), confirmação humana de handoff (`handoff:ack` idempotente + auditoria, D-15), pós-gate de conteúdo L4 (`src/domain/llm/post-gate.ts`; CONV-07) validado por corpus adversário (falso-negativo = 0), relatório de shadow gerado do banco (`npm run shadow:report`, gate D-17) e harness de bake-off (`npm run bake-off`, D-10) com veredito JSON commitado. Suíte **49 arquivos / 268 testes verdes**; `tsc` e biome limpos. **Gate de saída: `npm run shadow:report` = FAIL (0 evidência) → Admin decidiu `manter-shadow`, promoção shadow→ativo NÃO aprovada (D-18).** 01-03 segue deferido (P-004 `CREDS_INVALID` — ✅ corrigido em `2d64728` em 2026-10-15; bloqueio atual **P-007**).
 
