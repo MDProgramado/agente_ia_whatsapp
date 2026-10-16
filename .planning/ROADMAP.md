@@ -122,7 +122,7 @@ Plans:
 - [ ] 03-02-PLAN.md — Scheduler + catch-up: `scheduler.ts` (tick 30s produtor de `outbox`, idempotência `flup:{conv}:{idx}`, cancelamento auditável) + `catchup-drain.ts` (`FIRE_ONCE`, ≤3/10min, 1/lead/dia, jitter, adiado nunca descartado) + encerramento "sem resposta" + boot do motor em `index.ts` (WHS-02, FLUP-01/02/03)
 - [ ] 03-03-PLAN.md — Painel backend: Fastify bind `127.0.0.1` + `Host` guard + token Bearer (`timingSafeEqual`) + `@fastify/static` + REST read-only (leads/chat/histórico) + ações auditadas + envio pelo gate (`origin='admin'`) + kill switch unificado + SSE (NFRQ-05)
 - [ ] 03-04-PLAN.md — Painel frontend: React 19 + Vite + Tailwind v4, layout denso 4 painéis, cabeçalho em tempo real ("BOT ATIVO" vs "MÃO HUMANA ATIVA — BOT EM SILÊNCIO" + motivo + contador + janela + fila de handoff), sugestões só com ação explícita, kill switch confirmado, notificação/chime (NFRQ-05)
-- [ ] 03-05-PLAN.md — CRM + copiloto + agendamento: migration `0008_pipeline_crm.sql` (pipeline 9 status com backfill + tags/notas/tarefas) + `pipeline.ts` + `copilot.ts` (sugere nunca envia) + `appointment.ts` (confirmação/lembrete; remarcar/cancelar → handoff) + rotas/UI de CRM + ADRs 014/015 e reconciliação de docs (FLUP-06, FLUP-08, CRM-01, CRM-03)
+- [ ] 03-05-PLAN.md — CRM + copiloto + agendamento: migration `0008_pipeline_crm.sql` (pipeline 9 status com backfill + tags/notas/tarefas) + `pipeline.ts` + `copilot.ts` (sugere nunca envia + nota automática da IA via `LlmPort`, `author_type='ia'`) + `appointment.ts` (confirmação/lembrete no `outbox` `origin='bot'`; remarcar/cancelar → handoff) + rotas/UI de CRM + ADRs 014/015 e reconciliação de docs (FLUP-06, FLUP-08, CRM-01, CRM-03)
 
 ### Phase 4: Piloto, Calibração e Apuração
 

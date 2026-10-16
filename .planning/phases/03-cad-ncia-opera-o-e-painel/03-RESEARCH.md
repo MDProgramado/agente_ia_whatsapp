@@ -515,7 +515,7 @@ await app.listen({ host: "127.0.0.1", port: env.PANEL_PORT });   // nunca 0.0.0.
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **O `dispatcher` já devolve um resultado estruturado que o scheduler possa consumir?** **(RESOLVIDO no plano 03-02)**
    - What we know: `outbox-worker.ts` tem `DrainResult`; `dispatcher.ts` é o choke-point.
