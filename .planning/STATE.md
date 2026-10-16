@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 3
+current_phase: 03
 status: executing
-last_updated: "2026-10-16T11:55:02.695Z"
+last_updated: "2026-10-16T13:15:15.565Z"
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 14
-  completed_plans: 8
-  percent: 25
+  total_plans: 16
+  completed_plans: 10
+  percent: 27
 ---
 
 # Estado do Projeto
@@ -20,15 +20,16 @@ progress:
 Ver: `.planning/PROJECT.md` (atualizado 2026-09-28)
 
 **Valor central:** Quando o bot assume uma conversa, conduz com naturalidade suficiente para gerar reuniões agendadas sem nunca cruzar uma fronteira proibida — e para no instante exato em que o humano precisa assumir.
-**Foco atual:** Phase 3 (Cadência, Operação e Painel) — contexto capturado (`03-CONTEXT.md`, 2026-10-15); próximo passo = `plan-phase 3`
+**Foco atual:** Phase 3 (Cadência, Operação e Painel) — plano `03-01` (**núcleo de cadência, calendário BR e settings**) concluído e commitado; próximo passo = `03-02` (Scheduler/dreno).
 
 ## Posição Atual
 
-Current Phase: 3
-Fase: 3 de 4 (Cadência, Operação e Painel) — **contexto capturado em `03-CONTEXT.md` (2026-10-15); 3 planos a planejar**; Fase 2 com implementação completa (4/4, gate `manter-shadow`); Fase 1 com 01-03 deferido (P-004 ✅ corrigido em `2d64728`; bloqueio atual **P-007** — ambos deferidos, não bloqueiam a Fase 3)
-Plano: 0 de 3 na fase atual (nenhum plano ainda planejado; `03-CONTEXT.md` é o artefato de retomada)
-Status: Ready to execute
-Última atividade: 2026-10-14 — Wave 4 (fechamento de lacunas): plano 02-04 concluído com 3/3 tasks (TDD). Entregues: **CR-01** — Guard 0 (`deveMarcarPrimeiroContatoHumano`) passa a comparar o **emissor** E.164 (`EventoInbound.senderPhoneE164`, carimbado pelo runtime Baileys a partir de `sock.user.id` via `normalizeJid`) com `env.CHANNEL_PHONE_E164`, não o `chatId` (que num `fromMe` é o JID do lead) — a 1ª mensagem manual do Admin volta a setar `first_contact_by_human` e a mover `novo → aquecimento`; **CR-02** — `duvida_complexa` entra em `INTENCOES_HANDOFF` (R-065/FLUP-09) com e2e atômico + silêncio total; **WR-03** — passo (d) do inbound dobrado em transação única; warn único `jid_proprio_sem_e164` no boot (pareamento LID). Suíte **51 arquivos / 274 testes verdes**; `tsc` exit 0 e biome exit 0 (0 erros). Commits: `757f728`/`aacaa69` (T1), `0a51cc5`/`2e3c56d` (T2), `1b40695` (format).
+Current Phase: 03
+Fase: 3 de 4 (Cadência, Operação e Painel) — **plano 03-01 concluído (núcleo de cadência puro: `cadence.ts`, `feriados-br.ts`, `business-hours.ts`, `queries/settings.ts`, migração 0007)**; 4 planos restantes (03-02..03-05); Fase 2 com implementação completa (4/4, gate `manter-shadow`); Fase 1 com 01-03 deferido (P-004 ✅ corrigido em `2d64728`; bloqueio atual **P-007** — ambos deferidos, não bloqueiam a Fase 3)
+Plano: 1 de 5 na fase atual (03-01 concluído; 03-02 é o próximo)
+Status: Executing Phase 03
+Última atividade: 2026-10-16 — plano **03-01** concluído com 3/3 tasks (executor, main tree). Entregues: **migração 0007** (`scheduled_tasks.follow_up_index` + índice único **parcial** `(conversation_id, follow_up_index) WHERE status='pending'` — D-05), **`src/domain/cadence.ts`** (cadência `1h→1d→3d→7d` ancorada em `last_outbound_at`, nunca reancorada — Pitfall 2; `max_touches` default 4 / **teto duro 4**; `proximaTentativa` lança para índice ≥4 por desenho — o chamador filtra com `cadenciaEncerrada`), **`src/domain/feriados-br.ts`** (Páscoa por Meeus + P−47/P−2/P+60 + 9 fixos — Pitfall 8) e **`src/domain/business-hours.ts`** (`ehDiaUtil`/`nextWindow`/`proximoDiaUtil` com `feriados` como último parâmetro default `[]`; teto de 14 dias no passo de dias úteis), e **`src/infra/db/queries/settings.ts`** (leitura jsonb hostil com `#>> '{}'` — Pitfall 10). Suíte **312 testes verdes**; `tsc` exit 0 e biome 0 erros (16 warnings pré-existentes). Commits `3524dcc` (T1), `a7d81d8`/`9a272f4` (T2 RED/GREEN), `2846a53`/`053999d` (T3 RED/GREEN), `81acc7a` (docs AC literal). Requirements `FLUP-01..03` fechados.
+Última atividade anterior: 2026-10-14 — Wave 4 (fechamento de lacunas): plano 02-04 concluído com 3/3 tasks (TDD). Entregues: **CR-01** — Guard 0 (`deveMarcarPrimeiroContatoHumano`) passa a comparar o **emissor** E.164 (`EventoInbound.senderPhoneE164`, carimbado pelo runtime Baileys a partir de `sock.user.id` via `normalizeJid`) com `env.CHANNEL_PHONE_E164`, não o `chatId` (que num `fromMe` é o JID do lead) — a 1ª mensagem manual do Admin volta a setar `first_contact_by_human` e a mover `novo → aquecimento`; **CR-02** — `duvida_complexa` entra em `INTENCOES_HANDOFF` (R-065/FLUP-09) com e2e atômico + silêncio total; **WR-03** — passo (d) do inbound dobrado em transação única; warn único `jid_proprio_sem_e164` no boot (pareamento LID). Suíte **51 arquivos / 274 testes verdes**; `tsc` exit 0 e biome exit 0 (0 erros). Commits: `757f728`/`aacaa69` (T1), `0a51cc5`/`2e3c56d` (T2), `1b40695` (format).
 Última atividade anterior: 2026-10-14 — Wave 3: plano 02-03 (Shadow review e gate de saída) concluído com 3/3 tasks. Entregues: CLI de revisão em shadow (`shadow:list/approve/edit/discard`; decisões append-only em `review_events`, nunca `UPDATE messages`), kill switch global de 1 comando (`mode pause/resume` → `settings.operational_mode` + trilha append-only em `event_log` com `event_type='operational_mode_changed'`), correção de status pelo Admin (`status:corrigir`), confirmação humana de handoff (`handoff:ack` idempotente + auditoria, D-15), pós-gate de conteúdo L4 (`src/domain/llm/post-gate.ts`; CONV-07) validado por corpus adversário (falso-negativo = 0), relatório de shadow gerado do banco (`npm run shadow:report`, gate D-17) e harness de bake-off (`npm run bake-off`, D-10) com veredito JSON commitado. Suíte **49 arquivos / 268 testes verdes**; `tsc` e biome limpos. **Gate de saída: `npm run shadow:report` = FAIL (0 evidência) → Admin decidiu `manter-shadow`, promoção shadow→ativo NÃO aprovada (D-18).** 01-03 segue deferido (P-004 `CREDS_INVALID` — ✅ corrigido em `2d64728` em 2026-10-15; bloqueio atual **P-007**).
 
 Verificação de fase (2026-10-13, gsd-verifier): **PASS_WITH_NOTES** / `gaps_found` — 3/5 Success Criteria ✓ (SC2, SC3, SC4); SC1 deferido (01-03); SC5 parcial à época (encarregado) — **nomeado em 2026-10-13** (`docs/lgpd/encarregado-dpo.md`). Relatório: `.planning/phases/01-funda-o-canal-e-gate-de-envio/VERIFICATION.md`.
@@ -40,14 +41,14 @@ Verificação de fase 2 (2026-10-14, `362cedc`): **gaps_found** — 2 achados Cr
 - ✅ **Toast R-013 exibido de verdade (2026-10-05):** após o registro manual do AUMID `WhatsAppProspect.Automacao` em `HKCU\SOFTWARE\Classes\AppUserModelId`, o `npm run notify -- -Title "Teste R-013" -Message "Verificacao" -Urgent` exibiu o toast "WhatsApp Prospecção" — atestado por humano. Causa raiz confirmada: ausência do registro do AUMID (o `CreateToastNotifier($Aumid)` emite para um AUMID que o Windows desconhece e descarta em silêncio). Fecha a Task 6 do plano 01-01 (P-001, `docs/pendencias.md`).
 - ✅ **Restauração de backup validada (2026-10-13):** `backup.ps1 -Verify` terminou com exit 0 — `pg_restore` numa base temporária com as 4 contagens conferidas contra a origem: leads 2=2, conversations 0=0, messages 0=0, daily_counters 0=0 (NFRQ-02, R-032). Um `pg_dump` que ninguém restaurou é uma hipótese; este foi restaurado.
 
-Progresso: [████████░░] 8 de 9 planos com SUMMARY (25%) — **Fase 2 completa (4/4)**; Fase 1 com 4 de 5 efetivos (01-03 deferido); **Fase 3 registrada e em contexto (0/3)**; Fase 4 não iniciada.
+Progresso: [█████████░] 9 de 10 planos com SUMMARY (27%) — **Fase 2 completa (4/4)**; Fase 1 com 4 de 5 efetivos (01-03 deferido); **Fase 3 em execução (1/5 — plano 03-01 concluído)**; Fase 4 não iniciada.
 
 ## Métricas de Desempenho
 
 **Velocidade:**
 
 - Planos concluídos: 3
-- Duração média: ~218 min (01-01: 150 min; 01-02: 240 min; 01-04: 263 min)
+- Duração média: ~218 min (01-01: 150 min; 01-02: 240 min; 01-04: 263 min; **03-01: 36 min**)
 - Tempo total de execução: ~653 min
 
 **Por Fase:**
@@ -56,7 +57,7 @@ Progresso: [████████░░] 8 de 9 planos com SUMMARY (25%) — 
 |------|--------|-------------|------------|-------------|
 | 1. Fundação, Canal e Gate | 5 | 5 | 3 | 218 min |
 | 2. IA, Handoff e Shadow | 4 | 4 | 4 | ~90 min (02-04/cr-01+cr-02: 5h 42m) |
-| 3. Cadência, Operação e Painel | 3 | 0 | 0 | — |
+| 3. Cadência, Operação e Painel | 5 | 5 | 1 | 36 min (03-01) |
 | 4. Piloto, Calibração e Apuração | 2 | 0 | 0 | — |
 
 *Atualizado após cada plano concluído*
@@ -175,6 +176,19 @@ Discussão em modo `--auto` (passada única, 5 áreas). Decisões D-01..D-18 em 
 - **Ajustes em `tests/application/qualification.test.ts` e `shadow.test.ts`** (além dos 7 arquivos de `files_modified`): passaram a construir eventos inbound com `chatId` = JID do lead + `senderPhoneE164` — o novo contrato CR-01. Autorizado pelo plano.
 - **Desvio Rule 3 (format):** `biome check` acusou 2 erros de **formato** (não de lint) em arquivos criados/editados neste plano; corrigidos por `biome check --write` e commitados em `1b40695` (style).
 
+### Decisões do Plano 03-01 (2026-10-16, núcleo de cadência, calendário BR e settings)
+
+- **Cadência ancorada em `last_outbound_at`, nunca reancorada.** `proximaTentativa` projeta `1h→1d→3d→7d` a partir do último outbound; um follow-up novo **não** move a âncora (Pitfall 2). Os deltas vivem em `DELTAS_TOQUE` (as const), e a data é calculada sem `new Date()` no corpo (AC literal por grep = 0 matches).
+- **`max_touches`: default 4, teto duro 4.** `maxToques` faz clamp em `MAX_TOQUES_TETO` (=4); a mitigação T-03-01 é o teto, não o default configurável. Mesmo um valor hostil (`99`) em `settings` clampa em 4.
+- **Índice único é PARCIAL (D-05):** `scheduled_tasks (conversation_id, follow_up_index) WHERE status='pending'`. É o único jeito de permitir reabertura de um toque concluído (`done`/`abandoned`) sem colidir com o índice — dois `pending` do mesmo par levantam `23505`; um `pending` após um `done` é aceito.
+- **Feriados BR por Meeus (Pitfall 8):** `pascoa` (algoritmo de Meeus), móveis em P−47 (Carnaval seg), P−2 (Sexta-feira Santa) e P+60 (Corpus Christi), mais 9 fixos. `ehFeriado` recebe a lista por **parâmetro** — nada de relógio/estado global nas funções de domínio.
+- **`feriados` é o ÚLTIMO parâmetro, default `[]`.** Assinaturas posicionais de `ehDiaUtil`/`nextWindow` da Fase 1/2 ficam intactas; os guards existentes seguem passando sem alteração. `proximoDiaUtil(instante, tz, feriados, inicio=7)` é o novo helper.
+- **Teto do passo de dias úteis subiu de 7 → 14 dias** em `nextWindow`/`proximoDiaUtil` — o pior caso com feriados encadeados (ex.: Natal→Ano Novo) não caberia em 7.
+- **`#>> '{}'` (Pitfall 10) é o único jeito de ler jsonb escalar em texto.** `lerSettings` usa `#>> '{}'` (3 ocorrências em `settings.ts`); a coluna `jsonb` rejeita `::text` para escalares de forma confiável.
+- **`proximaTentativa` LANÇA para índice ≥4 — por desenho.** O contrato é explícito: o chamador (Scheduler do 03-02) deve filtrar com `cadenciaEncerrada(follow_up_index, max)` antes de chamar. Não é bug; é uma fronteira testada.
+- **Deviation Rule 2 (verificação real de jsonb):** descoberto em execução que o driver manda a string JS crua e o Postgres a parseia como JSON — para gravar uma string JSON genuína a fixture precisa de cast `::jsonb` explícito. O Drizzle ainda faz `JSON.parse` defensivo, então a string JSON `2` chega como número `2` (≤ teto: inofensivo); o teste passou a assertar também o caso que a mitigação cobre de fato (string `99` → clamp 4). *(Detalhe de plataforma registrado para o 03-02.)*
+- **Nada ainda consome `lerMaxToques`/`lerFeriadosOverride`.** Os leitores existem e estão testados, mas o **fio no boot** (carregar settings) e o uso no **tick de 30s** são escopo do 03-02 — readiness, não lacuna.
+
 ### Todos Pendentes
 
 De `.planning/todos/pending/`:
@@ -225,15 +239,16 @@ Nenhum ainda.
 
 ## Continuidade de Sessão
 
-Última sessão: 2026-10-15
-Parou em: **Fase 3 (Cadência, Operação e Painel)** — contexto capturado em `03-CONTEXT.md` (`--auto`, passada única, decisões D-01..D-26); tensão do ROADMAP resolvida como supersession D-02. Próximo passo = `plan-phase 3`.
-Parou em (anterior): Fase 2, plano **02-04** (fechamento de lacunas) concluído (3/3 tasks) — **CR-01** (Guard 0 pelo emissor E.164 via `EventoInbound.senderPhoneE164` carimbado pelo runtime; `novo → aquecimento` volta a funcionar) e **CR-02** (`duvida_complexa` em `INTENCOES_HANDOFF`, e2e atômico + silêncio), WR-03 (passo (d) transacional) e warn `jid_proprio_sem_e164` no boot. Suíte **51 arquivos / 274 testes verdes**; `tsc` exit 0 e biome exit 0. Commits `757f728`/`aacaa69`/`0a51cc5`/`2e3c56d`/`1b40695`.
+Última sessão: 2026-10-16
+Parou em: **Fase 3 (Cadência, Operação e Painel), plano 03-01 concluído** (3/3 tasks; 36 min) — migração **0007** (`follow_up_index` + índice único parcial `WHERE status='pending'`), `src/domain/cadence.ts` (cadência 1h/1d/3d/7d ancorada em `last_outbound_at`, `max_touches` teto 4, `cadenciaEncerrada`, `proximaTentativa` lança p/ índice ≥4), `src/domain/feriados-br.ts` (Meeus + móveis + fixos), `src/domain/business-hours.ts` (`feriados` como último parâmetro default `[]`; teto 14 dias) e `src/infra/db/queries/settings.ts` (`#>> '{}'`). Suíte **312 testes verdes**; `tsc` exit 0; biome 0 erros. Requirements FLUP-01..03 fechados. Commits `3524dcc`/`a7d81d8`/`9a272f4`/`2846a53`/`053999d`/`81acc7a`. **Próximo passo = plano `03-02` (Scheduler/dreno)** — inclui o fio de boot (`lerMaxToques`/`lerFeriadosOverride`) e o tick de 30s; a query de candidatos deve usar o mesmo `max` de `cadenciaEncerrada`.
+Parou em (anterior): Fase 3 — contexto capturado em `03-CONTEXT.md` (`--auto`, decisões D-01..D-26); tensão do ROADMAP resolvida como supersession D-02.
+Parou em (anterior-2): Fase 2, plano **02-04** (fechamento de lacunas) concluído (3/3 tasks) — **CR-01** (Guard 0 pelo emissor E.164 via `EventoInbound.senderPhoneE164` carimbado pelo runtime; `novo → aquecimento` volta a funcionar) e **CR-02** (`duvida_complexa` em `INTENCOES_HANDOFF`, e2e atômico + silêncio), WR-03 (passo (d) transacional) e warn `jid_proprio_sem_e164` no boot. Suíte **51 arquivos / 274 testes verdes**; `tsc` exit 0 e biome exit 0. Commits `757f728`/`aacaa69`/`0a51cc5`/`2e3c56d`/`1b40695`.
 Parou em (anterior-2): Fase 2, plano **02-03** concluído (3/3 tasks) — CLI de revisão em shadow (`shadow:list/approve/edit/discard`; decisões append-only em `review_events`), kill switch global de 1 comando (`mode pause/resume` → `settings.operational_mode` + `event_log event_type='operational_mode_changed'`), `status:corrigir` (CRM-02), `handoff:ack` idempotente (D-15), pós-gate de conteúdo L4 (`src/domain/llm/post-gate.ts`, CONV-07) validado por corpus adversário, relatório de shadow (`npm run shadow:report`, gate D-17) e harness de bake-off (`npm run bake-off`, D-10). **Fase 2 com implementação completa (4/4).**
 Marco (D-18): **gate de saída = `manter-shadow`** — `shadow:report` = FAIL (0 evidência); promoção shadow→ativo NÃO aprovada; `ACTIVA` adiada até PASS.
-Próximo passo: **Fase 3 (Cadência, Operação e Painel)** — `Scheduler` + cadência FLUP + painel único (R-046, Fastify/SSE + React localhost) + CRM operacional/copiloto. As 2 Critical da verificação da Fase 2 (CR-01, CR-02) foram **fechadas** pelo 02-04; a verificação da Fase 2 (`362cedc`, gaps_found) pode ser reverificada. A promoção shadow→ativo depende de dados reais de operação (permanece pendente por decisão do Admin, D-18).
+Próximo passo: **Fase 3 — plano `03-02` (Scheduler/dreno)** — `Scheduler` + cadência FLUP + painel único (R-046, Fastify/SSE + React localhost) + CRM operacional/copiloto; depois 03-03..03-05. As 2 Critical da verificação da Fase 2 (CR-01, CR-02) foram **fechadas** pelo 02-04; a verificação da Fase 2 (`362cedc`, gaps_found) pode ser reverificada. A promoção shadow→ativo depende de dados reais de operação (permanece pendente por decisão do Admin, D-18).
 Pendente (deferido — P-004 ✅ corrigido / P-007 ⚠️ aberto): fechar o checkpoint de pareamento do 01-03. A corrida `requestPairingCode` × WS foi corrigida em `2d64728` (boot chega a `channel_ready`), mas o socket cai logo depois (P-007, `7.0.0-rc14` × servidor atual). **Ambos deferidos; não bloqueiam a Fase 3** (`01-03-DIAG.md` / `docs/pendencias.md`).
 Pós-reboot: revalidar com `npm run notify -- -Title "Teste R-013" -Message "Verificacao" -Urgent` e fechar a Task 6 do plano 01-01 (toast já exibido por humano em 2026-10-05, P-001).
-Arquivo de retomada: `.planning/phases/03-cad-ncia-opera-o-e-painel/03-CONTEXT.md`
+Arquivo de retomada: `.planning/phases/03-cad-ncia-opera-o-e-painel/03-02-PLAN.md`
 
 ---
-*Atualizado: 2026-10-15*
+*Atualizado: 2026-10-16*

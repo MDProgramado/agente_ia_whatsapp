@@ -51,9 +51,9 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 
 ### Follow-up, Agendamento e Handoff (FLUP)
 
-- [ ] **FLUP-01**: Se o lead não responde, envia follow-up curto após tempo configurável (R-003)
-- [ ] **FLUP-02**: Cadência de follow-up 1h → 1d → 3d → 7d; cadência interrompida se responder, opt-out, handoff ou pausa manual (R-004)
-- [ ] **FLUP-03**: Máximo de 4 tentativas (1h, 1d, 3d, 7d); após 7 dias sem resposta, encerra e marca "sem resposta"; follow-up de 15 dias NÃO é executado (R-005)
+- [x] **FLUP-01**: Se o lead não responde, envia follow-up curto após tempo configurável (R-003)
+- [x] **FLUP-02**: Cadência de follow-up 1h → 1d → 3d → 7d; cadência interrompida se responder, opt-out, handoff ou pausa manual (R-004)
+- [x] **FLUP-03**: Máximo de 4 tentativas (1h, 1d, 3d, 7d); após 7 dias sem resposta, encerra e marca "sem resposta"; follow-up de 15 dias NÃO é executado (R-005)
 - [x] **FLUP-04**: Handoff acionado em pedido de preço/proposta/orçamento OU intenção de agendar reunião/chamada; automação pausa e notifica (R-012)
 - [x] **FLUP-05**: Notificação local (som + pop-up) em handoff, identificando lead, motivo e ação rápida (R-013)
 - [ ] **FLUP-06**: Após handoff quando o Admin assume, bot entra em modo copiloto: sugere respostas sem enviar nada (R-014)
@@ -187,9 +187,9 @@ Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/0
 | CONV-12 | Phase 2 | Complete |
 | CONV-13 | Phase 1 | Complete |
 | CONV-14 | Phase 1 | Complete |
-| FLUP-01 | Phase 3 | Pending |
-| FLUP-02 | Phase 3 | Pending |
-| FLUP-03 | Phase 3 | Pending |
+| FLUP-01 | Phase 3 | Complete |
+| FLUP-02 | Phase 3 | Complete |
+| FLUP-03 | Phase 3 | Complete |
 | FLUP-04 | Phase 2 | Complete |
 | FLUP-05 | Phase 2 | Complete |
 | FLUP-06 | Phase 3 | Pending |

@@ -120,7 +120,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Cadência (fundação): migration `0007_scheduler_cadence.sql` (`follow_up_index` + índice parcial único `(conversation_id, follow_up_index) WHERE status='pending'`) + `feriados-br.ts` + `business-hours.ts` (feriados BR + "próximo dia útil 07:00") + `cadence.ts` (1h→1d→3d→7d, máx 4) + `queries/settings.ts` (FLUP-01, FLUP-02, FLUP-03)
+- [x] 03-01-PLAN.md — Cadência (fundação): migration `0007_scheduler_cadence.sql` (`follow_up_index` + índice parcial único `(conversation_id, follow_up_index) WHERE status='pending'`) + `feriados-br.ts` + `business-hours.ts` (feriados BR + "próximo dia útil 07:00") + `cadence.ts` (1h→1d→3d→7d, máx 4) + `queries/settings.ts` (FLUP-01, FLUP-02, FLUP-03)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -168,7 +168,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Fundação, Canal e Gate de Envio | 4/5 | In Progress (01-03 deferido — `P-004` (corrida `requestPairingCode` x WS open) corrigido em `2d64728`. Bloqueio atual: `P-007` (socket cai após `channel_ready`; rc14 vs servidor WhatsApp). Ambos deferidos; não bloqueiam Fase 3.) |  |
 | 2. IA, Handoff e Shadow Mode | 4/4 | Complete   | 2026-10-14 |
-| 3. Cadência, Operação e Painel | 0/3 | Not started | - |
+| 3. Cadência, Operação e Painel | 1/5 | In Progress|  |
 | 4. Piloto, Calibração e Apuração | 0/2 | Not started | - |
 
 ## Notas de Cobertura e Decisões de Mapeamento
