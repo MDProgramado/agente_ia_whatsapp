@@ -1,0 +1,2 @@
+ALTER TABLE "scheduled_tasks" ADD COLUMN "follow_up_index" smallint DEFAULT 0 NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "scheduled_tasks_conv_idx_uniq" ON "scheduled_tasks" USING btree ("conversation_id","follow_up_index") WHERE "scheduled_tasks"."status" = 'pending';

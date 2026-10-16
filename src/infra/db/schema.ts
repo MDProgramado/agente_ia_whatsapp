@@ -45,6 +45,7 @@ import {
 	text,
 	timestamp,
 	uuid,
+	uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -631,6 +632,13 @@ export const scheduledTasks = pgTable(
 			.references(() => conversations.id),
 		taskType: text("task_type").notNull(),
 		scheduledFor: timestamp("scheduled_for", { withTimezone: true }).notNull(),
+		/**
+		 * Cursor de cadência por conversa (D-05, FLUP-01): `0` = toque de 1h,
+		 * `1` = 1d, `2` = 3d, `3` = 7d. É a coluna que torna o agendamento
+		 * IDEMPOTENTE — o índice único parcial abaixo impede que dois ticks
+		 * concorrentes criem dois agendamentos para o mesmo toque.
+		 */
+		followUpIndex: smallint("follow_up_index").notNull().default(0),
 		attempts: integer("attempts").notNull().default(0),
 		status: text("status").notNull().default("pending"),
 		cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
@@ -649,6 +657,14 @@ export const scheduledTasks = pgTable(
 		// maioria em três meses e o tick não deveria varrê-los.
 		index("scheduled_tasks_pending_idx")
 			.on(t.scheduledFor, t.id)
+			.where(sql`${t.status} = 'pending'`),
+		// Idempotência de agendamento (D-05): um mesmo toque de cadência só pode
+		// ter UMA linha pendente por conversa. Dois ticks concorrentes não criam
+		// dois agendamentos — o segundo INSERT viola este índice. O predicado
+		// `status = 'pending'` é essencial: cancelamentos (`abandoned`) e
+		// execuções (`done`) do mesmo índice convivem, porque são histórico.
+		uniqueIndex("scheduled_tasks_conv_idx_uniq")
+			.on(t.conversationId, t.followUpIndex)
 			.where(sql`${t.status} = 'pending'`),
 	],
 );
