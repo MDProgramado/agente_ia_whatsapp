@@ -96,7 +96,7 @@ Cada task foi commitada atomicamente (tasks 2 e 3 são TDD, com RED antes do GRE
 3. **Task 3: `cadence.ts` + leitura de `settings`** — `2846a53` (test, RED) → `053999d` (feat, GREEN)
 4. **Ajuste de AC literal** — `81acc7a` (docs)
 
-**Plan metadata:** `TBD` (docs: complete plan)
+**Plan metadata:** `fcff2b6` (docs: complete plan)
 
 ## Files Created/Modified
 
