@@ -3,7 +3,7 @@
  *
  * Uma única instância Fastify que:
  *   - derruba `Host` fora de `{127.0.0.1, localhost}` (anti-DNS-rebinding, T-03-11):
- *     um domínio malicioso que resolva para 127.0.0.1 e aponte o browser do
+ *     um domínio malicioso que resolva para o loopback e aponte o browser do
  *     Admin para cá seria barrado aqui, antes de alcançar qualquer rota;
  *   - exige `Authorization: Bearer <PANEL_TOKEN>` em `/api/*` (T-03-12);
  *   - serve o SPA compilado (`dist/web`) sem token (asset público), MAS com o
@@ -24,8 +24,17 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
+import type { DispatchDeps } from "../application/dispatcher.js";
+import type { BarramentoEventos } from "../application/event-bus.js";
 import { env } from "../config/env.js";
+import type { Db } from "../infra/db/client.js";
 import { requireToken } from "./auth.js";
+import { registrarConversations } from "./routes/conversations.js";
+import { registrarDispatch } from "./routes/dispatch.js";
+import { registrarLeads } from "./routes/leads.js";
+import { registrarMessages } from "./routes/messages.js";
+import { registrarSystem } from "./routes/system.js";
+import { registrarSse } from "./sse.js";
 
 /** Hosts aceitos no header `Host`, sem a porta. Anti-DNS-rebinding (T-03-11). */
 const HOSTS_PERMITIDOS = new Set(["127.0.0.1", "localhost"]);
@@ -51,11 +60,35 @@ const hostSemPorta = (hostHeader: string | undefined): string => {
 	return semPorta.toLowerCase();
 };
 
+/**
+ * Núcleo do painel — as dependências que as rotas de leitura/ação usam.
+ *
+ * `dispatchDeps` carrega o `db`, o `channel` e o `ctx` (tz/janela/tetos). As
+ * rotas de leitura reusam o `ctx` de lá (uma única fonte para o fuso e a
+ * janela, nunca uma cópia paralela que possa divergir).
+ */
+export interface PanelCore {
+	readonly db: Db;
+	readonly bus: BarramentoEventos;
+	readonly dispatchDeps: DispatchDeps;
+	/** Feriados para o cálculo de janela/próxima janela (D-09). */
+	readonly feriados: readonly string[];
+	/** Relógio injetável (teste). Default `() => new Date()`. */
+	readonly agora?: () => Date;
+}
+
 export type ServerDeps = {
 	/** Porta a escutar. Default `env.PANEL_PORT`. */
 	port?: number;
 	/** Logger pino a usar. Se ausente, um child silencioso é criado. */
 	logger?: unknown;
+	/**
+	 * Núcleo do painel. Ausente em teste de borda puro (só guarda Host/token e
+	 * estático): sem ele nenhuma rota de API é registrada, e `app.inject()`
+	 * devolve 404 para `/api/*` — que é o comportamento esperado antes de o
+	 * boot (03-03 Task 3) injetar o core.
+	 */
+	core?: PanelCore;
 };
 
 /**
@@ -89,6 +122,17 @@ export const buildServer = (deps: ServerDeps = {}): FastifyInstance => {
 		}
 	});
 
+	// Rotas de API só existem com o núcleo injetado (boot real / teste de integração).
+	if (deps.core !== undefined) {
+		const core = deps.core;
+		registrarLeads(app, core);
+		registrarConversations(app, core);
+		registrarMessages(app, core);
+		registrarSystem(app, core);
+		registrarDispatch(app, core);
+		registrarSse(app, core);
+	}
+
 	// SPA compilado: servido sem token, com Host já validado pelo hook acima.
 	// Só registra se o diretório existir — antes do build (03-04) não há o que
 	// servir, e `@fastify/static` lançaria se `root` não existisse.
@@ -100,7 +144,6 @@ export const buildServer = (deps: ServerDeps = {}): FastifyInstance => {
 		});
 	}
 
-	void deps;
 	return app;
 };
 
