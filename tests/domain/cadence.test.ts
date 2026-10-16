@@ -10,8 +10,8 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import {
-	DELTAS_TOQUE,
 	cadenciaEncerrada,
+	DELTAS_TOQUE,
 	maxToques,
 	proximaTentativa,
 } from "../../src/domain/cadence.js";
@@ -35,10 +35,18 @@ describe("cadence — DELTAS_TOQUE (R-004/D-01)", () => {
 
 describe("cadence — proximaTentativa ancorada em lastOutboundAt (Pitfall 2)", () => {
 	it("soma o delta do índice: +1h, +1d, +3d, +7d", () => {
-		expect(proximaTentativa(toque, 0).getTime()).toBe(toque.getTime() + 1 * HORA);
-		expect(proximaTentativa(toque, 1).getTime()).toBe(toque.getTime() + 1 * DIA);
-		expect(proximaTentativa(toque, 2).getTime()).toBe(toque.getTime() + 3 * DIA);
-		expect(proximaTentativa(toque, 3).getTime()).toBe(toque.getTime() + 7 * DIA);
+		expect(proximaTentativa(toque, 0).getTime()).toBe(
+			toque.getTime() + 1 * HORA,
+		);
+		expect(proximaTentativa(toque, 1).getTime()).toBe(
+			toque.getTime() + 1 * DIA,
+		);
+		expect(proximaTentativa(toque, 2).getTime()).toBe(
+			toque.getTime() + 3 * DIA,
+		);
+		expect(proximaTentativa(toque, 3).getTime()).toBe(
+			toque.getTime() + 7 * DIA,
+		);
 	});
 
 	it("é determinística em (lastOutboundAt, index) — o relógio do processo é irrelevante", () => {
