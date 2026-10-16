@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 03
 status: executing
-last_updated: "2026-10-16T13:15:15.565Z"
+last_updated: "2026-10-16T15:42:52.272Z"
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 16
+  total_plans: 14
   completed_plans: 10
-  percent: 27
+  percent: 25
 ---
 
 # Estado do Projeto
@@ -20,15 +20,15 @@ progress:
 Ver: `.planning/PROJECT.md` (atualizado 2026-09-28)
 
 **Valor central:** Quando o bot assume uma conversa, conduz com naturalidade suficiente para gerar reuniões agendadas sem nunca cruzar uma fronteira proibida — e para no instante exato em que o humano precisa assumir.
-**Foco atual:** Phase 3 (Cadência, Operação e Painel) — plano `03-01` (**núcleo de cadência, calendário BR e settings**) concluído e commitado; próximo passo = `03-02` (Scheduler/dreno).
+**Foco atual:** Phase 3 (Cadência, Operação e Painel) — plano `03-02` (**scheduler produtor + dreno de catch-up + motor fiado no boot**) concluído e commitado; próximo passo = `03-03` (painel backend).
 
 ## Posição Atual
 
 Current Phase: 03
-Fase: 3 de 4 (Cadência, Operação e Painel) — **plano 03-01 concluído (núcleo de cadência puro: `cadence.ts`, `feriados-br.ts`, `business-hours.ts`, `queries/settings.ts`, migração 0007)**; 4 planos restantes (03-02..03-05); Fase 2 com implementação completa (4/4, gate `manter-shadow`); Fase 1 com 01-03 deferido (P-004 ✅ corrigido em `2d64728`; bloqueio atual **P-007** — ambos deferidos, não bloqueiam a Fase 3)
-Plano: 1 de 5 na fase atual (03-01 concluído; 03-02 é o próximo)
+Fase: 3 de 4 (Cadência, Operação e Painel) — **plano 03-02 concluído (`scheduler.ts` tick 30s produtor do `outbox`, `catchup-drain.ts` FIRE_ONCE + encerramento `sem_resposta`, cancelamento transacional no inbound, motor fiado no boot com shutdown ordenado)**; 3 planos restantes (03-03..03-05); Fase 2 com implementação completa (4/4, gate `manter-shadow`); Fase 1 com 01-03 deferido (P-004 ✅ corrigido em `2d64728`; bloqueio atual **P-007** — ambos deferidos, não bloqueiam a Fase 3)
+Plano: 2 de 5 na fase atual (03-01 e 03-02 concluídos; 03-03 é o próximo)
 Status: Executing Phase 03
-Última atividade: 2026-10-16 — plano **03-01** concluído com 3/3 tasks (executor, main tree). Entregues: **migração 0007** (`scheduled_tasks.follow_up_index` + índice único **parcial** `(conversation_id, follow_up_index) WHERE status='pending'` — D-05), **`src/domain/cadence.ts`** (cadência `1h→1d→3d→7d` ancorada em `last_outbound_at`, nunca reancorada — Pitfall 2; `max_touches` default 4 / **teto duro 4**; `proximaTentativa` lança para índice ≥4 por desenho — o chamador filtra com `cadenciaEncerrada`), **`src/domain/feriados-br.ts`** (Páscoa por Meeus + P−47/P−2/P+60 + 9 fixos — Pitfall 8) e **`src/domain/business-hours.ts`** (`ehDiaUtil`/`nextWindow`/`proximoDiaUtil` com `feriados` como último parâmetro default `[]`; teto de 14 dias no passo de dias úteis), e **`src/infra/db/queries/settings.ts`** (leitura jsonb hostil com `#>> '{}'` — Pitfall 10). Suíte **312 testes verdes**; `tsc` exit 0 e biome 0 erros (16 warnings pré-existentes). Commits `3524dcc` (T1), `a7d81d8`/`9a272f4` (T2 RED/GREEN), `2846a53`/`053999d` (T3 RED/GREEN), `81acc7a` (docs AC literal). Requirements `FLUP-01..03` fechados.
+Última atividade: 2026-10-16 — plano **03-02** concluído com 3/3 tasks (executor, main tree). Entregues: **`src/application/scheduler.ts`** (tick 30s PRODUTOR do `outbox` — agendar → cancelar interrompidos → reconciliar → encerrar → re-agendar; **nunca sender**; `scheduled_for` projetado de `last_outbound_at`, nunca reancorado — Pitfall 2), **`src/application/catchup-drain.ts`** (NOVO — `drenarCatchup` REAGENDADOR `FIRE_ONCE`: ≤3 iminentes com jitter 3–12s determinístico por sha256, o resto **adiado nunca descartado** — WHS-02; `encerrarCadenciasSemResposta`: 4º toque sem inbound → `state='encerrado'` + `closed_reason='sem_resposta'` + `status_history` pelo watermark de inbound, nunca read-receipt), **`src/infra/db/queries/scheduler.ts`** (`candidatosEmCadencia`/`pendentesForaDeCadencia`/`reconciliar`/`vencidosNoOutbox`/`jaEnviouFollowUpHoje`/`marcarCatchupIminente`/`conversasParaEncerrar`/`cancelarCadenciaPendente`; conversão de timestamp naive via `(extract(epoch from (naive AT TIME ZONE c.timezone))*1000)::bigint`), **`src/application/inbound-handler.ts`** (grava `messages` + `cancelarCadenciaPendente` na MESMA transação; watermark corrigido: `fromMe` do número dedicado sobe só `last_processed_at` **e ancora `last_outbound_at`**, `last_inbound_at` sobe só para o lead) e **motor fiado no boot** (`src/index.ts` etapa (l): `criarBaileysChannel` → `drenarCatchup` background → `drainLoop` + `startScheduler` após `migrate()`; SIGINT/SIGTERM param motor ANTES do socket/pool). Suíte **324 testes / 59 arquivos verdes**; `tsc` exit 0 e biome 0 erros (16 warnings pré-existentes, nenhum em arquivo tocado). Requirements `WHS-02, FLUP-01, FLUP-02, FLUP-03` fechados. Commits `24288f4` (T1), `70e34a6`/`1136409` (T2 RED/GREEN), `5a49f7a` (T3), `fb027f5` (SUMMARY). 4 desvios auto-corrigidos (2 Rule 1, 2 Rule 2) + 4 itens diferidos documentados no SUMMARY.
 Última atividade anterior: 2026-10-14 — Wave 4 (fechamento de lacunas): plano 02-04 concluído com 3/3 tasks (TDD). Entregues: **CR-01** — Guard 0 (`deveMarcarPrimeiroContatoHumano`) passa a comparar o **emissor** E.164 (`EventoInbound.senderPhoneE164`, carimbado pelo runtime Baileys a partir de `sock.user.id` via `normalizeJid`) com `env.CHANNEL_PHONE_E164`, não o `chatId` (que num `fromMe` é o JID do lead) — a 1ª mensagem manual do Admin volta a setar `first_contact_by_human` e a mover `novo → aquecimento`; **CR-02** — `duvida_complexa` entra em `INTENCOES_HANDOFF` (R-065/FLUP-09) com e2e atômico + silêncio total; **WR-03** — passo (d) do inbound dobrado em transação única; warn único `jid_proprio_sem_e164` no boot (pareamento LID). Suíte **51 arquivos / 274 testes verdes**; `tsc` exit 0 e biome exit 0 (0 erros). Commits: `757f728`/`aacaa69` (T1), `0a51cc5`/`2e3c56d` (T2), `1b40695` (format).
 Última atividade anterior: 2026-10-14 — Wave 3: plano 02-03 (Shadow review e gate de saída) concluído com 3/3 tasks. Entregues: CLI de revisão em shadow (`shadow:list/approve/edit/discard`; decisões append-only em `review_events`, nunca `UPDATE messages`), kill switch global de 1 comando (`mode pause/resume` → `settings.operational_mode` + trilha append-only em `event_log` com `event_type='operational_mode_changed'`), correção de status pelo Admin (`status:corrigir`), confirmação humana de handoff (`handoff:ack` idempotente + auditoria, D-15), pós-gate de conteúdo L4 (`src/domain/llm/post-gate.ts`; CONV-07) validado por corpus adversário (falso-negativo = 0), relatório de shadow gerado do banco (`npm run shadow:report`, gate D-17) e harness de bake-off (`npm run bake-off`, D-10) com veredito JSON commitado. Suíte **49 arquivos / 268 testes verdes**; `tsc` e biome limpos. **Gate de saída: `npm run shadow:report` = FAIL (0 evidência) → Admin decidiu `manter-shadow`, promoção shadow→ativo NÃO aprovada (D-18).** 01-03 segue deferido (P-004 `CREDS_INVALID` — ✅ corrigido em `2d64728` em 2026-10-15; bloqueio atual **P-007**).
 
@@ -41,15 +41,15 @@ Verificação de fase 2 (2026-10-14, `362cedc`): **gaps_found** — 2 achados Cr
 - ✅ **Toast R-013 exibido de verdade (2026-10-05):** após o registro manual do AUMID `WhatsAppProspect.Automacao` em `HKCU\SOFTWARE\Classes\AppUserModelId`, o `npm run notify -- -Title "Teste R-013" -Message "Verificacao" -Urgent` exibiu o toast "WhatsApp Prospecção" — atestado por humano. Causa raiz confirmada: ausência do registro do AUMID (o `CreateToastNotifier($Aumid)` emite para um AUMID que o Windows desconhece e descarta em silêncio). Fecha a Task 6 do plano 01-01 (P-001, `docs/pendencias.md`).
 - ✅ **Restauração de backup validada (2026-10-13):** `backup.ps1 -Verify` terminou com exit 0 — `pg_restore` numa base temporária com as 4 contagens conferidas contra a origem: leads 2=2, conversations 0=0, messages 0=0, daily_counters 0=0 (NFRQ-02, R-032). Um `pg_dump` que ninguém restaurou é uma hipótese; este foi restaurado.
 
-Progresso: [█████████░] 9 de 10 planos com SUMMARY (27%) — **Fase 2 completa (4/4)**; Fase 1 com 4 de 5 efetivos (01-03 deferido); **Fase 3 em execução (1/5 — plano 03-01 concluído)**; Fase 4 não iniciada.
+Progresso: [████████░░] 10 de 14 planos com SUMMARY (25%) — **Fase 2 completa (4/4)**; Fase 1 com 4 de 5 efetivos (01-03 deferido); **Fase 3 em execução (2/5 — planos 03-01 e 03-02 concluídos)**; Fase 4 não iniciada (planos ainda não criados).
 
 ## Métricas de Desempenho
 
 **Velocidade:**
 
 - Planos concluídos: 3
-- Duração média: ~218 min (01-01: 150 min; 01-02: 240 min; 01-04: 263 min; **03-01: 36 min**)
-- Tempo total de execução: ~653 min
+- Duração média: ~218 min (01-01: 150 min; 01-02: 240 min; 01-04: 263 min; **03-01: 36 min**; **03-02: 52 min**)
+- Tempo total de execução: ~705 min
 
 **Por Fase:**
 
@@ -57,7 +57,7 @@ Progresso: [█████████░] 9 de 10 planos com SUMMARY (27%) —
 |------|--------|-------------|------------|-------------|
 | 1. Fundação, Canal e Gate | 5 | 5 | 3 | 218 min |
 | 2. IA, Handoff e Shadow | 4 | 4 | 4 | ~90 min (02-04/cr-01+cr-02: 5h 42m) |
-| 3. Cadência, Operação e Painel | 5 | 5 | 1 | 36 min (03-01) |
+| 3. Cadência, Operação e Painel | 5 | 5 | 2 | 44 min (03-01: 36 min; 03-02: 52 min) |
 | 4. Piloto, Calibração e Apuração | 2 | 0 | 0 | — |
 
 *Atualizado após cada plano concluído*
@@ -189,6 +189,21 @@ Discussão em modo `--auto` (passada única, 5 áreas). Decisões D-01..D-18 em 
 - **Deviation Rule 2 (verificação real de jsonb):** descoberto em execução que o driver manda a string JS crua e o Postgres a parseia como JSON — para gravar uma string JSON genuína a fixture precisa de cast `::jsonb` explícito. O Drizzle ainda faz `JSON.parse` defensivo, então a string JSON `2` chega como número `2` (≤ teto: inofensivo); o teste passou a assertar também o caso que a mitigação cobre de fato (string `99` → clamp 4). *(Detalhe de plataforma registrado para o 03-02.)*
 - **Nada ainda consome `lerMaxToques`/`lerFeriadosOverride`.** Os leitores existem e estão testados, mas o **fio no boot** (carregar settings) e o uso no **tick de 30s** são escopo do 03-02 — readiness, não lacuna.
 
+### Decisões do Plano 03-02 (2026-10-16, scheduler produtor, dreno de catch-up e motor no boot)
+
+- **`drenarCatchup` é um REAGENDADOR, não um sender.** O `key_links` e o padrão "scheduler e dreno NUNCA importam nem chamam `dispatch`" (PATTERNS) vencem o analog `drainOnce`. O dreno só escolhe quem pode sair (`marcarCatchupIminente`) e quem espera (`markDeferred`); o envio real continua no `drainLoop`. Um dreno que enviasse teria de reimplementar o gate — o "envio sem gate" que `choke-point.grep.test.ts` transforma em falha de suíte.
+- **Jitter do dreno em 3–12s (ADR-009 / PATTERNS l.183), determinístico por sha256 local — NÃO via `humanDelayMs`.** `humanDelayMs("followup")` entrega 2,5–6s e ficaria fora da faixa decidida para o catch-up; ele continua sendo o humanizador do envio no `dispatcher`.
+- **`sleep` do dreno injetável com default real.** Testes passam `sleep: async () => {}` e inspecionam o `scheduled_for` resultante; produção dorme de verdade (≤~36s para os 3 iminentes, dentro dos 10 min por construção). O catch-up roda em **background no boot** (`void drenarCatchup(...)`) — só reagenda, não segura a subida.
+- **Encerramento grava `conversations.state='encerrado'` + `closed_reason='sem_resposta'` + `status_history{to_state:'encerrado', changed_by:'bot', reason:'sem_resposta'}`.** `pipeline_status` NÃO existe nesta wave (D-14/03-CONTEXT l.51 é camada do **03-05**, migration nova); "Perdido" é rótulo de CRM, não estado de máquina. O predicado é o **watermark de inbound** (`last_inbound_at < last_outbound_at`), nunca read-receipt (D-12).
+- **`isCatchupDrain` é decidido NO BOOT como parâmetro (`const CATCHUP_DRAIN_FIRME = true`), nunca lido de `settings`.** Um operador não pode religar um dreno que já rodou, ou o R-007 vira loop de reenvio (padrão de banimento que o ADR-009 existe para evitar).
+- **Relógio injetável em TODO ciclo.** `startScheduler` recebe `now: () => Date`; `drainLoop` ganhou `DrainLoopOpts.agora?: () => Date` (default `deps.now`). Um `Date` fixo congelaria a janela operacional (AR-007) e a cota do dia (R-023) no instante do boot, e `reserveNext` devolveria vencidos em loop para sempre (Rule 2).
+- **Feriados no boot = `feriadosNacionais(ano)` + `feriadosNacionais(ano+1)` + `lerFeriadosOverride(db)`.** O processo pode atravessar a virada de ano; sem `ano+1`, 01-01 deixaria de ser feriado a partir de 00:00 do dia 1.
+- **`newContactsToday` entra no `ctx` lido uma vez no boot** (declarado em `domain/gate/types.ts:84`, ainda não consumido por nenhuma regra do gate — sem bug corrente); `sentToday` continua fresco por job via `channel.readQuota`. Quando R-023 "novos leads/dia" existir, o valor precisa ser fresco no próprio `dispatch`.
+- **Shutdown com ordem corrigida (Rule 2):** o motor da cadência **escreve** no banco, então `motorScheduler.stop()` + `motorDreno.abort()` rodam ANTES de `canalSock.end()` e `closeDb(conn)`; monitor de saúde/cron continuam por último. Ordem verificada por grep: `keepAlive` → `motorScheduler.stop()` → `motorDreno.abort()` → `canalSock.end()` → `closeDb(conn)`.
+- **Rule 2 — âncora `last_outbound_at`:** nada gravava `last_outbound_at`, então a cadência ficaria permanentemente inerte (predicado `last_inbound_at < last_outbound_at` nunca verdadeiro). Corrigido no ramo `fromMe` do `inbound-handler.ts` (o echo do número dedicado é a única fonte autorizada de "nós falamos"). **Diferido:** o reply automático do bot (fase futura) também precisa reancorar — ponto natural em `dispatcher.ts`/`outbox-worker.ts` após `sent`; `dispatcher.ts`/`outbox.ts` não constam de `files_modified` deste plano. Até lá a cadência só inicia após um envio manual do Admin — exatamente o fluxo do MVP (R-001).
+- **Rule 1 — bug de watermark:** o echo `fromMe` não pode atualizar `last_inbound_at`, senão ele mesmo mata o predicado que inicia a cadência. Watermark final: ramo `fromMe` só toca `last_processed_at` (+ ancora `last_outbound_at`); `last_inbound_at` sobe só para mensagens reais do lead (`fromMe !== true`).
+- **Descoberta de plataforma:** `db.execute` cru devolve `timestamp` (naive) como **string**; todas as queries do scheduler convertem via `(extract(epoch from (naive AT TIME ZONE c.timezone)) * 1000)::bigint` e comparam a janela com `<= (${now}::timestamptz AT TIME ZONE c.timezone)`. Sem isso `outbox.scheduled_for` (naive) contra `now()` cru ficaria adiantado em 3h.
+
 ### Todos Pendentes
 
 De `.planning/todos/pending/`:
@@ -240,15 +255,16 @@ Nenhum ainda.
 ## Continuidade de Sessão
 
 Última sessão: 2026-10-16
-Parou em: **Fase 3 (Cadência, Operação e Painel), plano 03-01 concluído** (3/3 tasks; 36 min) — migração **0007** (`follow_up_index` + índice único parcial `WHERE status='pending'`), `src/domain/cadence.ts` (cadência 1h/1d/3d/7d ancorada em `last_outbound_at`, `max_touches` teto 4, `cadenciaEncerrada`, `proximaTentativa` lança p/ índice ≥4), `src/domain/feriados-br.ts` (Meeus + móveis + fixos), `src/domain/business-hours.ts` (`feriados` como último parâmetro default `[]`; teto 14 dias) e `src/infra/db/queries/settings.ts` (`#>> '{}'`). Suíte **312 testes verdes**; `tsc` exit 0; biome 0 erros. Requirements FLUP-01..03 fechados. Commits `3524dcc`/`a7d81d8`/`9a272f4`/`2846a53`/`053999d`/`81acc7a`. **Próximo passo = plano `03-02` (Scheduler/dreno)** — inclui o fio de boot (`lerMaxToques`/`lerFeriadosOverride`) e o tick de 30s; a query de candidatos deve usar o mesmo `max` de `cadenciaEncerrada`.
+Parou em: **Fase 3 (Cadência, Operação e Painel), plano 03-02 concluído** (3/3 tasks; 52 min) — `scheduler.ts` (tick 30s PRODUTOR do `outbox`; idempotência entre ticks; cancelamento auditável), `catchup-drain.ts` NOVO (`drenarCatchup` REAGENDADOR `FIRE_ONCE`: ≤3 iminentes com jitter 3–12s sha256, resto adiado nunca descartado; `encerrarCadenciasSemResposta` = 4º toque sem inbound → `state='encerrado'` + `closed_reason='sem_resposta'` + `status_history`), `queries/scheduler.ts` (naive→epoch `(extract(epoch from (naive AT TIME ZONE c.timezone))*1000)::bigint`; `vencidosNoOutbox`/`jaEnviouFollowUpHoje`/`marcarCatchupIminente`/`conversasParaEncerrar`/`cancelarCadenciaPendente`), `inbound-handler.ts` (cancelamento na MESMA transação; watermark `fromMe` só `last_processed_at` + ancora `last_outbound_at`) e motor fiado no boot (`index.ts` etapa (l): canal → catch-up background → `drainLoop` + `startScheduler` após `migrate()`; shutdown para motor ANTES de socket/pool). Suíte **324 testes / 59 arquivos verdes**; `tsc` e biome limpos. Requirements WHS-02/FLUP-01/02/03 fechados. 4 desvios auto-corrigidos (2 Rule 1, 2 Rule 2). Commits `24288f4`/`70e34a6`/`1136409`/`5a49f7a`/`fb027f5`. **Próximo passo = plano `03-03` (painel backend).**
+Parou em (anterior): **Fase 3, plano 03-01 concluído** (3/3 tasks; 36 min) — migração **0007** (`follow_up_index` + índice único parcial `WHERE status='pending'`), `src/domain/cadence.ts` (cadência 1h/1d/3d/7d ancorada em `last_outbound_at`, `max_touches` teto 4, `cadenciaEncerrada`, `proximaTentativa` lança p/ índice ≥4), `src/domain/feriados-br.ts` (Meeus + móveis + fixos), `src/domain/business-hours.ts` (`feriados` como último parâmetro default `[]`; teto 14 dias) e `src/infra/db/queries/settings.ts` (`#>> '{}'`). Suíte **312 testes verdes**; `tsc` exit 0; biome 0 erros. Requirements FLUP-01..03 fechados. Commits `3524dcc`/`a7d81d8`/`9a272f4`/`2846a53`/`053999d`/`81acc7a`. **Próximo passo = plano `03-02` (Scheduler/dreno)** — inclui o fio de boot (`lerMaxToques`/`lerFeriadosOverride`) e o tick de 30s; a query de candidatos deve usar o mesmo `max` de `cadenciaEncerrada`.
 Parou em (anterior): Fase 3 — contexto capturado em `03-CONTEXT.md` (`--auto`, decisões D-01..D-26); tensão do ROADMAP resolvida como supersession D-02.
 Parou em (anterior-2): Fase 2, plano **02-04** (fechamento de lacunas) concluído (3/3 tasks) — **CR-01** (Guard 0 pelo emissor E.164 via `EventoInbound.senderPhoneE164` carimbado pelo runtime; `novo → aquecimento` volta a funcionar) e **CR-02** (`duvida_complexa` em `INTENCOES_HANDOFF`, e2e atômico + silêncio), WR-03 (passo (d) transacional) e warn `jid_proprio_sem_e164` no boot. Suíte **51 arquivos / 274 testes verdes**; `tsc` exit 0 e biome exit 0. Commits `757f728`/`aacaa69`/`0a51cc5`/`2e3c56d`/`1b40695`.
 Parou em (anterior-2): Fase 2, plano **02-03** concluído (3/3 tasks) — CLI de revisão em shadow (`shadow:list/approve/edit/discard`; decisões append-only em `review_events`), kill switch global de 1 comando (`mode pause/resume` → `settings.operational_mode` + `event_log event_type='operational_mode_changed'`), `status:corrigir` (CRM-02), `handoff:ack` idempotente (D-15), pós-gate de conteúdo L4 (`src/domain/llm/post-gate.ts`, CONV-07) validado por corpus adversário, relatório de shadow (`npm run shadow:report`, gate D-17) e harness de bake-off (`npm run bake-off`, D-10). **Fase 2 com implementação completa (4/4).**
 Marco (D-18): **gate de saída = `manter-shadow`** — `shadow:report` = FAIL (0 evidência); promoção shadow→ativo NÃO aprovada; `ACTIVA` adiada até PASS.
-Próximo passo: **Fase 3 — plano `03-02` (Scheduler/dreno)** — `Scheduler` + cadência FLUP + painel único (R-046, Fastify/SSE + React localhost) + CRM operacional/copiloto; depois 03-03..03-05. As 2 Critical da verificação da Fase 2 (CR-01, CR-02) foram **fechadas** pelo 02-04; a verificação da Fase 2 (`362cedc`, gaps_found) pode ser reverificada. A promoção shadow→ativo depende de dados reais de operação (permanece pendente por decisão do Admin, D-18).
+Próximo passo: **Fase 3 — plano `03-03` (painel backend)** — Fastify bind `127.0.0.1` + guard de `Host` + token Bearer (`timingSafeEqual`) + `@fastify/static` + REST read-only (leads/chat/histórico) + ações auditadas + envio pelo gate (`origin='admin'`) + kill switch unificado + SSE (NFRQ-05); depois 03-04 (painel frontend) e 03-05 (CRM/copiloto/agendamento, migration 0008 com `pipeline_status`). O motor da cadência roda sozinho e todo o estado que o painel precisa ler já existe e é auditável (`scheduled_tasks` + `cancelled_reason`, `outbox`, `status_history` com `reason='sem_resposta'`, `conversations.closed_reason`).
 Pendente (deferido — P-004 ✅ corrigido / P-007 ⚠️ aberto): fechar o checkpoint de pareamento do 01-03. A corrida `requestPairingCode` × WS foi corrigida em `2d64728` (boot chega a `channel_ready`), mas o socket cai logo depois (P-007, `7.0.0-rc14` × servidor atual). **Ambos deferidos; não bloqueiam a Fase 3** (`01-03-DIAG.md` / `docs/pendencias.md`).
 Pós-reboot: revalidar com `npm run notify -- -Title "Teste R-013" -Message "Verificacao" -Urgent` e fechar a Task 6 do plano 01-01 (toast já exibido por humano em 2026-10-05, P-001).
-Arquivo de retomada: `.planning/phases/03-cad-ncia-opera-o-e-painel/03-02-PLAN.md`
+Arquivo de retomada: `.planning/phases/03-cad-ncia-opera-o-e-painel/03-03-PLAN.md`
 
 ---
 *Atualizado: 2026-10-16*

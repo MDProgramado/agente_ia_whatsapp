@@ -124,7 +124,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 03-02-PLAN.md — Scheduler + catch-up: `scheduler.ts` (tick 30s produtor de `outbox`, idempotência `flup:{conv}:{idx}`, cancelamento auditável) + `catchup-drain.ts` (`FIRE_ONCE`, ≤3/10min, 1/lead/dia, jitter, adiado nunca descartado) + encerramento "sem resposta" + boot do motor em `index.ts` (WHS-02, FLUP-01/02/03)
+- [x] 03-02-PLAN.md — Scheduler + catch-up: `scheduler.ts` (tick 30s produtor de `outbox`, idempotência `flup:{conv}:{idx}`, cancelamento auditável) + `catchup-drain.ts` (`FIRE_ONCE`, ≤3/10min, 1/lead/dia, jitter, adiado nunca descartado) + encerramento "sem resposta" + boot do motor em `index.ts` (WHS-02, FLUP-01/02/03)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -168,7 +168,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Fundação, Canal e Gate de Envio | 4/5 | In Progress (01-03 deferido — `P-004` (corrida `requestPairingCode` x WS open) corrigido em `2d64728`. Bloqueio atual: `P-007` (socket cai após `channel_ready`; rc14 vs servidor WhatsApp). Ambos deferidos; não bloqueiam Fase 3.) |  |
 | 2. IA, Handoff e Shadow Mode | 4/4 | Complete   | 2026-10-14 |
-| 3. Cadência, Operação e Painel | 1/5 | In Progress|  |
+| 3. Cadência, Operação e Painel | 2/5 | In Progress|  |
 | 4. Piloto, Calibração e Apuração | 0/2 | Not started | - |
 
 ## Notas de Cobertura e Decisões de Mapeamento

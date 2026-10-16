@@ -27,7 +27,7 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 ### Infraestrutura WhatsApp (WHS)
 
 - [x] **WHS-01**: Nenhuma mensagem automática fora de dias úteis, 7h–17h (janela operacional) (R-006)
-- [ ] **WHS-02**: Follow-up vencido fora da janela é drenado com limite e jitter controlados assim que o app abre — nunca em rajada (misfire `FIRE_ONCE`, ADR) (R-007)
+- [x] **WHS-02**: Follow-up vencido fora da janela é drenado com limite e jitter controlados assim que o app abre — nunca em rajada (misfire `FIRE_ONCE`, ADR) (R-007)
 - [x] **WHS-03**: Camada de conexão do WhatsApp isolada em interface/adaptador, permitindo trocar Baileys/WPPConnect → API oficial sem quebrar histórico, status ou agendamentos (R-016)
 - [x] **WHS-04**: Travas duras: 20 leads/dia + N contatos novos/dia via `fetchNewChatMessageCap()` + 20–30 mensagens/dia; ao atingir, para e enfileira para o próximo dia útil; erro 463 jamais é retryado (R-023*)
 - [ ] **WHS-05**: Opera um único número de WhatsApp dedicado e exclusivo para vendas (R-059)
@@ -169,7 +169,7 @@ Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/0
 | LEAD-05 | Phase 2 | Pending |
 | LEAD-06 | Phase 2 | Pending |
 | WHS-01 | Phase 1 | Complete |
-| WHS-02 | Phase 3 | Pending |
+| WHS-02 | Phase 3 | Complete |
 | WHS-03 | Phase 1 | Complete |
 | WHS-04 | Phase 1 | Complete |
 | WHS-05 | Phase 1 | Pending |
