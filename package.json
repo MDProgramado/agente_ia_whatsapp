@@ -10,8 +10,10 @@
 	"scripts": {
 		"dev": "tsx src/index.ts",
 		"start": "npm run dev",
-		"typecheck": "tsc --noEmit",
-		"build": "tsc --noEmit",
+		"typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.web.json",
+		"build": "npm run typecheck && vite build",
+		"web:dev": "vite",
+		"web:build": "vite build",
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"lint": "biome check .",
@@ -44,16 +46,25 @@
 		"p-queue": "9.3.3",
 		"pg": "8.23.0",
 		"pino": "10.3.1",
+		"react": "19.3.1",
+		"react-dom": "19.3.1",
 		"zod": "4.6.5"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.14",
 		"@fast-check/vitest": "0.5.0",
+		"@tailwindcss/vite": "4.3.3",
 		"@types/pg": "8.23.1",
+		"@types/react": "19.3.0",
+		"@types/react-dom": "19.3.0",
+		"@vitejs/plugin-react": "6.1.2",
 		"drizzle-kit": "0.31.11",
 		"fast-check": "4.10.2",
+		"lucide-react": "1.57.0",
+		"tailwindcss": "4.3.3",
 		"tsx": "4.23.15",
 		"typescript": "7.0.2",
+		"vite": "8.3.4",
 		"vitest": "5.0.2"
 	}
 }

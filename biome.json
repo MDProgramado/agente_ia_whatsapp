@@ -6,11 +6,20 @@
 			"!**/node_modules",
 			"!**/.planning",
 			"!**/opencode.json",
-			"!src/infra/db/migrations/meta"
+			"!src/infra/db/migrations/meta",
+			"!**/dist"
 		]
+	},
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
 	},
 	"linter": {
 		"enabled": true,
+		"domains": {
+			"react": "none"
+		},
 		"rules": {
 			"preset": "recommended",
 			"style": {
@@ -36,6 +45,14 @@
 		}
 	},
 	"overrides": [
+		{
+			"includes": ["src/web/**", "tests/web/**"],
+			"linter": {
+				"domains": {
+					"react": "all"
+				}
+			}
+		},
 		{
 			"includes": ["src/channel/baileys/**"],
 			"linter": {

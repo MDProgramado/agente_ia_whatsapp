@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+/*
+ * Tokens do painel (03-UI-SPEC). Tailwind v4 lê `@theme` e gera as utilities
+ * (`bg-fundo`, `text-suave`, `border-borda`, ...). Sem `tailwind.config.js`
+ * nem lista de `content`: o plugin do Vite faz o scan.
+ *
+ * Paleta escura por decisão: o painel fica aberto por horas, lado a lado com o
+ * WhatsApp; contraste alto reduz fadiga.
+ */
+@theme {
+	--color-fundo: #0b1120;
+	--color-superficie: #111827;
+	--color-superficie-alta: #1f2937;
+	--color-borda: #273449;
+	--color-acento: #3b82f6;
+	--color-acento-suave: #1d4ed8;
+	--color-ativo: #22c55e;
+	--color-pausa: #f59e0b;
+	--color-perigo: #ef4444;
+	--color-texto: #e5e7eb;
+	--color-suave: #94a3b8;
+	--color-msg-entrada: #1f2937;
+	--color-msg-saida: #1d4ed8;
+	--font-sans: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+	--radius-painel: 0.5rem;
+
+	/* Escala de espaçamento nomeada: habilita `gap-sm`, `px-md`, `p-lg`, etc. */
+	--spacing-xs: 0.25rem;
+	--spacing-sm: 0.5rem;
+	--spacing-md: 0.75rem;
+	--spacing-lg: 1rem;
+	--spacing-xl: 1.5rem;
+}
+
+/*
+ * Tokens de espaço/estado que NÃO viram utilities do Tailwind — expostos como
+ * custom properties para uso direto no CSS.
+ */
+:root {
+	--espaco-painel: 12px;
+	--altura-linha: 28px;
+	--transicao-rapida: 120ms ease-out;
+}
+
+@layer base {
+	html,
+	body,
+	#root {
+		height: 100%;
+	}
+
+	body {
+		margin: 0;
+		background-color: var(--color-fundo);
+		color: var(--color-texto);
+		font-family: var(--font-sans);
+		font-size: 14px;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	:focus-visible {
+		outline: 2px solid var(--color-acento);
+		outline-offset: 2px;
+	}
+}
+
+@layer components {
+	/* Barra de rolagem discreta nas listas longas (leads, histórico). */
+	.rolagem-fina {
+		scrollbar-width: thin;
+		scrollbar-color: var(--color-borda) transparent;
+	}
+
+	.rolagem-fina::-webkit-scrollbar {
+		width: 8px;
+		height: 8px;
+	}
+
+	.rolagem-fina::-webkit-scrollbar-thumb {
+		background-color: var(--color-borda);
+		border-radius: 9999px;
+	}
+}

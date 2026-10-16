@@ -34,7 +34,7 @@ describe("build do SPA (dist/web)", () => {
 		// Compila sob demanda: o teste é a prova de que `npm run web:build`
 		// produz o bundle. Rodar o build dentro do próprio teste mantém a
 		// afirmação honesta mesmo num clone que nunca buildou.
-		if (!existsSync(RAIZ + "dist/web/index.html")) {
+		if (!existsSync(`${RAIZ}dist/web/index.html`)) {
 			execSync("npm run web:build", {
 				cwd: RAIZ,
 				stdio: "pipe",
@@ -44,7 +44,7 @@ describe("build do SPA (dist/web)", () => {
 	}, 180_000);
 
 	it("gera dist/web/index.html com um <script> de entrada", () => {
-		const indicePath = RAIZ + "dist/web/index.html";
+		const indicePath = `${RAIZ}dist/web/index.html`;
 		expect(existsSync(indicePath)).toBe(true);
 		const html = readFileSync(indicePath, "utf8");
 		expect(html).toContain("<script");
@@ -85,7 +85,9 @@ describe("cliente REST (api.ts)", () => {
 	it("trata 401 como token ausente/inválido (não erro genérico)", async () => {
 		vi.stubGlobal(
 			"fetch",
-			vi.fn(async () => respostaJson(401, { erro: "token ausente ou invalido" })),
+			vi.fn(async () =>
+				respostaJson(401, { erro: "token ausente ou invalido" }),
+			),
 		);
 		definirToken("token-expirado");
 
