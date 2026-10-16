@@ -67,17 +67,12 @@ describe("migração 0007 — follow_up_index + índice único parcial (openDb/m
 		) as { entries: { tag: string }[] };
 		const tags = journal.entries.map((e) => e.tag);
 		expect(tags).toContain("0007_scheduler_cadence");
-		expect(existsSync(`${MIGRATIONS_DIR}/meta/0007_snapshot.json`)).toBe(
+		expect(existsSync(`${MIGRATIONS_DIR}/meta/0007_snapshot.json`)).toBe(true);
+		expect(existsSync(`${MIGRATIONS_DIR}/0007_scheduler_cadence.sql`)).toBe(
 			true,
 		);
 		expect(
-			existsSync(`${MIGRATIONS_DIR}/0007_scheduler_cadence.sql`),
-		).toBe(true);
-		expect(
-			readFileSync(
-				`${MIGRATIONS_DIR}/0007_scheduler_cadence.sql`,
-				"utf8",
-			),
+			readFileSync(`${MIGRATIONS_DIR}/0007_scheduler_cadence.sql`, "utf8"),
 		).toContain("follow_up_index");
 
 		// (b) default 0: uma linha inserida sem citar a coluna nasce com 0.
@@ -138,8 +133,7 @@ describe("migração 0007 — follow_up_index + índice único parcial (openDb/m
 					// Drizzle embrulha o erro do Postgres: o SQLSTATE real do
 					// driver vive em `cause.code`, não no erro de topo.
 					const causa = (e as { cause?: { code?: string } }).cause;
-					const codigo =
-						(e as { code?: string }).code ?? causa?.code;
+					const codigo = (e as { code?: string }).code ?? causa?.code;
 					expect(
 						codigo,
 						"segundo 'pending' do mesmo par não violou unicidade (23505)",

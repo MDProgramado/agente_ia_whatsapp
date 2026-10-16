@@ -78,11 +78,7 @@ describe("business-hours — feriados BR (D-09) e próximo dia útil 07:00 (D-10
 		).toBe(false);
 		// Sexta-feira Santa (03/04/2026).
 		expect(
-			ehDiaUtil(
-				instanteEmZona(TZ, 2026, 4, 3, 12),
-				TZ,
-				FERIADOS_2026_ABRIL,
-			),
+			ehDiaUtil(instanteEmZona(TZ, 2026, 4, 3, 12), TZ, FERIADOS_2026_ABRIL),
 		).toBe(false);
 		// O parâmetro é opcional: sem ele, o comportamento antigo permanece.
 		expect(ehDiaUtil(instanteEmZona(TZ, 2026, 4, 3, 12), TZ)).toBe(true);
@@ -100,9 +96,7 @@ describe("business-hours — feriados BR (D-09) e próximo dia útil 07:00 (D-10
 	it("proximoDiaUtil: quinta véspera de feriado na sexta → pula o feriado e cai na segunda 07:00", () => {
 		const quinta = instanteEmZona(TZ, 2026, 4, 2, 18, 0);
 		const alvo = proximoDiaUtil(quinta, TZ, FERIADOS_2026_ABRIL);
-		expect(alvo.getTime()).toBe(
-			instanteEmZona(TZ, 2026, 4, 6, 7, 0).getTime(),
-		);
+		expect(alvo.getTime()).toBe(instanteEmZona(TZ, 2026, 4, 6, 7, 0).getTime());
 		expect(formatarHoraLocal(alvo, TZ)).toBe("07:00");
 	});
 

@@ -44,8 +44,8 @@ import {
 	smallint,
 	text,
 	timestamp,
-	uuid,
 	uniqueIndex,
+	uuid,
 } from "drizzle-orm/pg-core";
 
 /**

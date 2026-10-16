@@ -10,6 +10,8 @@
  * formata explicitamente no fuso recebido.
  */
 
+import { ehFeriado } from "./feriados-br.js";
+
 const WEEKDAY_INDEX: Record<string, number> = {
 	Sun: 0,
 	Mon: 1,
@@ -59,10 +61,29 @@ const partesEmZona = (
 	};
 };
 
-/** Segunda (1) a sexta (5). Sábado e domingo fora. */
-export const ehDiaUtil = (instante: Date, tz: string): boolean => {
+/** `0` → `00`, `7` → `07` — só a parte de data/hora, sem arredondamento. */
+const pad2 = (n: number): string => String(n).padStart(2, "0");
+
+/** Data local (`YYYY-MM-DD`) de `instante` no fuso `tz`. */
+const dataEmZona = (instante: Date, tz: string): string => {
+	const { ano, mes, dia } = partesEmZona(instante, tz);
+	return `${ano}-${pad2(mes)}-${pad2(dia)}`;
+};
+
+/**
+ * É dia útil? Sábado/domingo fora; com `feriados` (D-09) a data local também
+ * é conferida contra a lista injetada — parâmetro opcional para preservar a
+ * assinatura e o comportamento dos guards da Fase 1/2.
+ */
+export const ehDiaUtil = (
+	instante: Date,
+	tz: string,
+	feriados: readonly string[] = [],
+): boolean => {
 	const { diaDaSemana } = partesEmZona(instante, tz);
-	return diaDaSemana >= 1 && diaDaSemana <= 5;
+	if (diaDaSemana < 1 || diaDaSemana > 5) return false;
+	if (feriados.length === 0) return true;
+	return !ehFeriado(dataEmZona(instante, tz), feriados);
 };
 
 /**
@@ -131,8 +152,12 @@ const instanteLocal = (
  *
  * Usado pelo dreno da fila para reprogramar uma mensagem que bateu na janela:
  *   - dia útil antes de `inicio` → hoje às `inicio`;
- *   - qualquer outro caso (fim de semana, depois de `inicio`, madrugada) → o
- *     próximo dia útil às `inicio`. Sexta depois da janela cai na segunda.
+ *   - qualquer outro caso (fim de semana, feriado, depois de `inicio`,
+ *     madrugada) → o próximo dia útil às `inicio`. Sexta depois da janela cai
+ *     na segunda; se a segunda é feriado (D-09), na terça.
+ *
+ * `feriados` é opcional e vem de fora (`feriadosNacionais(ano)` e/ou override
+ * manual de settings) — funções puras, nenhuma leitura de banco aqui.
  *
  * O retorno é um instante UTC real; `formatarHoraLocal` dele devolve `inicio`.
  */
@@ -141,6 +166,7 @@ export const nextWindow = (
 	tz: string,
 	inicio: number,
 	fim: number,
+	feriados: readonly string[] = [],
 ): Date => {
 	if (fim <= inicio) {
 		throw new Error(`janela invalida: [${inicio}, ${fim})`);
@@ -150,17 +176,27 @@ export const nextWindow = (
 	if (
 		p.diaDaSemana >= 1 &&
 		p.diaDaSemana <= 5 &&
+		!ehFeriado(dataEmZona(instante, tz), feriados) &&
 		hojeInicio.getTime() > instante.getTime()
 	) {
 		return hojeInicio;
 	}
+	// Calendário em passos de 1 dia civil (UTC) a partir da data local atual;
+	// o offset de fuso não importa porque só lemos a parte de data. O teto de
+	// 14 dias cobre qualquer sequência real de feriados + fim de semana (e
+	// feriados manuais adjacente a um feriado nacional).
+	const baseCivil = Date.UTC(p.ano, p.mes - 1, p.dia);
 	let salto = 1;
-	while (salto <= 7) {
-		const diaDaSemana = (p.diaDaSemana + salto) % 7;
-		if (diaDaSemana >= 1 && diaDaSemana <= 5) break;
+	while (salto <= 14) {
+		const dia = new Date(baseCivil + salto * 86_400_000);
+		const diaDaSemana = dia.getUTCDay();
+		const ehUtil =
+			diaDaSemana >= 1 &&
+			diaDaSemana <= 5 &&
+			!ehFeriado(dia.toISOString().slice(0, 10), feriados);
+		if (ehUtil) break;
 		salto += 1;
 	}
-	const baseCivil = Date.UTC(p.ano, p.mes - 1, p.dia);
 	const alvo = new Date(baseCivil + salto * 86_400_000);
 	return instanteLocal(
 		tz,
@@ -168,5 +204,43 @@ export const nextWindow = (
 		alvo.getUTCMonth() + 1,
 		alvo.getUTCDate(),
 		inicio,
+	);
+};
+
+/**
+ * Primeiro dia útil com `inicio:00` **estritamente depois** de `instante`,
+ * no fuso `tz` (D-10).
+ *
+ * `proximoDiaUtil(quinta18h, tz, ["2026-04-03"])` → segunda 07:00: pula a
+ * sexta-feira feriada, sábado e domingo. Antes de `inicio` no próprio dia útil
+ * → devolve o próprio dia às `inicio` (é o próximo instante futuro válido).
+ *
+ * Lança se nenhum dia útil aparecer em 14 dias — condição impossível com
+ * feriados reais, mas fail-closed em vez de devolver um dia inválido.
+ */
+export const proximoDiaUtil = (
+	instante: Date,
+	tz: string,
+	feriados: readonly string[] = [],
+	inicio = 7,
+): Date => {
+	const p = partesEmZona(instante, tz);
+	const baseCivil = Date.UTC(p.ano, p.mes - 1, p.dia);
+	for (let salto = 0; salto <= 14; salto += 1) {
+		const dia = new Date(baseCivil + salto * 86_400_000);
+		const diaDaSemana = dia.getUTCDay();
+		if (diaDaSemana < 1 || diaDaSemana > 5) continue;
+		if (ehFeriado(dia.toISOString().slice(0, 10), feriados)) continue;
+		const alvo = instanteLocal(
+			tz,
+			dia.getUTCFullYear(),
+			dia.getUTCMonth() + 1,
+			dia.getUTCDate(),
+			inicio,
+		);
+		if (alvo.getTime() > instante.getTime()) return alvo;
+	}
+	throw new Error(
+		`nenhum dia util com inicio ${inicio}h nas proximas 14 dias a partir de ${instante.toISOString()}`,
 	);
 };
