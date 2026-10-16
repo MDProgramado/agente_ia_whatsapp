@@ -111,6 +111,24 @@ export const envSchema = z.object({
 	 * fecha a conexão antes de "connected to WA" (15/10) — hipótese a isolar.
 	 */
 	BAILEYS_BROWSER_MODE: z.enum(["default", "custom"]).default("default"),
+
+	/**
+	 * Token Bearer do painel local (D-18, T-03-12). Obrigatório: sem ele o boot
+	 * falha no parse do zod — um painel sem token autenticável é uma superfície
+	 * aberta para qualquer página/extension de terceiro no navegador. Vem do
+	 * `.env` (segredo de desenvolvimento) e NUNCA vai para `settings` (banco),
+	 * que é dado operacional e não cofre de segredos.
+	 */
+	PANEL_TOKEN: z
+		.string()
+		.min(1, "PANEL_TOKEN e obrigatorio (token Bearer do painel local)"),
+
+	/**
+	 * Porta do painel. Default 8787 — fora das ports de desenvolvimento comuns
+	 * (Vite 5173, etc.) e não-privilegiada (>1024), evitando colisão com o
+	 * restante da toolchain.
+	 */
+	PANEL_PORT: z.coerce.number().int().min(1).max(65535).default(8787),
 });
 
 export type Env = z.infer<typeof envSchema>;
