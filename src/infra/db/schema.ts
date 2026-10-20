@@ -176,6 +176,20 @@ export const conversations = pgTable(
 		/** WHS-04: reach-out timelock lido do servidor (463). */
 		reachoutTimelockUntil: timestamp("reachout_timelock_until"),
 		timezone: text("timezone").notNull().default("America/Sao_Paulo"),
+		/**
+		 * Pipeline de VENDAS do CRM — os 9 status de RN-078/D-14 (Novo → … → Perdido),
+		 * com `DEFAULT 'novo'`. É coluna SEPARADA de `state` (FSM do motor, D-07) e
+		 * de `stage` (sub-estágio de qualificação): as três respondem "onde o lead
+		 * está" em domínios diferentes, e confundi-las faz o motor setar o funil —
+		 * o exato Pitfall 6 do 03-RESEARCH. Toda mudança aqui é auditada como nova
+		 * linha em `status_history` (D-14), nunca por UPDATE de histórico.
+		 */
+		pipelineStatus: text("pipeline_status").notNull().default("novo"),
+		/**
+		 * Motivo de encerramento/perda — os 9 valores enumerados de D-15/RN-084.
+		 * Nullable porque só conversas fechadas/perdidas carregam motivo; o CHECK
+		 * abaixo é o que impede um valor inventado por fora do domínio.
+		 */
 		closedReason: text("closed_reason"),
 		pendingMediaBlock: boolean("pending_media_block").notNull().default(false),
 		/**
@@ -197,6 +211,19 @@ export const conversations = pgTable(
 		check(
 			"conversations_engagement_mode_check",
 			sql`engagement_mode IN ('bot_active', 'awaiting_human', 'human', 'copilot', 'pausado', 'shadow')`,
+		),
+		// Os 9 valores EXATOS de D-14/RN-078. O CHECK no banco é o que sustenta o
+		// funil: `transicaoValida` (src/domain/pipeline.ts) valida a TRANSIÇÃO, mas
+		// um valor fora do domínio nunca chega a ser tentado.
+		check(
+			"conversations_pipeline_status_check",
+			sql`pipeline_status IN ('novo', 'contatado', 'respondeu', 'qualificado', 'aquecido', 'reuniao_agendada', 'proposta', 'fechado', 'perdido')`,
+		),
+		// D-15/RN-084: os 9 motivos de Perdido/encerramento, enumerados. `catchup`
+		// grava 'sem_resposta' (D-13); o resto entra pela correção manual do CRM.
+		check(
+			"conversations_closed_reason_check",
+			sql`closed_reason IS NULL OR closed_reason IN ('sem_resposta', 'sem_interesse', 'sem_verba', 'sem_decisao', 'concorrente', 'fora_do_perfil', 'opt_out', 'bad_timing', 'outro')`,
 		),
 	],
 );
@@ -758,5 +785,136 @@ export const reviewEvents = pgTable(
 			sql`decision IN ('approved', 'edited', 'discarded')`,
 		),
 		index("review_events_message_created_idx").on(t.messageId, t.createdAt),
+	],
+);
+
+// ---------------------------------------------------------------------------
+// Bloco 3 — plano 03-05 (D-22): estruturas de CRM do painel operacional.
+// ---------------------------------------------------------------------------
+
+/**
+ * Etiquetas de lead (D-22, R-048). `name` é `unique`: "tag" sem unicidade vira
+ * duas tags de mesmo nome que se comportam como duas — e o filtro por tag passaria
+ * a depender de qual das duas a UI escolheu.
+ *
+ * `created_by` (R-028) nasce nullable: sob R-027 (usuário único) ele só é preenchido
+ * quando o Admin cria a tag pela API.
+ */
+export const tags = pgTable(
+	"tags",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		name: text("name").notNull().unique(),
+		createdBy: uuid("created_by").references(() => appUsers.id),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+	},
+	(t) => [index("tags_name_idx").on(t.name)],
+);
+
+/**
+ * Junção N:N lead ↔ tag (D-22). A PK composta é a idempotência: associar a mesma
+ * tag duas vezes viola a PK em vez de criar um vínculo duplicado — é o
+ * "idempotência no banco" que o `ON CONFLICT` dos endpoints usa.
+ */
+export const leadTags = pgTable(
+	"lead_tags",
+	{
+		leadId: uuid("lead_id")
+			.notNull()
+			.references(() => leads.id),
+		tagId: uuid("tag_id")
+			.notNull()
+			.references(() => tags.id),
+		createdBy: uuid("created_by").references(() => appUsers.id),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+	},
+	(t) => [
+		primaryKey({ name: "lead_tags_pkey", columns: [t.leadId, t.tagId] }),
+		index("lead_tags_tag_idx").on(t.tagId),
+	],
+);
+
+/**
+ * Notas do lead — do Admin e as **automáticas da IA** (D-22, CRM-03, R-043).
+ *
+ * `author_type` é trave de D-22: nome e valores (`'admin' | 'ia'`) são LITERAIS do
+ * contexto de decisão — não renomear para `origin` (que é o domínio de `messages`).
+ * É a coluna que distingue a nota gerada pelo copiloto da escrita à mão do Admin
+ * (T-03-37): uma nota da IA indistinguível seria repudio.
+ *
+ * `conversation_id` é nullable e SEM cascata: o caminho automático nasce de uma
+ * conversa (`gerarNotaAutomatica`), o do Admin nasce do lead — e nenhuma das duas
+ * origens pode apagar a nota se a conversa um dia sumir.
+ *
+ * Append-only: o trigger `trg_lead_notes_append_only` (migration 0008) + `REVOKE`
+ * espelham o padrão de 0004/0006 — uma nota não é corrigida, é rebatizada como
+ * nova linha. `created_by` nulo é o esperado em `author_type='ia'` (a autoria é
+ * da IA, não de um usuário).
+ */
+export const leadNotes = pgTable(
+	"lead_notes",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		leadId: uuid("lead_id")
+			.notNull()
+			.references(() => leads.id),
+		conversationId: uuid("conversation_id").references(() => conversations.id),
+		body: text("body").notNull(),
+		authorType: text("author_type").notNull(),
+		createdBy: uuid("created_by").references(() => appUsers.id),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+	},
+	(t) => [
+		check("lead_notes_author_type_check", sql`author_type IN ('admin', 'ia')`),
+		index("lead_notes_lead_created_idx").on(t.leadId, sql`${t.createdAt} DESC`),
+	],
+);
+
+/**
+ * Tarefas e lembretes do lead (D-22). Uma tabela serve os dois porque a pergunta
+ * do painel é a mesma — "o que eu preciso fazer com este lead até quando" — e
+ * separá-las criaria duas filas de vencimento para o mesmo Admin.
+ *
+ * `status` usa o vocabulário em inglês de `scheduled_tasks`
+ * (`pending`/`done`/`failed`/`abandoned`) em vez de traduções: são valores de
+ * ENUM DE BANCO (padrão de todo o schema), e a tradução pt-BR é do `rotulo()` na
+ * camada de domínio. `cancelled` entra no lugar de `abandoned` porque tarefa de
+ * Admin não é "abandonada pelo sistema" — é cancelada por decisão.
+ *
+ * `responsible_user_id`/`created_by` (R-028) já nascem aqui: adicionar depois é
+ * migração em base viva, e marcar agora custa duas colunas nullable.
+ */
+export const tasks = pgTable(
+	"tasks",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		leadId: uuid("lead_id")
+			.notNull()
+			.references(() => leads.id),
+		title: text("title").notNull(),
+		dueAt: timestamp("due_at", { withTimezone: true }),
+		status: text("status").notNull().default("pending"),
+		responsibleUserId: uuid("responsible_user_id").references(
+			() => appUsers.id,
+		),
+		createdBy: uuid("created_by").references(() => appUsers.id),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.notNull()
+			.defaultNow(),
+	},
+	(t) => [
+		check(
+			"tasks_status_check",
+			sql`status IN ('pending', 'done', 'cancelled')`,
+		),
+		// Leitura do painel: "o que vence hoje, do mais vencido para o menos".
+		index("tasks_due_idx").on(t.dueAt, t.status),
+		index("tasks_lead_idx").on(t.leadId, sql`${t.createdAt} DESC`),
 	],
 );

@@ -57,6 +57,13 @@
       "when": 1792154176551,
       "tag": "0007_scheduler_cadence",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792502019000,
+      "tag": "0008_pipeline_crm",
+      "breakpoints": true
     }
   ]
 }
