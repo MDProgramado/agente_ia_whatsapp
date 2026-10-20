@@ -56,17 +56,17 @@ Requisitos para o release inicial (escopo do piloto, R-060). Cada um mapeia para
 - [x] **FLUP-03**: Máximo de 4 tentativas (1h, 1d, 3d, 7d); após 7 dias sem resposta, encerra e marca "sem resposta"; follow-up de 15 dias NÃO é executado (R-005)
 - [x] **FLUP-04**: Handoff acionado em pedido de preço/proposta/orçamento OU intenção de agendar reunião/chamada; automação pausa e notifica (R-012)
 - [x] **FLUP-05**: Notificação local (som + pop-up) em handoff, identificando lead, motivo e ação rápida (R-013)
-- [ ] **FLUP-06**: Após handoff quando o Admin assume, bot entra em modo copiloto: sugere respostas sem enviar nada (R-014)
+- [x] **FLUP-06**: Após handoff quando o Admin assume, bot entra em modo copiloto: sugere respostas sem enviar nada (R-014)
 - [x] **FLUP-07**: Bot nunca agenda sozinho; apenas avisa; sem link, horários ou confirmação (R-025)
-- [ ] **FLUP-08**: Após o Admin registrar agendamento, o bot envia confirmação e lembrete antes da reunião, com opção de confirmar/remarcar/cancelar, respeitando janela e limite (R-026)
+- [x] **FLUP-08**: Após o Admin registrar agendamento, o bot envia confirmação e lembrete antes da reunião, com opção de confirmar/remarcar/cancelar, respeitando janela e limite (R-026)
 - [x] **FLUP-09**: Handoff também em irritação, ameaça de denúncia/bloqueio, pedido de opt-out e dúvida técnica complexa (R-065)
 - [x] **FLUP-10**: Em irritação/ameaça: pausa automação, notifica, silêncio total, aguarda decisão; bot não se desculpa nem ameniza sozinho (R-066)
 
 ### CRM Local e Pipeline (CRM)
 
-- [ ] **CRM-01**: Pipeline completo de status: Novo → Contatado → Respondeu → Qualificado → Aquecido → Reunião agendada → Proposta → Fechado → Perdido (com motivo) (R-021)
+- [x] **CRM-01**: Pipeline completo de status: Novo → Contatado → Respondeu → Qualificado → Aquecido → Reunião agendada → Proposta → Fechado → Perdido (com motivo) (R-021)
 - [x] **CRM-02**: IA atualiza status automaticamente com transições de critérios claros e auditáveis; status críticos com justificativa e timestamp; Admin corrige manualmente (R-022)
-- [ ] **CRM-03**: CRMS intermediário: lista de leads, status, histórico (imutável), busca, tags, filtros, notas, tarefas, lembretes e responsável; Admin cria notas/tarefas e a IA cria notas automáticas (resumo, objeções, próximos passos) (R-043)
+- [x] **CRM-03**: CRMS intermediário: lista de leads, status, histórico (imutável), busca, tags, filtros, notas, tarefas, lembretes e responsável; Admin cria notas/tarefas e a IA cria notas automáticas (resumo, objeções, próximos passos) (R-043)
 
 ### Integrações (INTR)
 
@@ -192,14 +192,14 @@ Atualizado no fechamento da Fase 1 (2026-10-13, após planos 01-01/01-02/01-04/0
 | FLUP-03 | Phase 3 | Complete |
 | FLUP-04 | Phase 2 | Complete |
 | FLUP-05 | Phase 2 | Complete |
-| FLUP-06 | Phase 3 | Pending |
+| FLUP-06 | Phase 3 | Complete |
 | FLUP-07 | Phase 2 | Complete |
-| FLUP-08 | Phase 3 | Pending |
+| FLUP-08 | Phase 3 | Complete |
 | FLUP-09 | Phase 2 | Complete |
 | FLUP-10 | Phase 2 | Complete |
-| CRM-01 | Phase 3 | Pending |
+| CRM-01 | Phase 3 | Complete |
 | CRM-02 | Phase 2 | Complete |
-| CRM-03 | Phase 3 | Pending |
+| CRM-03 | Phase 3 | Complete |
 | INTR-01 | Phase 1 | Complete |
 | COMP-01 | Phase 2 | Complete |
 | COMP-02 | Phase 1 | Complete |

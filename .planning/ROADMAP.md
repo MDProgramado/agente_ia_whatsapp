@@ -136,7 +136,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 03-05-PLAN.md — CRM + copiloto + agendamento (backend): migration `0008_pipeline_crm.sql` (pipeline 9 status com backfill + tags/notas/tarefas) + `pipeline.ts` + `copilot.ts` (sugere nunca envia + nota automática da IA via `LlmPort`, `author_type='ia'`) + `appointment.ts` (confirmação/lembrete no `outbox` `origin='bot'`; remarcar/cancelar → handoff) + rotas `crm.ts`/`conversations.ts` + testes (FLUP-06, FLUP-08, CRM-01, CRM-03)
+- [x] 03-05-PLAN.md — CRM + copiloto + agendamento (backend): migration `0008_pipeline_crm.sql` (pipeline 9 status com backfill + tags/notas/tarefas) + `pipeline.ts` + `copilot.ts` (sugere nunca envia + nota automática da IA via `LlmPort`, `author_type='ia'`) + `appointment.ts` (confirmação/lembrete no `outbox` `origin='bot'`; remarcar/cancelar → handoff) + rotas `crm.ts`/`conversations.ts` + testes (FLUP-06, FLUP-08, CRM-01, CRM-03)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
@@ -180,7 +180,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Fundação, Canal e Gate de Envio | 4/5 | In Progress (01-03 deferido — `P-004` (corrida `requestPairingCode` x WS open) corrigido em `2d64728`. Bloqueio atual: `P-007` (socket cai após `channel_ready`; rc14 vs servidor WhatsApp). Ambos deferidos; não bloqueiam Fase 3.) |  |
 | 2. IA, Handoff e Shadow Mode | 4/4 | Complete   | 2026-10-14 |
-| 3. Cadência, Operação e Painel | 4/8 | In Progress (03-01..03-04 concluídos; planos revisados e verificados em 2026-10-20 — 03-05 dividido em backend + 03-08 UI/docs) |  |
+| 3. Cadência, Operação e Painel | 5/8 | In Progress|  |
 | 4. Piloto, Calibração e Apuração | 0/2 | Not started | - |
 
 ## Notas de Cobertura e Decisões de Mapeamento
