@@ -666,6 +666,9 @@ const main = async (): Promise<void> => {
 	const corePainel: PanelCore = {
 		db: conn.db,
 		bus: barramento,
+		// Copiloto (03-05): mesma porta de GERAÇÃO que o pipeline usa — a
+		// sugestão é rascunho (`ai_suggestion`), nunca envio.
+		llm: llmProducao,
 		dispatchDeps: {
 			db: conn.db,
 			channel: canal,

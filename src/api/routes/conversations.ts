@@ -16,10 +16,28 @@
  */
 import { sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import {
+	agendarConfirmacao,
+	tratarRespostaAgendamento,
+} from "../../application/appointment.js";
 import type { Db } from "../../infra/db/client.js";
 import { recordStatusChange } from "../../infra/db/queries/status-history.js";
 import { acaoConversaBody, idParams } from "../schemas.js";
 import type { PanelCore } from "../server.js";
+
+/** Corpo do agendamento manual da reunião (D-25). */
+const agendamentoBody = z.object({
+	quando: z.coerce.date({ message: "quando invalido" }),
+	tipo: z.enum(["confirmacao", "lembrete"], { message: "tipo invalido" }),
+});
+
+/** Corpo da resposta do lead sobre a reunião. */
+const respostaAgendamentoBody = z.object({
+	resposta: z.enum(["confirmar", "remarcar", "cancelar"], {
+		message: "resposta invalida",
+	}),
+});
 
 interface LinhaConversa {
 	readonly id: string;
@@ -37,6 +55,8 @@ interface LinhaConversa {
 	readonly phone_number: string;
 	readonly origin_source: string | null;
 	readonly opt_out: boolean;
+	readonly pipeline_status: string;
+	readonly closed_reason: string | null;
 }
 
 /** Alvo de cada ação: o par (estado, modo) e se o handoff é desligado. */
@@ -67,6 +87,8 @@ const paraDetalhe = (row: LinhaConversa) => ({
 	lastInboundAt: row.last_inbound_at,
 	lastOutboundAt: row.last_outbound_at,
 	createdAt: row.created_at,
+	pipelineStatus: row.pipeline_status,
+	closedReason: row.closed_reason,
 	lead: {
 		id: row.lead_id,
 		name: row.name,
@@ -91,6 +113,7 @@ export const registrarConversations = (
 				c.id, c.state, c.engagement_mode, c.stage, c.qualification,
 				c.follow_up_index, c.handoff_active,
 				c.last_inbound_at, c.last_outbound_at, c.created_at,
+				c.pipeline_status, c.closed_reason,
 				l.id as lead_id, l.name, l.phone_number, l.origin_source, l.opt_out
 			from conversations c
 			join leads l on l.id = c.lead_id
@@ -230,4 +253,85 @@ export const registrarConversations = (
 			engagementMode: resultado.toMode,
 		};
 	});
+
+	// --- Agendamento manual (FLUP-08/D-25, R-006/R-023/R-025) ----------------
+	//
+	// O Admin registra a reunião; o sistema agenda confirmação e lembrete já
+	// normalizados para a janela e a cota. Data inválida vira 400 AQUI: agendar é
+	// 100% manual, o bot nunca decide horário (D-25).
+	app.post("/api/conversations/:id/agendamento", async (req, reply) => {
+		const params = idParams.safeParse(req.params);
+		if (!params.success) {
+			return reply.code(400).send({ erro: "id invalido" });
+		}
+		const body = agendamentoBody.safeParse(req.body);
+		if (!body.success) {
+			return reply.code(400).send({
+				erro: "corpo invalido",
+				detalhes: body.error.issues.map((i) => i.message),
+			});
+		}
+
+		const ctx = core.dispatchDeps.ctx;
+		const resultado = await agendarConfirmacao(
+			core.db,
+			{
+				conversationId: params.data.id,
+				quando: body.data.quando,
+				tipo: body.data.tipo,
+			},
+			{
+				agora: core.agora,
+				tz: ctx.tz,
+				inicioJanela: ctx.windowStartHour,
+				fimJanela: ctx.windowEndHour,
+				feriados: core.feriados,
+			},
+		);
+
+		if (!resultado.ok) {
+			return resultado.erro === "conversa_nao_encontrada"
+				? reply.code(404).send({ erro: "conversa nao encontrada" })
+				: reply.code(409).send({ erro: "limite_diario" });
+		}
+
+		return reply.code(resultado.duplicado ? 200 : 201).send({
+			scheduledFor: resultado.scheduledFor.toISOString(),
+			outboxId: resultado.outboxId,
+			duplicado: resultado.duplicado,
+		});
+	});
+
+	// Resposta do lead sobre a reunião: confirmar encerra pendências; remarcar ou
+	// cancelar NUNCA é tratado pelo bot — handoff (R-025).
+	app.post(
+		"/api/conversations/:id/agendamento/resposta",
+		async (req, reply) => {
+			const params = idParams.safeParse(req.params);
+			if (!params.success) {
+				return reply.code(400).send({ erro: "id invalido" });
+			}
+			const body = respostaAgendamentoBody.safeParse(req.body);
+			if (!body.success) {
+				return reply.code(400).send({
+					erro: "corpo invalido",
+					detalhes: body.error.issues.map((i) => i.message),
+				});
+			}
+
+			const resultado = await tratarRespostaAgendamento(
+				core.db,
+				{
+					conversationId: params.data.id,
+					resposta: body.data.resposta,
+				},
+				{ agora: core.agora },
+			);
+
+			if (resultado.tratado === "erro") {
+				return reply.code(404).send({ erro: "conversa nao encontrada" });
+			}
+			return resultado;
+		},
+	);
 };

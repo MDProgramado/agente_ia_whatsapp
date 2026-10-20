@@ -144,3 +144,29 @@ export const buildGeneratePrompt = (
 		"Contexto da conversa:",
 		renderContexto(maskPii(payload)),
 	].join("\n");
+
+/** Versão do template de NOTA interna da IA (03-05) — comparável em `llm_runs`. */
+export const NOTA_PROMPT_VERSION = "03-05";
+
+/**
+ * Prompt da nota automática (CRM-03/D-22/R-043). Mesmo choke-point dos
+ * demais: `maskPii` roda aqui, então nem o telefone que o PRÓPRIO LEAD escreveu
+ * na conversa sai no prompt.
+ *
+ * As três seções (Resumo/Objeções/Próximos passos) são exigidas no prompt e
+ * verificadas no código — a nota só nasce completa.
+ */
+export const buildNotePrompt = (payload: PayloadLlm, canario: string): string =>
+	[
+		"Analise a conversa de prospecção B2B abaixo e redija uma nota interna em português do Brasil, para o consultor ler no painel.",
+		"A nota deve conter exatamente estas três seções, nesta ordem, com estes títulos:",
+		"Resumo — o que já foi conversado, em poucas linhas.",
+		"Objeções — objeções, dúvidas e resistências explicitadas pelo lead (escreva 'Nenhuma' se não houver).",
+		"Próximos passos — o que o consultor deve fazer a seguir.",
+		"Não invente fatos: apoie-se apenas no contexto abaixo. Nunca negocie preço nem proponha horários.",
+		'Devolva SOMENTE um JSON com os campos "replyText" (a nota completa) e "canary".',
+		`O campo "canary" deve ecoar exatamente este valor: ${canario}`,
+		"",
+		"Contexto da conversa:",
+		renderContexto(maskPii(payload)),
+	].join("\n");

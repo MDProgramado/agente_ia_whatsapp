@@ -27,9 +27,15 @@ import Fastify, { type FastifyInstance } from "fastify";
 import type { DispatchDeps } from "../application/dispatcher.js";
 import type { BarramentoEventos } from "../application/event-bus.js";
 import { env } from "../config/env.js";
+import type {
+	ExtractionEnvelope,
+	GenerationEnvelope,
+} from "../domain/llm/envelope.js";
+import type { LlmPort } from "../domain/ports/LlmPort.js";
 import type { Db } from "../infra/db/client.js";
 import { requireToken } from "./auth.js";
 import { registrarConversations } from "./routes/conversations.js";
+import { registrarCrm } from "./routes/crm.js";
 import { registrarDispatch } from "./routes/dispatch.js";
 import { registrarLeads } from "./routes/leads.js";
 import { registrarMessages } from "./routes/messages.js";
@@ -75,6 +81,12 @@ export interface PanelCore {
 	readonly feriados: readonly string[];
 	/** Relógio injetável (teste). Default `() => new Date()`. */
 	readonly agora?: () => Date;
+	/**
+	 * Porta de geração da LLM para o copiloto (03-05). OPCIONAL de propósito:
+	 * testes de borda montam o core sem IA e a rota de sugestão responde 503;
+	 * produção (index.ts) injeta a porta de verdade.
+	 */
+	readonly llm?: LlmPort<ExtractionEnvelope, GenerationEnvelope>;
 }
 
 export type ServerDeps = {
@@ -127,6 +139,7 @@ export const buildServer = (deps: ServerDeps = {}): FastifyInstance => {
 		const core = deps.core;
 		registrarLeads(app, core);
 		registrarConversations(app, core);
+		registrarCrm(app, core);
 		registrarMessages(app, core);
 		registrarSystem(app, core);
 		registrarDispatch(app, core);
