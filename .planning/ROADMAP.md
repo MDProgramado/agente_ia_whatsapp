@@ -113,7 +113,7 @@ Plans:
   4. O Admin busca, filtra, tagueia, anota e cria tarefas/lembretes; move o lead pelo pipeline (Novo → Contatado → Respondeu → Qualificado → Aquecido → Reunião agendada → Proposta → Fechado → Perdido com motivo) e corrige status manualmente, com histórico imutável (CRM-01, CRM-03); após registrar um agendamento, o bot envia confirmação e lembrete antes da reunião com opção de confirmar/remarcar/cancelar — remarcar ou cancelar vira handoff, respeitando janela e limite (FLUP-08; nota: a pesquisa sugere reagendar/cancelar → handoff por R-025/AR-003).
   5. Depois de o Admin assumir um handoff, o bot entra em modo copiloto: sugere respostas no painel e **nunca envia nada sozinho** (FLUP-06); nenhuma mensagem automática sai fora de dias úteis 7h–17h e nada ultrapassa os limites diários — a fila espera o próximo dia útil (reforça WHS-01/WHS-04, cuja mecânica veio na Fase 1).
 
-**Plans**: 5 plans
+**Plans**: 8 plans
 **UI hint**: yes
 
 Plans:
@@ -132,11 +132,23 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 03-04-PLAN.md — Painel frontend: React 19 + Vite + Tailwind v4, layout denso 4 painéis, cabeçalho em tempo real ("BOT ATIVO" vs "MÃO HUMANA ATIVA — BOT EM SILÊNCIO" + motivo + contador + janela + fila de handoff), sugestões só com ação explícita, kill switch confirmado, notificação/chime (NFRQ-05)
+- [x] 03-04-PLAN.md — Painel frontend: React 19 + Vite + Tailwind v4, layout denso 4 painéis, cabeçalho em tempo real ("BOT ATIVO" vs "MÃO HUMANA ATIVA — BOT EM SILÊNCIO" + motivo + contador + janela + fila de handoff), sugestões só com ação explícita, kill switch confirmado, notificação/chime (NFRQ-05)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 03-05-PLAN.md — CRM + copiloto + agendamento: migration `0008_pipeline_crm.sql` (pipeline 9 status com backfill + tags/notas/tarefas) + `pipeline.ts` + `copilot.ts` (sugere nunca envia + nota automática da IA via `LlmPort`, `author_type='ia'`) + `appointment.ts` (confirmação/lembrete no `outbox` `origin='bot'`; remarcar/cancelar → handoff) + rotas/UI de CRM + ADRs 014/015 e reconciliação de docs (FLUP-06, FLUP-08, CRM-01, CRM-03)
+- [ ] 03-05-PLAN.md — CRM + copiloto + agendamento (backend): migration `0008_pipeline_crm.sql` (pipeline 9 status com backfill + tags/notas/tarefas) + `pipeline.ts` + `copilot.ts` (sugere nunca envia + nota automática da IA via `LlmPort`, `author_type='ia'`) + `appointment.ts` (confirmação/lembrete no `outbox` `origin='bot'`; remarcar/cancelar → handoff) + rotas `crm.ts`/`conversations.ts` + testes (FLUP-06, FLUP-08, CRM-01, CRM-03)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 03-08-PLAN.md — UI de CRM/copiloto + docs: `PipelineBoard` (9 status, motivo obrigatório em status terminal) + `LeadNotes` (admin vs IA) + `TaskList` + `CopilotPanel` (aceitar/editar só preenche input; envio só pelo gate) + ADRs 014/015 + reconciliação de docs D-26 (`R-004`/`R-005`/`R-058`, `RN-009`, `pendencias.md`) (CRM-01, CRM-03, FLUP-06, FLUP-08)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 03-06-PLAN.md — Gaveta de detalhe de lead + compliance: `LeadDetailDrawer` (`<dialog>` com abas Conversa/Notas/Tarefas/Histórico/Compliance) + `AuditTimeline` + `CompliancePanel` (LGPD: origem, base legal, opt-out) + `LeadHistoryPanel` + busca/filtros server-side paginados (NFRQ-05)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [ ] 03-07-PLAN.md — Eventos e falhas: rota `system.ts` (event_log read-only, pageSize ≤ 200) + `ErrorPanel` filtrável por severidade + `ConnectionIndicator` (SSE: ao vivo/reconectando/sem conexão) + `SystemHeader` (R-045 painel de erros formalizado, NFRQ-04, NFRQ-05)
 
 ### Phase 4: Piloto, Calibração e Apuração
 
@@ -168,7 +180,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Fundação, Canal e Gate de Envio | 4/5 | In Progress (01-03 deferido — `P-004` (corrida `requestPairingCode` x WS open) corrigido em `2d64728`. Bloqueio atual: `P-007` (socket cai após `channel_ready`; rc14 vs servidor WhatsApp). Ambos deferidos; não bloqueiam Fase 3.) |  |
 | 2. IA, Handoff e Shadow Mode | 4/4 | Complete   | 2026-10-14 |
-| 3. Cadência, Operação e Painel | 3/5 | In Progress|  |
+| 3. Cadência, Operação e Painel | 4/8 | In Progress (03-01..03-04 concluídos; planos revisados e verificados em 2026-10-20 — 03-05 dividido em backend + 03-08 UI/docs) |  |
 | 4. Piloto, Calibração e Apuração | 0/2 | Not started | - |
 
 ## Notas de Cobertura e Decisões de Mapeamento
