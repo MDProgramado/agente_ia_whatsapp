@@ -137,3 +137,33 @@ describe("cliente REST (api.ts)", () => {
 		expect(resultado.action).toBe("deferred");
 	});
 });
+
+/**
+ * Guarda estrutural do copiloto (T-03-22 / FLUP-06 / R-014).
+ *
+ * Aceitar/Editar/Ignorar NUNCA emitem requisição de envio: o `SuggestionCard`
+ * é puramente apresentacional e não tem caminho até o gate. O único ponto que
+ * chama `/api/dispatch` é o `App` (botão Enviar). Provar por ausência de
+ * `enviarMensagem`/`apiPost`/`fetch` no componente é a mesma estratégia dos
+ * grep-tests de choke-point do backend.
+ */
+describe("copiloto não envia sozinho (T-03-22)", () => {
+	it("SuggestionCard não tem caminho para o gate de envio", () => {
+		const src = lerArquivo("src/web/components/SuggestionCard.tsx");
+		expect(src).not.toContain("enviarMensagem");
+		expect(src).not.toContain("apiPost");
+		expect(src).not.toContain("/api/dispatch");
+		expect(src).not.toContain("fetch(");
+	});
+
+	it('usa o rótulo literal "Ignorar" do UI-SPEC (nunca "Descartar")', () => {
+		const src = lerArquivo("src/web/components/SuggestionCard.tsx");
+		expect(src).toContain("Ignorar");
+		expect(src).not.toContain("Descartar");
+	});
+
+	it("renderiza o rótulo literal da sugestão do copiloto", () => {
+		const src = lerArquivo("src/web/components/SuggestionCard.tsx");
+		expect(src).toContain("Sugestão do copiloto — revise antes de enviar");
+	});
+});

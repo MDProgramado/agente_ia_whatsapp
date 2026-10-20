@@ -117,8 +117,16 @@ const paraReviewEventLido = (
 	decision: paraDecisao(row.decision),
 	actor: row.actor as string,
 	editedText: (row.edited_text as string | null) ?? null,
-	createdAt: row.created_at as Date,
+	createdAt: paraData(row.created_at),
 });
+
+/**
+ * Normaliza o timestamp devolvido pelo driver. Dependendo do type parser ativo,
+ * o pg devolve `Date` (default de TIMESTAMPTZ) ou `string` — afirmar `as Date`
+ * seria mentira de tipo no segundo caso (IN-01). `new Date(...)` aceita ambos.
+ */
+const paraData = (bruto: unknown): Date =>
+	bruto instanceof Date ? bruto : new Date(String(bruto));
 
 const paraDecisao = (bruto: unknown): ReviewDecision => {
 	if (bruto === "approved" || bruto === "edited" || bruto === "discarded") {

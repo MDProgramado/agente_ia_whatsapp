@@ -45,6 +45,7 @@ import {
 	type GenerationEnvelope,
 } from "../src/domain/llm/envelope.js";
 import { scanPostGate } from "../src/domain/llm/post-gate.js";
+import type { Estado } from "../src/domain/orchestrator/transitions.js";
 import type { GenerateResult, LlmPort } from "../src/domain/ports/LlmPort.js";
 import { criarAiSdkAdapter } from "../src/infra/llm/ai-sdk-adapter.js";
 import { scriptedLlmAdapter } from "../src/infra/llm/scripted-adapter.js";
@@ -61,7 +62,7 @@ export const PESO_REGISTRO = 0.4;
 export interface Transcript {
 	readonly id: string;
 	/** Estado AUTORITATIVO que o `resolveNextState` escolheria (Camada 2, D-07). */
-	readonly estado: string;
+	readonly estado: Estado;
 	/** Prompt já mascarado (D-16) — o harness não monta prompt com PII. */
 	readonly prompt: string;
 }
@@ -89,15 +90,15 @@ export const TRANSCRIPTS: readonly Transcript[] = [
 		prompt: "Que tipo de serviço vocês fazem exatamente?",
 	},
 	{ id: "t04", estado: "qualificando", prompt: "Quanto custa um site desses?" },
-	{ id: "t05", estado: "contorno_objecao", prompt: "Está caro pra mim agora." },
+	{ id: "t05", estado: "qualificando", prompt: "Está caro pra mim agora." },
 	{
 		id: "t06",
-		estado: "contorno_objecao",
+		estado: "qualificando",
 		prompt: "Já tenho um fornecedor que cuida disso.",
 	},
 	{
 		id: "t07",
-		estado: "contorno_objecao",
+		estado: "qualificando",
 		prompt: "Preciso pensar, vou ver com meu sócio.",
 	},
 	{
@@ -122,7 +123,7 @@ export const TRANSCRIPTS: readonly Transcript[] = [
 	},
 	{
 		id: "t12",
-		estado: "contorno_objecao",
+		estado: "qualificando",
 		prompt: "Um amigo disse que isso não dá resultado.",
 	},
 	{
@@ -142,7 +143,7 @@ export const TRANSCRIPTS: readonly Transcript[] = [
 	},
 	{
 		id: "t16",
-		estado: "contorno_objecao",
+		estado: "qualificando",
 		prompt: "Já tentei isso com outra agência e não funcionou.",
 	},
 	{
@@ -157,7 +158,7 @@ export const TRANSCRIPTS: readonly Transcript[] = [
 	},
 	{
 		id: "t19",
-		estado: "contorno_objecao",
+		estado: "qualificando",
 		prompt: "Não tenho verba pra isso agora, sabe como é.",
 	},
 	{
@@ -172,7 +173,7 @@ export const TRANSCRIPTS: readonly Transcript[] = [
 	},
 	{
 		id: "t22",
-		estado: "contorno_objecao",
+		estado: "qualificando",
 		prompt: "Meu sobrinho faz site de graça, por que eu pagaria?",
 	},
 	{

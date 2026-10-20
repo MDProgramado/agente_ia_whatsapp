@@ -9,6 +9,7 @@ import {
 } from "react";
 import type {
 	ConversaDetalhe,
+	DesfechoDispatch,
 	ItemFilaHandoff,
 	Mensagem,
 	ResumoLead,
@@ -23,12 +24,16 @@ import {
 	buscarLeads,
 	buscarResumoSistema,
 	definirToken,
+	enviarMensagem,
 	lerToken,
 	limparTokenDaUrl,
 } from "./api";
+import type { AcaoRapida } from "./components/ActionBar";
+import { ActionBar } from "./components/ActionBar";
 import { ChatPane } from "./components/ChatPane";
 import { HandoffQueue } from "./components/HandoffQueue";
 import { LeadList } from "./components/LeadList";
+import { SuggestionCard } from "./components/SuggestionCard";
 import { SystemHeader } from "./components/SystemHeader";
 import { useSse } from "./useSse";
 
@@ -69,6 +74,73 @@ const tratarTokenInvalido = (causa: unknown): boolean => {
 	return false;
 };
 
+/**
+ * Chime Web Audio (D-21): redundância da notificação do `notify.ps1`, que
+ * continua sendo a notificação PRIMÁRIA. Toca um bip curto de dois tons quando
+ * um handoff chega via SSE. Degrada em silêncio se o Web Audio não estiver
+ * disponível ou bloqueado.
+ */
+const tocarChime = (): void => {
+	try {
+		const contexto = globalThis as {
+			AudioContext?: typeof AudioContext;
+			webkitAudioContext?: typeof AudioContext;
+		};
+		const Ctx = contexto.AudioContext ?? contexto.webkitAudioContext;
+		if (Ctx === undefined) return;
+		const ctx = new Ctx();
+		const agora = ctx.currentTime;
+		[880, 1174.7].forEach((frequencia, i) => {
+			const osc = ctx.createOscillator();
+			const ganho = ctx.createGain();
+			osc.type = "sine";
+			osc.frequency.value = frequencia;
+			const inicio = agora + i * 0.18;
+			ganho.gain.setValueAtTime(0.0001, inicio);
+			ganho.gain.exponentialRampToValueAtTime(0.18, inicio + 0.02);
+			ganho.gain.exponentialRampToValueAtTime(0.0001, inicio + 0.35);
+			osc.connect(ganho);
+			ganho.connect(ctx.destination);
+			osc.start(inicio);
+			osc.stop(inicio + 0.4);
+		});
+		setTimeout(() => {
+			void ctx.close();
+		}, 1200);
+	} catch {
+		// degrada em silêncio (D-21)
+	}
+};
+
+/**
+ * Notificação de handoff. `notify.ps1` é a notificação primária; aqui é só a
+ * redundância do navegador. Pede permissão APENAS quando há um handoff (contexto)
+ * — nunca no load. Se negada ou indisponível, degrada em silêncio.
+ */
+const notificarHandoff = (): void => {
+	try {
+		if (typeof Notification === "undefined") return;
+		if (Notification.permission === "denied") return;
+		const corpo =
+			"Um lead aguarda atendimento humano. Abra o painel para assumir.";
+		if (Notification.permission === "default") {
+			void Notification.requestPermission()
+				.then((permissao) => {
+					if (permissao === "granted") {
+						new Notification("Handoff pendente", { body: corpo });
+					}
+				})
+				.catch(() => {
+					// degrada em silêncio
+				});
+			return;
+		}
+		new Notification("Handoff pendente", { body: corpo });
+	} catch {
+		// degrada em silêncio (D-21)
+	}
+};
+
 export function App() {
 	const [tokenPresente, setTokenPresente] = useState<boolean>(
 		() => lerToken() !== null,
@@ -90,6 +162,15 @@ export function App() {
 	const dialogoRef = useRef<HTMLDialogElement | null>(null);
 	const [confirmacao, setConfirmacao] = useState("");
 	const [pausandoTudo, setPausandoTudo] = useState(false);
+
+	// --- Task 3: compositor, sugestões, resultado do gate ------------------
+	const [texto, setTexto] = useState("");
+	const [enviando, setEnviando] = useState(false);
+	const [resultado, setResultado] = useState<DesfechoDispatch | null>(null);
+	const [sugestoesIgnoradas, setSugestoesIgnoradas] = useState<
+		readonly string[]
+	>([]);
+	const campoRef = useRef<HTMLTextAreaElement | null>(null);
 
 	// id estável e único (evita duplicar `id` no DOM quando o painel renderiza
 	// mais de um dialog) — regra `useUniqueElementIds`.
@@ -256,6 +337,80 @@ export function App() {
 	);
 	const aoEntrarNoPainel = useCallback(() => setTokenPresente(true), []);
 
+	// --- Task 3 handlers ---------------------------------------------------
+
+	/** Sugestão ativa: a última `ai_suggestion`/`suggested` ainda não ignorada. */
+	const sugestao = useMemo(() => {
+		const candidatas = mensagens.filter(
+			(m) =>
+				m.origin === "ai_suggestion" &&
+				m.status === "suggested" &&
+				!sugestoesIgnoradas.includes(m.id),
+		);
+		return candidatas.at(-1) ?? null;
+	}, [mensagens, sugestoesIgnoradas]);
+
+	/** Aceitar/Editar só preenchem o campo — NUNCA enviam (T-03-22). */
+	const aoAplicar = useCallback((conteudo: string, focar: boolean) => {
+		setTexto(conteudo);
+		setResultado(null);
+		if (focar) campoRef.current?.focus();
+	}, []);
+
+	const aoIgnorar = useCallback(() => {
+		if (sugestao === null) return;
+		setSugestoesIgnoradas((atual) => [...atual, sugestao.id]);
+	}, [sugestao]);
+
+	/** Envio sempre pelo gate: o servidor decide sent/blocked/deferred. */
+	const enviar = useCallback(async (): Promise<void> => {
+		if (conversa === null || texto.trim() === "") return;
+		setEnviando(true);
+		try {
+			const desfecho = await enviarMensagem(conversa.id, texto.trim());
+			setResultado(desfecho);
+			if (desfecho.action === "sent") {
+				setTexto("");
+				await carregarConversa(conversa.id);
+				await carregarSistema();
+			}
+		} catch (causa) {
+			setErroSistema(mensagemDeErro(causa));
+		} finally {
+			setEnviando(false);
+		}
+	}, [conversa, texto, carregarConversa, carregarSistema]);
+
+	const aoEnviar = useCallback(() => void enviar(), [enviar]);
+
+	const aoAcao = useCallback(
+		(acao: AcaoRapida) => {
+			void (async () => {
+				if (conversa === null) return;
+				try {
+					await acionarAcao(conversa.id, acao);
+					await carregarConversa(conversa.id);
+					await carregarSistema();
+				} catch (causa) {
+					setErroSistema(mensagemDeErro(causa));
+				}
+			})();
+		},
+		[conversa, carregarConversa, carregarSistema],
+	);
+
+	// Chime + notificação (D-21) quando a fila de handoff cresce via SSE.
+	// A primeira carga (boot) não notifica.
+	const filaAnteriorRef = useRef<number | null>(null);
+	useEffect(() => {
+		const atual = resumo?.handoffQueue.length ?? 0;
+		const anterior = filaAnteriorRef.current;
+		filaAnteriorRef.current = atual;
+		if (anterior === null || atual <= anterior) return;
+		tocarChime();
+		notificarHandoff();
+	}, [resumo]);
+
 	if (!tokenPresente) {
 		return <TelaToken onEntrar={aoEntrarNoPainel} />;
 	}
@@ -305,12 +460,31 @@ export function App() {
 					carregando={carregandoConversa}
 					motivoSilencio={motivoSilencio}
 					onAssumir={aoAssumir}
-				/>
+				>
+					<ActionBar
+						conversa={conversa}
+						resumo={resumo}
+						texto={texto}
+						enviando={enviando}
+						resultado={resultado}
+						campoRef={campoRef}
+						onTexto={setTexto}
+						onEnviar={aoEnviar}
+						onAcao={aoAcao}
+					/>
+				</ChatPane>
 
-				<HandoffQueue
-					itens={resumo?.handoffQueue ?? []}
-					onSelecionar={aoSelecionarHandoff}
-				/>
+				<div className="flex min-h-0 flex-col divide-y divide-borda">
+					<SuggestionCard
+						sugestao={sugestao}
+						onAplicar={aoAplicar}
+						onIgnorar={aoIgnorar}
+					/>
+					<HandoffQueue
+						itens={resumo?.handoffQueue ?? []}
+						onSelecionar={aoSelecionarHandoff}
+					/>
+				</div>
 			</main>
 
 			<dialog

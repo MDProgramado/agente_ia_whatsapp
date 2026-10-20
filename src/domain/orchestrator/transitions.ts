@@ -74,6 +74,7 @@ export const resolveNextState = (
 	hint: string | undefined,
 	ctx: SinaisLocais,
 ): Estado => {
+	if (prev === "encerrado") return "encerrado";
 	if (ctx.optOutAtivo) return "encerrado";
 	if (ctx.handoffDisparado) return "awaiting_human";
 	if (ctx.adminPrimeiraMensagem === true && prev === "novo")

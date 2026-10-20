@@ -49,9 +49,19 @@ const RE_ENDERECO =
 /** CEP isolado (`40000-000`). */
 const RE_CEP = /\b\d{5}-\d{3}\b/g;
 
+/** Regex para e-mail */
+const RE_EMAIL = /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g;
+/** Regex para CNPJ */
+const RE_CNPJ = /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g;
+/** Regex para CPF */
+const RE_CPF = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g;
+
 /** Mascara telefone, logradouro e CEP em um texto livre. Idempotente. */
 const maskTexto = (texto: string): string =>
 	texto
+		.replace(RE_EMAIL, "[EMAIL]")
+		.replace(RE_CNPJ, "[CNPJ]")
+		.replace(RE_CPF, "[CPF]")
 		.replace(RE_ENDERECO, PLACEHOLDER_ENDERECO)
 		.replace(RE_TELEFONE, PLACEHOLDER_TELEFONE)
 		.replace(RE_CEP, PLACEHOLDER_ENDERECO);

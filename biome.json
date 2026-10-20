@@ -50,6 +50,11 @@
 			"linter": {
 				"domains": {
 					"react": "all"
+				},
+				"rules": {
+					"performance": {
+						"noJsxPropsBind": "off"
+					}
 				}
 			}
 		},

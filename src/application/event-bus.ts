@@ -35,7 +35,7 @@ export interface EventoInbound {
 	readonly timestamp: number;
 	/** E.164 já resolvido, quando o emissor souber; senão o handler resolve via JID. */
 	readonly phoneNumber?: string;
-	/** E.164 do EMISSOR resolvido pelo runtime; undefined quando não derivável. */
+	/** E.164 do EMISSOR resolvido pelo runtime; null/undefined quando não derivável. */
 	readonly senderPhoneE164?: string | null;
 	readonly isMedia?: boolean;
 	readonly mediaType?: string | null;

@@ -49,10 +49,21 @@ describe("resolveNextState (FSM pura)", () => {
 
 	it("handoff disparado → awaiting_human, vencendo a hint (AR-010)", () => {
 		for (const prev of ESTADOS) {
+			// `encerrado` é sumidouro: o handoff NÃO o reabre (ver teste abaixo).
+			if (prev === "encerrado") continue;
 			expect(
 				resolveNextState(prev, "aquecido", { handoffDisparado: true }),
 			).toBe("awaiting_human");
 		}
+	});
+
+	it("handoff disparado NÃO reabre o sumidouro encerrado (WR-01)", () => {
+		// O handoff congela a automação por `handoff_active` + `engagement_mode`
+		// (AR-010/R-066) — a silêncio não depende do `state` virar awaiting_human,
+		// e ALLOWED.encerrado = [] não tem transição de saída.
+		expect(
+			resolveNextState("encerrado", "aquecido", { handoffDisparado: true }),
+		).toBe("encerrado");
 	});
 
 	it("verba e decisão confirmadas → aquecido (R-051)", () => {

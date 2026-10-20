@@ -426,7 +426,7 @@ const rascunharShadow = async (
 			{
 				conversationId: conversa.id,
 				reason: "opt-out ambiguo (matcher deterministico)",
-				triggeredBy: "opt_out",
+				triggeredBy: "validation_error",
 				triggerDetail: "optout_ambiguo",
 				excerpt: evt.body,
 				actor: "bot",
@@ -511,7 +511,10 @@ const rascunharShadow = async (
 			{
 				conversationId: conversa.id,
 				reason: `gatilho de handoff: ${intent}`,
-				triggeredBy: triggeredByDoGatilho(intent, signals),
+				triggeredBy:
+					intent === "pedido_optout"
+						? "intent"
+						: triggeredByDoGatilho(intent, signals),
 				triggerDetail: intent,
 				triggerValue: intent,
 				excerpt: evt.body,
@@ -527,17 +530,23 @@ const rascunharShadow = async (
 	// AUDITA a transição (R-022/CRM-02): sem `status_history`, um estado não tem
 	// por quê nem por quem. Só grava quando o estado REALMENTE mudou.
 	if (estadoResolvido !== conversa.state) {
-		await db.execute(sql`
-			update conversations set state = ${estadoResolvido}
-			where id = ${conversa.id}
-		`);
-		await recordStatusChange(db, {
-			conversationId: conversa.id,
-			fromState: conversa.state,
-			toState: estadoResolvido,
-			changedBy: "bot",
-			reason: `extracao Camada 1 (intent=${intent})`,
-			changedAt: agora,
+		// WR-03: o UPDATE do estado e a auditoria (R-022) são uma coisa só — se o
+		// segundo write falhar, o primeiro reverte (savepoint), como no caminho do
+		// Admin (abaixo) e no `dispararHandoff`.
+		await db.transaction(async (txBruto) => {
+			const tx = txBruto as unknown as Db;
+			await tx.execute(sql`
+				update conversations set state = ${estadoResolvido}
+				where id = ${conversa.id}
+			`);
+			await recordStatusChange(tx, {
+				conversationId: conversa.id,
+				fromState: conversa.state,
+				toState: estadoResolvido,
+				changedBy: "bot",
+				reason: `extracao Camada 1 (intent=${intent})`,
+				changedAt: agora,
+			});
 		});
 	}
 
@@ -610,6 +619,15 @@ export const processInboundFromMe = async (
 	if (ehMidia) {
 		const conversa = await pegarOuCriarConversa(db, lead.id);
 		await registrarMidiaRecebida(db, conversa, lead.id, evt, deps, agora);
+		// (e) IN-03: a mídia também é processada — a watermark avança junto,
+		// senão o cursor de "até onde já processei" fica atrás do que já foi
+		// tratado e um re-entregue reavaliaria o evento do zero. Só
+		// `last_processed_at`: `last_inbound_at` mede a resposta de TEXTO do
+		// lead (D-12/D-13) e não é papel de um bloqueio de mídia tocá-lo.
+		await db.execute(sql`
+			update conversations set last_processed_at = now()
+			where id = ${conversa.id}
+		`);
 		return;
 	}
 

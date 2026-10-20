@@ -115,14 +115,25 @@ const paraRascunhoLido = (row: Record<string, unknown>): RascunhoLido => ({
 	id: row.id as string,
 	conversationId: row.conversation_id as string,
 	texto: row.body as string,
-	criadoEm: row.created_at as Date,
+	criadoEm: paraData(row.created_at),
 	decisao: paraDecisao(row.decisao),
 	ator: (row.ator as string | null) ?? null,
-	decididoEm: (row.decidido_em as Date | null) ?? null,
+	decididoEm:
+		row.decidido_em === null || row.decidido_em === undefined
+			? null
+			: paraData(row.decidido_em),
 	modelo: (row.modelo as string | null) ?? null,
 	promptVersion: (row.prompt_version as string | null) ?? null,
 	policyVersion: (row.policy_version as string | null) ?? null,
 });
+
+/**
+ * Normaliza o timestamp devolvido pelo driver (IN-01): conforme o type parser
+ * ativo o pg devolve `Date` ou `string` — afirmar `as Date` seria mentira de
+ * tipo no segundo caso. `new Date(...)` aceita ambos.
+ */
+const paraData = (bruto: unknown): Date =>
+	bruto instanceof Date ? bruto : new Date(String(bruto));
 
 /** `decision` é união fechada; `null` (sem decisão) é o estado pendente. */
 const paraDecisao = (bruto: unknown): ReviewDecision | null => {
@@ -174,17 +185,40 @@ const decidir = async (
 		escrever(`shadow:edit exige --text <texto>\n${USO}`);
 		return 2;
 	}
-	const eventoId = await recordReviewEvent(db, {
-		messageId: id,
-		decision: decisao,
-		actor: "admin",
-		editedText: textoEditado,
-	});
-	escrever(
-		`Rascunho ${id} ${rotuloDecisao(decisao)} (review_events ${eventoId}). ` +
-			"Nenhum envio nesta fase (D-18).",
-	);
-	return 0;
+
+	try {
+		const alvo = await db.execute(sql`
+			select id from messages
+			where id = ${id}
+				and origin = 'ai_suggestion'
+				and status = 'suggested'
+		`);
+		const existe = (alvo as unknown as { rows: Array<{ id: string }> }).rows[0];
+		if (!existe) {
+			escrever(`rascunho inexistente ou nao revisavel: ${id}`);
+			return 1;
+		}
+	} catch (err) {
+		escrever(`erro ao validar rascunho: ${String(err)}`);
+		return 1;
+	}
+
+	try {
+		const eventoId = await recordReviewEvent(db, {
+			messageId: id,
+			decision: decisao,
+			actor: "admin",
+			editedText: textoEditado,
+		});
+		escrever(
+			`Rascunho ${id} ${rotuloDecisao(decisao)} (review_events ${eventoId}). ` +
+				"Nenhum envio nesta fase (D-18).",
+		);
+		return 0;
+	} catch (err) {
+		escrever(`erro ao registrar evento de revisão: ${String(err)}`);
+		return 1;
+	}
 };
 
 /**

@@ -57,9 +57,16 @@ export const MEDIA_TERM =
  * É o que barra um link de PDF disfarçado de link normal — a checagem estrutural
  * de `parts` deixa `link` passar, e o texto pode estar limpo. Case-insensitive
  * porque `.JPG` e `.jpg` são o mesmo arquivo.
+ *
+ * A extensão precisa TERMINAR o token: sem âncora nenhuma, `.pdf` casaria dentro
+ * de um nome maior; com `$` puro (o bug WR-02), só casasse no fim exato do texto
+ * e `"baixe em https://ex.com/arquivo.pdf e responda"` passava. `[^\w]` fecha o
+ * token sem depender de onde ele está — cobre espaço, `?`/`#` de query/fragment
+ * E pontuação de frase (`.`, `,`, `)`, `;`), que o `[?#\s]` sugerido originalmente
+ * deixaria passar em "…/arquivo.pdf." (fim de frase sem espaço depois).
  */
 export const MEDIA_LINK_EXT =
-	/\.(png|jpe?g|gif|webp|mp3|ogg|opus|m4a|mp4|mov|pdf|docx?|xlsx?|pptx?|zip)$/i;
+	/\.(png|jpe?g|gif|webp|mp3|ogg|opus|m4a|mp4|mov|pdf|docx?|xlsx?|pptx?|zip)(?:[^\w]|$)/i;
 
 /**
  * Agendamento. AR-003.
