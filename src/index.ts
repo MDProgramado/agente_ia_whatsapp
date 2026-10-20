@@ -8,17 +8,25 @@
  *
  * O boot segue config → banco (com migrate) → logs → canal → motor. O "motor"
  * desta fase é o monitor de saúde e o relatório diário do piloto; o
- * dispatcher/LLM entram numa fase seguinte.
+ * `dispatcher` é o único choke-point de envio e o adaptador LLM de produção é
+ * instanciado aqui e injetado no `inbound-handler` (`deps.llm`).
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createOpenAI } from "@ai-sdk/openai";
 import { Cron } from "croner";
 import { sql } from "drizzle-orm";
 import { Client } from "pg";
 import { type PanelCore, startPanel } from "./api/server.js";
 import { drenarCatchup } from "./application/catchup-drain.js";
 import { BarramentoEventos } from "./application/event-bus.js";
-import { processInboundFromMe } from "./application/inbound-handler.js";
+import {
+	POLICY_VERSION,
+	PROMPT_VERSION,
+	processInboundFromMe,
+} from "./application/inbound-handler.js";
 import { drainLoop } from "./application/outbox-worker.js";
 import { startScheduler } from "./application/scheduler.js";
 import { CAP_MENSAGENS } from "./application/shadow.js";
@@ -33,7 +41,7 @@ import {
 } from "./channel/baileys/runtime.js";
 import { createSession } from "./channel/baileys/session.js";
 import { translateDisconnect } from "./channel/baileys/signals.js";
-import { ensureDataDirs, env, logsDir } from "./config/env.js";
+import { type Env, ensureDataDirs, env, logsDir } from "./config/env.js";
 import { feriadosNacionais } from "./domain/feriados-br.js";
 import { closeDb, openDb } from "./infra/db/client.js";
 import { dailyReport } from "./infra/db/queries/daily-report.js";
@@ -47,6 +55,10 @@ import {
 	type BaileysState,
 	startHealthMonitor,
 } from "./infra/health-monitor.js";
+import {
+	criarAiSdkAdapter,
+	type LanguageModel,
+} from "./infra/llm/ai-sdk-adapter.js";
 import { childLogger, flushLogSync } from "./infra/logger.js";
 import { criarNotifier } from "./infra/notifier.js";
 
@@ -276,11 +288,60 @@ const main = async (): Promise<void> => {
 		});
 	});
 
+	// O adaptador LLM de PRODUÇÃO (D-08/D-10): o `inbound-handler` só roda o
+	// sanduíche (extração → decisão → geração) quando `deps.llm` está injetado —
+	// e o matcher DETERMINÍSTICO de opt-out (R-024/AR-005) roda dentro desse
+	// sanduíche, antes da LLM. Sem este passo, um "pode me tirar" seria gravado
+	// e ignorado. Provider/modelo vêm do `.env` (fail-closed no parse do zod);
+	// a chave é `LLM_API_KEY` com fallback para a variável padrão do provider,
+	// mesma convenção do bake-off. Chave vazia NÃO aborta o boot: o adaptador é
+	// injetado e as chamadas falham fail-closed (silêncio + notificação, D-10).
+	const CHAVE_ENV_DO_PROVIDER: Record<Env["LLM_PROVIDER"], string> = {
+		openai: "OPENAI_API_KEY",
+		anthropic: "ANTHROPIC_API_KEY",
+		google: "GOOGLE_GENERATIVE_AI_API_KEY",
+	};
+	const chaveLlm =
+		env.LLM_API_KEY ||
+		process.env[CHAVE_ENV_DO_PROVIDER[env.LLM_PROVIDER]] ||
+		"";
+	const criarModeloLlm = (): LanguageModel => {
+		const apiKey = chaveLlm || undefined;
+		if (env.LLM_PROVIDER === "anthropic") {
+			return createAnthropic({ apiKey })(env.LLM_MODEL);
+		}
+		if (env.LLM_PROVIDER === "google") {
+			return createGoogleGenerativeAI({ apiKey })(env.LLM_MODEL);
+		}
+		return createOpenAI({ apiKey })(env.LLM_MODEL);
+	};
+	const llmProducao = criarAiSdkAdapter({
+		model: criarModeloLlm(),
+		promptVersion: PROMPT_VERSION,
+		policyVersion: POLICY_VERSION,
+	});
+	// Um notifier por processo: é um objeto sem estado (um `spawn` por chamada),
+	// e injetá-lo aqui é o que faz o handoff local (R-013) disparar de verdade —
+	// sem ele, `deps.notifier?.notify` engole a notificação em silêncio.
+	const notifierInbound = criarNotifier();
+	log.info(
+		{
+			step: "llm_adapter",
+			provider: env.LLM_PROVIDER,
+			model: env.LLM_MODEL,
+			api_key: chaveLlm ? "definida" : "AUSENTE",
+		},
+		"adaptador LLM de producao instanciado para injetar no inbound",
+	);
+
 	// O `inbound-handler` é o consumidor do canal: ligado ao barramento, ele resolve
 	// o JID e grava em `messages` (T-01-06) ou aciona o handoff.
 	const barramento = new BarramentoEventos(conn.db);
 	barramento.on("inbound", async (evt) => {
-		await processInboundFromMe(conn.db, sock, evt);
+		await processInboundFromMe(conn.db, sock, evt, {
+			llm: llmProducao,
+			notifier: notifierInbound,
+		});
 	});
 
 	// Pareamento: só quando não há sessão registrada. O Admin DIGITA o par de 8
@@ -550,18 +611,12 @@ const main = async (): Promise<void> => {
 	});
 
 	// `ctx` do gate (D-05): os campos de CONFIGURAÇÃO, lidos uma vez no boot.
-	// `sentToday` é atualizado pelo próprio `dispatch` a cada job (via
-	// `channel.readQuota`); `newContactsToday` vem dos contadores do dia. O
+	// Os contadores do dia NÃO entram aqui: `sentToday` é atualizado pelo próprio
+	// `dispatch` a cada job (via `channel.readQuota`) e `newContactsToday` é
+	// lido do `daily_counters` no ATO do dispatch — congelar qualquer um deles no
+	// boot faria o gate avaliar o dia inteiro com o contador da subida. O
 	// relógio do dreno é fresco a cada iteração (`agora`), senão a janela
-	// operacional e a cota congelariam no instante do boot.
-	const contadores = await conn.db.execute(sql`
-		select kind, count from daily_counters where day = ${diaEmSaoPaulo(new Date())}
-	`);
-	const linhasContador = contadores.rows as {
-		kind: string;
-		count: number | string;
-	}[];
-
+	// operacional congelaria no instante do boot.
 	motorDreno = new AbortController();
 	void drainLoop(
 		conn.db,
@@ -574,9 +629,6 @@ const main = async (): Promise<void> => {
 				windowEndHour: env.WINDOW_END_HOUR,
 				dailyMessageLimit: env.DAILY_MESSAGE_LIMIT,
 				dailyMessageCap: CAP_MENSAGENS,
-				newContactsToday: Number(
-					linhasContador.find((l) => l.kind === "new_contacts")?.count ?? 0,
-				),
 			},
 		},
 		{ signal: motorDreno.signal, agora: () => new Date() },
@@ -623,9 +675,6 @@ const main = async (): Promise<void> => {
 				windowEndHour: env.WINDOW_END_HOUR,
 				dailyMessageLimit: env.DAILY_MESSAGE_LIMIT,
 				dailyMessageCap: CAP_MENSAGENS,
-				newContactsToday: Number(
-					linhasContador.find((l) => l.kind === "new_contacts")?.count ?? 0,
-				),
 			},
 		},
 		feriados,

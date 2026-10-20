@@ -43,7 +43,29 @@ const kinds = {
 	novo_contato: "new_contacts",
 } as const;
 
-type Kind = (typeof kinds)[keyof typeof kinds];
+export type DailyCounterKind = (typeof kinds)[keyof typeof kinds];
+
+/**
+ * Lê UM contador do dia SEM reservar — a leitura fresca que o gate precisa.
+ *
+ * `newContactsToday` NÃO pode ser lido uma vez no boot: leads novos entram o
+ * dia inteiro, e um valor congelado faria o gate avaliar o dia com o contador
+ * do instante de subida do processo. Ausência da linha devolve 0 — dia sem
+ * movimento não é falha.
+ */
+export const readDailyCounter = async (
+	db: Db,
+	day: string,
+	kind: DailyCounterKind,
+): Promise<number> => {
+	const resultado = await db.execute(sql`
+		select count from ${dailyCounters}
+		where day = ${day} and kind = ${kind}
+	`);
+	const rows = (resultado as unknown as { rows: { count: number | string }[] })
+		.rows;
+	return Number(rows[0]?.count ?? 0);
+};
 
 /**
  * Uma única instrução, sem transação explícita e sem `SKIP LOCKED`.
@@ -56,7 +78,7 @@ type Kind = (typeof kinds)[keyof typeof kinds];
  */
 async function reservar(
 	db: Db,
-	kind: Kind,
+	kind: DailyCounterKind,
 	day: string,
 	configuredLimit: number,
 	cap: number,

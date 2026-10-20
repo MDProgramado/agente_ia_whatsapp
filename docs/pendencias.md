@@ -186,9 +186,12 @@ Boot ao vivo em 2026-10-15 11:41 chegou a `connected to WA` → `pairing_code` �
 
 ## P-007 — Socket cai logo após `channel_ready`, antes do pareamento completar (T6) ⚠️ ABERTO
 
-**Status:** Aberto. Bloqueia a Task 3 do plano 01-03 (pareamento do número dedicado). É o **próximo
+**Status:** Aberto — **experimentos executados e ambos falharam (2026-10-15)**; critério de parada atingido.
+P-007 é um **bloqueio conhecido do rc14** contra o servidor atual, **deferido como ADR-002** (avaliação de
+fork futura). Bloqueia a Task 3 do plano 01-03 (pareamento do número dedicado) mas **não bloqueia a Fase 3**
+(ROADMAP: "em caso de insucesso dos 2 experimentos, seguir para Fase 3"). É o **próximo
 bloqueio**, revelado depois de corrigir a corrida do P-004 — o boot agora chega a `channel_ready`.
-Diagnóstico em `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-03-DIAG.md` (§T6).
+Diagnóstico em `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-03-DIAG.md` (§T6 e §Resultado).
 
 **Numeração:** referido como **T6** no DIAG; registrado aqui como **P-007** porque P-005 (app_users)
 e P-006 (handoff) já existem neste arquivo.
@@ -229,6 +232,27 @@ humano digitar o par.
 (fallback) se ambos falharem, tratar como bloqueio do rc14 contra o servidor atual (R-059) e
 considerar fork (`@ndikagatengg/baileys`) como **ADR-002** — sem bloquear a Fase 3.
 
+### Resultado dos experimentos (2026-10-15 — executado, uma variável por vez)
+
+- **Exp. 1 (auth 100% limpo — `pasta_existia=false`):** FALHOU igual. Sequência: `connected to WA` →
+  `pairing_code` → `channel_ready` → **~1,2 s depois** `Connection Failure` (stanza `CB:failure` sem
+  `reason`) → `logged_out`, `terminal=true`, severity=critical → shutdown (motivo=`canal_logged_out`).
+  Não é 428 transiente; é 500 terminal.
+- **Exp. 2 (T4c — patch `case 'companion_reg_refresh'` no vendor):** FALHOU igual. Sequência idêntica:
+  `channel_ready` → **~4,6 s depois** `Connection Failure` → `logged_out`, `terminal=true` → shutdown.
+  Nenhum evento `companion_reg_refresh` chegou a ser logado (o handler não foi exercitado).
+
+**Conclusão (critério de parada atingido — time-box):** ambos os experimentos falharam.
+**P-007 confirmado como bloqueio do `@whiskeysockets/baileys@7.0.0-rc14` contra o servidor WhatsApp
+atual** — o socket morre logo após `channel_ready`, antes do pareamento completar, com `CB:failure` sem
+`reason` (500 → `badSession` → `logged_out`), e o rc14 não loga `node.attrs`, então não há como avançar
+por este caminho sem ADR-002.
+
+**Desfecho:** PARAR os experimentos. Considerar fork (`@ndikagatengg/baileys` ou similar) como
+**ADR-002** (avaliação futura, comparando exports e revalidando WHS-04/LEAD-03 antes de trocar).
+**Seguir para a Fase 3** (não bloqueia o roadmap) — o pareamento por este caminho permanece bloqueado
+até uma decisão de ADR-002.
+
 ---
 
 ## P-005 — Linha do Admin em `app_users` inexistente ✅ RESOLVIDO (2026-10-13)
@@ -256,10 +280,15 @@ a linha nasce aqui; o Admin pode trocá-lo depois. Prova: `tests/ops/seed-admin.
 
 ---
 
-## P-006 — Transição de handoff → `engagement_mode = awaiting_human` ⚠️ DIFERIDO (Fase 2)
+## P-006 — Transição de handoff → `engagement_mode = awaiting_human` ✅ RESOLVIDO (2026-10-14)
 
-**Status:** Deferido à **Fase 2** (plano **02-02** — HandoffService + gatilhos + `mode_changes`), por decisão
-do Admin em 2026-10-13. Não bloqueia o fechamento da Fase 1.
+**Status:** ✅ Resolvido em **2026-10-14** — o plano **02-02** (decisão do Admin de 2026-10-13 de adiar à
+Fase 2) cumpriu exatamente o que este item pedia. O `HandoffService` (`src/application/handoff-service.ts`,
+`dispararHandoff`) grava as quatro escritas numa **transação única**: `handoff_events` (append-only) +
+`mode_changes` (`from_mode` real lido da conversa → `awaiting_human`) +
+`conversations.engagement_mode='awaiting_human'`/`handoff_active=true` + `status_history` (via
+`resolveNextState` — a FSM decide o `state`). A truth do must_have do 01-05 (NFRQ-04/AR-010) é observável:
+o **escritor** que faltava existe e a guarda `ar010_handoff_ativo` lê sinal real.
 
 **Origem:** `.planning/phases/01-funda-o-canal-e-gate-de-envio/VERIFICATION.md` (gap #2) — truth do must_have
 do plano 01-05 (NFRQ-04/AR-010).
@@ -278,6 +307,8 @@ de handoff (R-012/R-038/R-056/R-065).
 
 **Como fechar:** no plano 02-02, implementar o `HandoffService` que grava `handoff_events` + muda
 `engagement_mode`/`handoff_active` na mesma transação; re-verificar a truth do must_have.
+→ **Cumprido (2026-10-14, plano 02-02):** `dispararHandoff` entrega a transação única descrita acima;
+prova nos testes do 02-02 (idempotência via `FOR UPDATE`, notificação fora da transação).
 
 ---
 
@@ -300,57 +331,13 @@ Resultados atestados por **humano** (e não por teste automatizado), com data e 
   de estado.
 - **Ao tentar parear o canal (Task 3 do plano 01-03):** a falha silenciosa do P-004 está corrigida
   (`2d64728`); agora o boot chega a `channel_ready` e, se cair, aparece no `app.log`. O bloqueio
-  restante é **P-007** (socket cai logo após `channel_ready`); rodar com `BAILEYS_LOG_LEVEL=debug`.
+  restante é **P-007** (socket cai logo após `channel_ready`) — os experimentos Exp. 1/Exp. 2 já foram
+  executados em 2026-10-15 e **ambos falharam**; não adianta repetir `BAILEYS_LOG_LEVEL=debug` por este
+  caminho, o desfecho é ADR-002 (avaliação de fork).
 - **Ao ver `aumid_registration_skipped` no log:** não é regressão. Ver P-002.
 - **Ao rodar `pg-hba-apply.ps1`:** esperar o Scope 2 abortar. Ver P-003.
 - **Ao fechar uma pendência:** mudar o status para ✅, datar, e registrar a decisão tomada.
 
 ---
 
-*Criado em 2026-10-05 (Task 4 do plano 01-02). P-001, P-002, P-003, P-004 e P-005 (2026-10-13); P-006 (2026-10-13); P-007 (2026-10-15).*
-## P-007 — Socket cai logo após channel_ready, antes do pareamento completar (T6) ⚠️ ABERTO
-
-**Data descoberta:** 2026-10-15 11:41:27 (após correção P-004).  
-**Evidência:** .planning/phases/01-funda-o-canal-e-gate-de-envio/01-03-DIAG.md (§T6), logs pp.log com channel_ready seguido de fechamento WS.
-
-### Ocorrências (observadas)
-- **10/09:** ws close 428 transiente (237ms).
-- **15/10:** CB:failure sem reason → 500 → adSession → logged_out terminal (~2,5s).
-
-### Pistas (hipóteses)
-1. **Fluxo exige socket vivo até confirmação do telefone.** O handshake pode precisar permanecer aberto durante equestPairingCode até o pareamento ser confirmado no telefone (não apenas channel_ready).
-2. **companion_reg_refresh ignorado pelo rc14 (T4c candidato).** Possível evento de refresh de registro do companion não tratado no @whiskeysockets/baileys@7.0.0-rc14, causando queda logo após channel_ready.
-3. **Creds de pareamento abandonado podem induzir rejeição.** Resquícios de tentativa anterior podem levar o servidor a rejeitar nova tentativa rapidamente (badSession/logged_out).
-
-### Experimentos planejados (T6)
-- **Exp. 1 — Auth 100% limpo:** mover TODAS pastas uth_info_baileys* para uth_info_baileys.OLD-<ts> (incluir .failed-*, .stale-*), boot fresh. Observar: connected to WA → pairing_code → channel_ready → ??? (sobrevive ou cai). Classificar: 428 (transiente) ou 500 (terminal).
-- **Exp. 2 — T4c (patch vendor):** aplicar patch para tratar processNotification com case 'companion_reg_refresh' em src/channel/baileys/ via patch-package. Boot fresh + pareamento. Reportar sequência.
-
-### Critério de parada
-- Se **Exp. 1** falhar igual (cai em segundos) **E** **Exp. 2** também falhar: **PARAR**. Registrar P-007 como bloqueio do @whiskeysockets/baileys@7.0.0-rc14 frente ao servidor atual.
-- Considerar fork (@ndikagatengg/baileys) como **ADR-002** (avaliação futura).
-- Em caso de insucesso dos 2 experimentos, seguir para **Fase 3** (não bloqueia o roadmap).
-
-**Status:** ABERTO. Aguarda execução controlada (uma variável por vez).
-
-### Resultado dos experimentos (2026-10-15, executado)
-
-- **Experimento 1 (auth 100% limpo — pasta_existia=false):** FALHOU igual.
-  Sequência: connected to WA → pairing_code → channel_ready → **~1,2 s depois**
-  Connection Failure (stanza CB:failure sem eason) → logged_out, 	erminal=true,
-  severity=critical → shutdown(motivo=canal_logged_out). Não é 428 transiente; é 500 terminal.
-
-- **Experimento 2 (T4c — patch case 'companion_reg_refresh' no vendor):** FALHOU igual.
-  Sequência idêntica: connected to WA → pairing_code → channel_ready → ~4,6 s depois
-  Connection Failure → logged_out, 	erminal=true → shutdown. Nenhum evento
-  companion_reg_refresh chegou a ser logado (o handler não foi exercitado).
-
-**Conclusão (critério de parada atingido — time-box):** ambos os experimentos falharam.
-**P-007 (T6) confirmado como bloqueio do @whiskeysockets/baileys@7.0.0-rc14 contra o
-servidor WhatsApp atual** — o socket morre logo após channel_ready, antes do pareamento
-completar, com CB:failure sem eason (500 → adSession → logged_out).
-
-**Desfecho:** PARAR os experimentos. Registrar como bloqueio; considerar fork
-(@ndikagatengg/baileys ou similar) como **ADR-002** (avaliação futura, comparando exports
-e revalidando WHS-04/LEAD-03 antes de trocar). **Seguir para a Fase 3** (não bloqueia o
-roadmap) — o pareamento por este caminho permanece bloqueado até uma decisão de ADR-002.
+*Criado em 2026-10-05 (Task 4 do plano 01-02). P-001, P-002, P-003, P-004 e P-005 (2026-10-13); P-006 (2026-10-13, fechado 2026-10-14); P-007 (2026-10-15, experimentos concluídos 2026-10-15 — ambos falharam, desfecho ADR-002).*

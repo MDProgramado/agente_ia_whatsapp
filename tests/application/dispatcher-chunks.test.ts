@@ -55,7 +55,6 @@ const CTX: DispatchDeps["ctx"] = {
 	windowEndHour: env.WINDOW_END_HOUR,
 	dailyMessageLimit: env.DAILY_MESSAGE_LIMIT,
 	dailyMessageCap: 30,
-	newContactsToday: 0,
 };
 
 const SENTINELA = "rollback-intencional-do-teste";

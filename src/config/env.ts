@@ -129,6 +129,25 @@ export const envSchema = z.object({
 	 * restante da toolchain.
 	 */
 	PANEL_PORT: z.coerce.number().int().min(1).max(65535).default(8787),
+
+	/**
+	 * LLM de produção (D-08/D-10, R-009) — o boot instancia o `AiSdkAdapter`
+	 * com estes valores e o injeta em `deps.llm` do `processInboundFromMe`.
+	 * Sem adaptador injetado o handler só persiste: cairia o matcher
+	 * determinístico de opt-out (que roda dentro do sanduíche) junto com a IA.
+	 * Provider/modelo são validados AQUI (fail-closed no boot), nunca lidos à
+	 * solta de `process.env` no módulo de boot.
+	 */
+	LLM_PROVIDER: z.enum(["openai", "anthropic", "google"]).default("openai"),
+	LLM_MODEL: z.string().min(1).default("gpt-4o-mini"),
+	/**
+	 * Chave do provider. Pode vir vazia do `.env`: nesse caso o adaptador é
+	 * injetado mesmo assim e as chamadas falham fail-closed (`provider_indisponivel`
+	 * → silêncio + notificação local, D-10) — nunca um texto de fallback.
+	 * O boot também aceita a variável padrão do provider (`OPENAI_API_KEY` etc.)
+	 * como fallback, mesma convenção do bake-off.
+	 */
+	LLM_API_KEY: z.string().default(""),
 });
 
 export type Env = z.infer<typeof envSchema>;

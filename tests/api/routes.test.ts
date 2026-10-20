@@ -67,7 +67,6 @@ const montarCore = (tx: Db): PanelCore => {
 		windowEndHour: env.WINDOW_END_HOUR,
 		dailyMessageLimit: env.DAILY_MESSAGE_LIMIT,
 		dailyMessageCap: 30,
-		newContactsToday: 0,
 	};
 	return {
 		db: tx,

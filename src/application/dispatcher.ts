@@ -31,7 +31,10 @@ import { evaluatePolicy } from "../domain/gate/index.js";
 import type { ChannelPort } from "../domain/ports/ChannelPort.js";
 import type { Db } from "../infra/db/client.js";
 import { recordBlockedAttempt } from "../infra/db/queries/blocked-attempts.js";
-import { reserveMessageQuota } from "../infra/db/queries/counters.js";
+import {
+	readDailyCounter,
+	reserveMessageQuota,
+} from "../infra/db/queries/counters.js";
 import { loadGateSnapshot } from "../infra/db/queries/snapshot.js";
 import { messages } from "../infra/db/schema.js";
 import { logger } from "../infra/logger.js";
@@ -72,13 +75,18 @@ export type DispatchResult =
 export interface DispatchDeps {
 	readonly db: Db;
 	readonly channel: ChannelPort;
+	/**
+	 * Config de janela/cota (D-05). Os contadores do dia NÃO moram aqui:
+	 * `sentToday` vem de `channel.readQuota` e `newContactsToday` do banco,
+	 * ambos lidos A CADA `dispatch` — um valor congelado no boot faria o gate
+	 * ver o dia inteiro com o contador do instante de subida do processo.
+	 */
 	readonly ctx: {
 		readonly tz: string;
 		readonly windowStartHour: number;
 		readonly windowEndHour: number;
 		readonly dailyMessageLimit: number;
 		readonly dailyMessageCap: number;
-		readonly newContactsToday: number;
 	};
 	/**
 	 * Fila por lead (R-067). O default é um singleton de módulo para que a
@@ -153,11 +161,15 @@ export const dispatch = async (
 	const dia = diaLocal(agora, ctx.tz);
 	const chave = input.idempotencyKey ?? conversationId;
 
-	// (1) snapshot — o gate lê o estado mais fresco possível.
+	// (1) snapshot — o gate lê o estado mais fresco possível. Os DOIS contadores
+	// do dia são lidos AGORA: `sentToday` pelo canal e `newContactsToday` do
+	// banco (`daily_counters`), nunca do boot — leads novos entram o dia todo.
 	const { sent } = await channel.readQuota(agora);
+	const novosContatos = await readDailyCounter(db, dia, "new_contacts");
 	const snapshot = await loadGateSnapshot(db, conversationId, agora, {
 		...ctx,
 		sentToday: sent,
+		newContactsToday: novosContatos,
 	});
 
 	if (!snapshot) {

@@ -48,7 +48,6 @@ const CTX = {
 	windowEndHour: env.WINDOW_END_HOUR,
 	dailyMessageLimit: env.DAILY_MESSAGE_LIMIT,
 	dailyMessageCap: 30,
-	newContactsToday: 0,
 };
 
 const SENTINELA = "rollback-intencional-do-teste";
@@ -152,7 +151,7 @@ describe("drainOnce — reavaliação estrita (opt-out após enfileirar)", () =>
 				tx,
 				conversaId,
 				DENTRO_DA_JANELA,
-				{ ...CTX, sentToday: 0 },
+				{ ...CTX, sentToday: 0, newContactsToday: 0 },
 			);
 			if (!snapshot)
 				throw new Error("snapshot ausente para a conversa de teste");
