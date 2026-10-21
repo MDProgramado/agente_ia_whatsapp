@@ -188,6 +188,12 @@ None - no external service configuration required.
 - `fetch(` em `src/web` → apenas `src/web/api.ts` e `src/web/useSse.ts`.
 - Docs: `docs/08-adr/014-scheduler-cadencia.md` e `docs/08-adr/015-pipeline-crm-copiloto.md` existem; `R-058` → 1 em `docs/01-requisitos-funcionais.md`; `reconciliado com ADR-009` → 3 e 2; `isCatchupDrain` → 1 em `docs/03-regras-de-negocio.md`; **nenhum dos 5 arquivos docs com BOM UTF-8**.
 
+## Self-Check: PASSED
+
+- **Arquivos criados/modificados verificados (12/12 presentes):** `src/web/components/PipelineBoard.tsx`, `src/web/components/LeadNotes.tsx`, `src/web/components/TaskList.tsx`, `src/web/components/CopilotPanel.tsx`, `src/web/App.tsx`, `src/web/api.ts`, `docs/08-adr/014-scheduler-cadencia.md`, `docs/08-adr/015-pipeline-crm-copiloto.md`, `docs/01-requisitos-funcionais.md`, `docs/03-regras-de-negocio.md`, `docs/pendencias.md`, `.planning/phases/03-cad-ncia-opera-o-e-painel/03-08-SUMMARY.md`.
+- **Commits verificados (4/4 presentes em `git log --all`):** `09005cd` (T1), `2041e35` (T2), `44c9e72` (SUMMARY), `765554a` (estado/roadmap).
+- **Working tree limpo** — nenhum arquivo não rastreado ou modificado pendente.
+
 ---
 *Phase: 03-cad-ncia-opera-o-e-painel*
 *Completed: 2026-10-21*
