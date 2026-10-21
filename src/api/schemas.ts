@@ -55,6 +55,21 @@ export const acaoConversaBody = z.object({
 export type AcaoConversaBody = z.infer<typeof acaoConversaBody>;
 
 /**
+ * `POST /api/leads/:id/opt-out` — o opt-out manual é IRREVERSÍVEL (R-024/AR-005),
+ * então a borda exige o LITERAL `OPTOUT` (T-03-41). Sem ele a rota responde 400
+ * e o lead fica intocado: um request capturado (ou um clique acidental) não pode
+ * virar bloqueio permanente. O `ConfirmDialog` do painel repete a exigência no
+ * cliente, mas quem decide é o servidor — o cliente é conveniência, o schema é
+ * controle.
+ */
+export const confirmarOptOutBody = z.object({
+	confirm: z.literal("OPTOUT", {
+		message: "confirm deve ser exatamente 'OPTOUT' para registrar o opt-out",
+	}),
+});
+export type ConfirmarOptOutBody = z.infer<typeof confirmarOptOutBody>;
+
+/**
  * `POST /api/system/kill-switch` — exige `confirm: true` explícito (type-to-confirm
  * no cliente, D-20). Um kill switch acionável por um clique acidental de um
  * request capturado seria ruim; o `confirm` força intenção deliberada.

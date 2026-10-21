@@ -22,9 +22,29 @@ import {
 	tratarRespostaAgendamento,
 } from "../../application/appointment.js";
 import type { Db } from "../../infra/db/client.js";
-import { recordStatusChange } from "../../infra/db/queries/status-history.js";
+import { loadBlockedAttempts } from "../../infra/db/queries/blocked-attempts.js";
+import {
+	loadStatusHistory,
+	recordStatusChange,
+} from "../../infra/db/queries/status-history.js";
 import { acaoConversaBody, idParams } from "../schemas.js";
 import type { PanelCore } from "../server.js";
+
+/**
+ * Teto de linhas por fonte na trilha de auditoria (D-23). O painel quer a
+ * janela recente do que aconteceu; a tabela inteira seria ruído e custo.
+ */
+const AUDIT_LIMITE = 200;
+
+/**
+ * `timestamptz` chega do driver como `Date`; a API fala ISO-8601 (string).
+ * A conversão mora na borda para que o contrato do painel seja explícito em
+ * vez de herdado do driver.
+ */
+const paraIso = (valor: Date | string | null | undefined): string | null => {
+	if (valor === null || valor === undefined) return null;
+	return valor instanceof Date ? valor.toISOString() : String(valor);
+};
 
 /** Corpo do agendamento manual da reunião (D-25). */
 const agendamentoBody = z.object({
@@ -97,6 +117,46 @@ const paraDetalhe = (row: LinhaConversa) => ({
 		optOut: row.opt_out,
 	},
 });
+
+/** Uma linha de `handoff_events` como a trilha de auditoria a consome. */
+interface LinhaHandoff {
+	readonly id: string;
+	readonly conversation_id: string;
+	readonly lead_id: string;
+	readonly triggered_by: string;
+	readonly trigger_detail: string | null;
+	readonly trigger_value: string | null;
+	readonly excerpt: string;
+	readonly simultaneous_send_blocked: boolean;
+	readonly bot_stopped_at: Date | string;
+	readonly human_acknowledged_at: Date | string | null;
+	readonly created_at: Date | string;
+}
+
+/**
+ * Lê os handoffs de uma conversa, mais recentes primeiro.
+ *
+ * `handoff_events` é TABELA e não coluna porque "por que a automação parou
+ * aqui?" é uma pergunta que precisa de histórico (R-012/R-022). Aqui só se lê:
+ * esta é a via read-only do painel (D-23) e a rota das ações do Admin é que
+ * escreve.
+ */
+const carregarHandoffEvents = async (
+	db: Db,
+	conversationId: string,
+): Promise<LinhaHandoff[]> => {
+	const resultado = await db.execute(sql`
+		select
+			id, conversation_id, lead_id, triggered_by, trigger_detail,
+			trigger_value, excerpt, simultaneous_send_blocked,
+			bot_stopped_at, human_acknowledged_at, created_at
+		from handoff_events
+		where conversation_id = ${conversationId}
+		order by created_at desc
+		limit ${AUDIT_LIMITE}
+	`);
+	return (resultado as unknown as { rows: LinhaHandoff[] }).rows;
+};
 
 export const registrarConversations = (
 	app: FastifyInstance,
@@ -251,6 +311,89 @@ export const registrarConversations = (
 			action: body.data.action,
 			state: resultado.toState,
 			engagementMode: resultado.toMode,
+		};
+	});
+
+	// --- Trilha de auditoria read-only (D-23, R-043/R-022) -----------------
+	//
+	// As QUATRO fontes de histórico do painel (`messages`, `status_history`,
+	// `handoff_events`, `blocked_attempts`) são append-only e SÓ LEEM. Esta rota
+	// serve as três últimas — `messages` já tem rota própria
+	// (`GET /api/conversations/:id/messages`) — e o painel funde as quatro
+	// numa linha do tempo cronológica.
+	//
+	// Aqui esta rota não escreve nada: histórico que pode ser corrigido depois
+	// não é histórico. A verificação do plano confere isso por `grep` na rota
+	// nova (o resto do arquivo tem as escritas das AÇÕES do Admin, que são de
+	// outro plano e são auditadas).
+	app.get("/api/conversations/:id/audit", async (req, reply) => {
+		const parsed = idParams.safeParse(req.params);
+		if (!parsed.success) {
+			return reply.code(400).send({ erro: "id invalido" });
+		}
+
+		// 404 quando a conversa não existe: a trilha é POR conversa, e devolver
+		// listas vazias para um id inválido esconderia erro de integração.
+		const existe = await core.db.execute(sql`
+			select id from conversations where id = ${parsed.data.id}
+		`);
+		if (!(existe as unknown as { rows: { id: string }[] }).rows[0]) {
+			return reply.code(404).send({ erro: "conversa nao encontrada" });
+		}
+
+		// SEQUENCIAL, não `Promise.all`: dentro de uma transação o cliente `pg` é
+		// único, e duas queries concorrentes nele são um erro de protocolo
+		// ("Calling client.query() when the client is already executing a
+		// query"). Três leituras locais em sequência custam menos que a
+		// correctedura.
+		const statusHistory = await loadStatusHistory(
+			core.db,
+			parsed.data.id,
+			AUDIT_LIMITE,
+		);
+		const handoffEvents = await carregarHandoffEvents(core.db, parsed.data.id);
+		const blockedAttempts = await loadBlockedAttempts(
+			core.db,
+			parsed.data.id,
+			AUDIT_LIMITE,
+		);
+
+		return {
+			statusHistory: statusHistory.map((linha) => ({
+				id: linha.id,
+				conversationId: linha.conversationId,
+				fromState: linha.fromState,
+				toState: linha.toState,
+				changedBy: linha.changedBy,
+				reason: linha.reason,
+				changedAt: paraIso(linha.changedAt),
+			})),
+			handoffEvents: handoffEvents.map((linha) => ({
+				id: linha.id,
+				conversationId: linha.conversation_id,
+				leadId: linha.lead_id,
+				triggeredBy: linha.triggered_by,
+				triggerDetail: linha.trigger_detail,
+				triggerValue: linha.trigger_value,
+				excerpt: linha.excerpt,
+				simultaneousSendBlocked: linha.simultaneous_send_blocked,
+				botStoppedAt: paraIso(linha.bot_stopped_at),
+				humanAcknowledgedAt: paraIso(linha.human_acknowledged_at),
+				createdAt: paraIso(linha.created_at),
+			})),
+			blockedAttempts: blockedAttempts.map((linha) => ({
+				id: linha.id,
+				conversationId: linha.conversationId,
+				leadId: linha.leadId,
+				direction: linha.direction,
+				guard: linha.guard,
+				reasonCode: linha.reasonCode,
+				ruleReference: linha.ruleReference,
+				excerpt: linha.excerpt,
+				detail: linha.detail,
+				blockedAt: paraIso(linha.blockedAt),
+				createdAt: paraIso(linha.createdAt),
+			})),
 		};
 	});
 

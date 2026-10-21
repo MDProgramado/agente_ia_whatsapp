@@ -40,6 +40,16 @@ export interface OptOutInput {
 	 * disponível para registrar um reforço, jamais para decidir (D-14).
 	 */
 	readonly detectedBy?: "deterministic" | "llm_signal";
+	/**
+	 * Origem do registro (03-06). `auto_detected` (default) é o caminho do
+	 * matcher determinístico; `manual` é o registro pelo Admin no painel.
+	 *
+	 * O CHECK do banco (`src/infra/db/schema.ts`) já aceita os dois valores —
+	 * `'manual'` existed como valor sem escritor. Em `manual` o `detected_by`
+	 * fica NULL: quem detectou foi o Admin, não um detector, e o CHECK aceita
+	 * NULL explicitamente.
+	 */
+	readonly source?: "auto_detected" | "manual";
 	readonly occurredAt?: Date;
 }
 
@@ -54,6 +64,12 @@ export const applyOptOut = async (
 ): Promise<boolean> =>
 	db.transaction(async (txBruto) => {
 		const tx = txBruto as unknown as Db;
+		const source = input.source ?? "auto_detected";
+		// `manual` → `detected_by` NULL (o Admin não é um detector). Nos demais
+		// caminhos o detector é obrigatório: sem ele o CHECK cairia para NULL e
+		// a prova perderia "quem viu o pedido".
+		const detectedBy =
+			source === "manual" ? null : (input.detectedBy ?? "deterministic");
 		const atualizado = await tx.execute(sql`
 			update leads set opt_out = true
 			where id = ${input.leadId} and opt_out = false
@@ -70,8 +86,8 @@ export const applyOptOut = async (
 			values (
 				${input.leadId},
 				'opt_out',
-				'auto_detected',
-				${input.detectedBy ?? "deterministic"},
+				${source},
+				${detectedBy},
 				${input.rawContent},
 				${input.legalBasis},
 				${input.purpose},

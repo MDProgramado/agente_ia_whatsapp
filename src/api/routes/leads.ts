@@ -1,15 +1,35 @@
 /**
- * Rotas de leitura de leads (R-046, D-22/D-23).
+ * Rotas de leads do painel (R-046, D-22/D-23, R-064).
  *
- * Somente leitura: o painel consulta, nunca muta cadastro por aqui (a mutação de
- * lead vive no CRM/importador). A lista ordena por prioridade operacional —
- * handoff ativo primeiro, depois quem respondeu mais recentemente — que é "o que
- * o Admin precisa olhar agora".
+ * As LEITURAS são read-only: o painel consulta, nunca muta cadastro por aqui
+ * (a mutação de lead vive no CRM/importador). A lista ordena por prioridade
+ * operacional — handoff ativo primeiro, depois quem respondeu mais recentemente
+ * — que é "o que o Admin precisa olhar agora".
+ *
+ * A ÚNICA escrita é `POST /api/leads/:id/opt-out`: o opt-out é IRREVERSÍVEL
+ * (R-024/AR-005), então ele exige confirmação literal `OPTOUT` na borda
+ * (T-03-41) e grava prova dupla — `optout_ledger(source='manual')` e
+ * `event_log('optout_manual')` — na MESMA transação (T-03-42). Nada aqui
+ * edita ou exclui histórico (D-23) nem envia mensagem: envio é do dispatcher.
  */
 import { sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { idParams, listarLeadsQuery } from "../schemas.js";
+import type { Db } from "../../infra/db/client.js";
+import { applyOptOut } from "../../infra/db/queries/leads.js";
+import { confirmarOptOutBody, idParams, listarLeadsQuery } from "../schemas.js";
 import type { PanelCore } from "../server.js";
+
+/**
+ * Base legal e finalidade de REGISTRO quando o lead não tem (R-064). O schema
+ * do banco torna as duas NOT NULL, então isto é o piso defensivo para uma base
+ * que veio de uma importação anterior — nunca a fonte da verdade.
+ */
+const BASE_LEGAL_PADRAO = "legitimo_interesse";
+const FINALIDADE_PADRAO = "contato_comercial_b2b";
+
+/** Texto de prova do opt-out manual: o que o ledger guarda como `raw_content`. */
+const PROVA_OPT_OUT_MANUAL =
+	"Opt-out manual registrado pelo Admin no painel (type-to-confirm OPTOUT)";
 
 interface LinhaLead {
 	readonly id: string;
@@ -27,7 +47,23 @@ interface LinhaLead {
 	readonly handoff_active: boolean | null;
 	readonly last_inbound_at: string | null;
 	readonly last_outbound_at: string | null;
+	/**
+	 * Instante do opt-out (`max(occurred_at)` do ledger do lead). Só a rota de
+	 * detalhe o consulta — a lista não precisa da data, e o subquery correlated
+	 * em 50 linhas seria custo por nada.
+	 */
+	readonly opt_out_at?: Date | string | null;
 }
+
+/**
+ * `timestamptz` chega do driver como `Date`; a API fala ISO-8601 (string).
+ * A conversão mora AQUI, na borda, para que o contrato do painel seja
+ * explícito em vez de herdado do driver.
+ */
+const paraIso = (valor: Date | string | null | undefined): string | null => {
+	if (valor === null || valor === undefined) return null;
+	return valor instanceof Date ? valor.toISOString() : String(valor);
+};
 
 const paraItem = (row: LinhaLead) => ({
 	id: row.id,
@@ -115,7 +151,9 @@ export const registrarLeads = (app: FastifyInstance, core: PanelCore): void => {
 				c.engagement_mode,
 				c.handoff_active,
 				c.last_inbound_at,
-				c.last_outbound_at
+				c.last_outbound_at,
+				(select max(o.occurred_at) from optout_ledger o where o.lead_id = l.id)
+					as opt_out_at
 			from leads l
 			left join conversations c on c.lead_id = l.id
 			where l.id = ${parsed.data.id}
@@ -128,8 +166,10 @@ export const registrarLeads = (app: FastifyInstance, core: PanelCore): void => {
 
 		// Campos de compliance (LGPD, R-064) expostos junto do lead: o Admin
 		// precisa ver a base legal e a finalidade no próprio cartão do lead.
+		// `optOutAt` é a data "Solicitado em ___" do wireframe §4.3.
 		return {
 			...paraItem(row),
+			optOutAt: paraIso(row.opt_out_at),
 			compliance: {
 				legalBasis: row.legal_basis,
 				purpose: row.purpose,
@@ -137,5 +177,91 @@ export const registrarLeads = (app: FastifyInstance, core: PanelCore): void => {
 				firstContactByHuman: row.first_contact_by_human,
 			},
 		};
+	});
+
+	// --- Opt-out manual (R-024/AR-005, T-03-41/T-03-42) --------------------
+	//
+	// Irreversível: não existe "desfazer" no banco (trigger
+	// `trg_leads_opt_out_irreversivel`) nem na UI. Por isso o corpo exige o
+	// literal `OPTOUT` e a prova é DUPLA — `optout_ledger(source='manual')` e
+	// `event_log('optout_manual')` — gravadas na MESMA transação: um opt-out
+	// sem trilha é irreversível sem auditoria, que é o pior dos dois mundos.
+	//
+	// Idempotente: a segunda chamada devolve `{optOut:true, mudou:false}` e não
+	// duplica prova nenhuma.
+	app.post("/api/leads/:id/opt-out", async (req, reply) => {
+		const params = idParams.safeParse(req.params);
+		if (!params.success) {
+			return reply.code(400).send({ erro: "id invalido" });
+		}
+		const body = confirmarOptOutBody.safeParse(req.body);
+		if (!body.success) {
+			return reply.code(400).send({
+				erro: "confirmacao invalida",
+				detalhes: body.error.issues.map((i) => i.message),
+			});
+		}
+
+		// 404 ANTES de qualquer escrita: um lead inexistente não pode "criar"
+		// um opt-out, e a checagem evita gravar prova de um lead que não existe.
+		const lido = await core.db.execute(sql`
+			select id, legal_basis, purpose
+			from leads
+			where id = ${params.data.id}
+		`);
+		const lead = (
+			lido as unknown as {
+				rows: {
+					id: string;
+					legal_basis: string | null;
+					purpose: string | null;
+				}[];
+			}
+		).rows[0];
+		if (!lead) {
+			return reply.code(404).send({ erro: "lead nao encontrado" });
+		}
+
+		const legalBasis = lead.legal_basis ?? BASE_LEGAL_PADRAO;
+		const purpose = lead.purpose ?? FINALIDADE_PADRAO;
+		const agora = core.agora?.() ?? new Date();
+
+		const resultado = await core.db.transaction(async (txBruto) => {
+			const tx = txBruto as unknown as Db;
+
+			// `applyOptOut` abre a sua própria transação (savepoint quando já
+			// estamos dentro de uma) — a atomicidade do opt-out + ledger é
+			// dela e não é reimplementada aqui.
+			const mudou = await applyOptOut(tx, {
+				leadId: params.data.id,
+				rawContent: PROVA_OPT_OUT_MANUAL,
+				legalBasis,
+				purpose,
+				source: "manual",
+				occurredAt: agora,
+			});
+
+			// Idempotência: sem mudança de estado, sem prova nova. A segunda
+			// chamada não duplica nem o ledger nem o `event_log`.
+			if (!mudou) return { mudou: false };
+
+			await tx.execute(sql`
+				insert into event_log (
+					event_type, entity_type, entity_id, lead_id, payload, severity
+				)
+				values (
+					'optout_manual',
+					'lead',
+					${params.data.id},
+					${params.data.id},
+					${JSON.stringify({ leadId: params.data.id, source: "manual" })}::jsonb,
+					'warn'
+				)
+			`);
+
+			return { mudou: true };
+		});
+
+		return { optOut: true, mudou: resultado.mudou };
 	});
 };
