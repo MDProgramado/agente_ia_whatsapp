@@ -140,7 +140,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 03-08-PLAN.md — UI de CRM/copiloto + docs: `PipelineBoard` (9 status, motivo obrigatório em status terminal) + `LeadNotes` (admin vs IA) + `TaskList` + `CopilotPanel` (aceitar/editar só preenche input; envio só pelo gate) + ADRs 014/015 + reconciliação de docs D-26 (`R-004`/`R-005`/`R-058`, `RN-009`, `pendencias.md`) (CRM-01, CRM-03, FLUP-06, FLUP-08)
+- [x] 03-08-PLAN.md — UI de CRM/copiloto + docs: `PipelineBoard` (9 status, motivo obrigatório em status terminal) + `LeadNotes` (admin vs IA) + `TaskList` + `CopilotPanel` (aceitar/editar só preenche input; envio só pelo gate) + ADRs 014/015 + reconciliação de docs D-26 (`R-004`/`R-005`/`R-058`, `RN-009`, `pendencias.md`) (CRM-01, CRM-03, FLUP-06, FLUP-08)
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
@@ -180,7 +180,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Fundação, Canal e Gate de Envio | 4/5 | In Progress (01-03 deferido — `P-004` (corrida `requestPairingCode` x WS open) corrigido em `2d64728`. Bloqueio atual: `P-007` (socket cai após `channel_ready`; rc14 vs servidor WhatsApp). Ambos deferidos; não bloqueiam Fase 3.) |  |
 | 2. IA, Handoff e Shadow Mode | 4/4 | Complete   | 2026-10-14 |
-| 3. Cadência, Operação e Painel | 5/8 | In Progress|  |
+| 3. Cadência, Operação e Painel | 6/8 | In Progress|  |
 | 4. Piloto, Calibração e Apuração | 0/2 | Not started | - |
 
 ## Notas de Cobertura e Decisões de Mapeamento
