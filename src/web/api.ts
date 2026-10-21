@@ -499,6 +499,26 @@ export const buscarAuditTrail = (
 		`/api/conversations/${encodeURIComponent(conversationId)}/audit`,
 	);
 
+/**
+ * Registra o opt-out MANUAL de um lead (R-024/AR-005, T-03-42).
+ *
+ * O literal `OPTOUT` é exigência do SERVIDOR (`confirm` exato, case-sensitive):
+ * é a prova de que o Admin digitou, e não clicou sem querer. O servidor grava
+ * `optout_ledger(source='manual')` + `event_log('optout_manual')` — prova
+ * dupla — e a operação é irreversível (não existe rota de reversão).
+ *
+ * `apiPost` NÃO lança em erro de HTTP: devolve o corpo do servidor. Por isso
+ * quem chama precisa conferir `optOut === true` — um 400 devolve
+ * `{erro, detalhes}` e não um opt-out.
+ */
+export const registrarOptOutManual = (
+	leadId: string,
+): Promise<{ optOut: boolean; mudou: boolean }> =>
+	apiPost<{ optOut: boolean; mudou: boolean }>(
+		`/api/leads/${encodeURIComponent(leadId)}/opt-out`,
+		{ confirm: "OPTOUT" },
+	);
+
 // ---------------------------------------------------------------------------
 // Rótulos pt-BR dos campos de compliance (R-064)
 // ---------------------------------------------------------------------------

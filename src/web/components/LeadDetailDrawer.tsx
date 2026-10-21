@@ -1,4 +1,11 @@
-import { History, ListTodo, MessageSquare, NotebookPen, X } from "lucide-react";
+import {
+	History,
+	ListTodo,
+	MessageSquare,
+	NotebookPen,
+	ShieldCheck,
+	X,
+} from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { isPipelineStatus, rotulo } from "../../domain/pipeline";
 import type { LeadDetalhe, Mensagem } from "../api";
@@ -9,6 +16,7 @@ import {
 	rotuloFinalidade,
 } from "../api";
 import { AuditTimeline } from "./AuditTimeline";
+import { CompliancePanel } from "./CompliancePanel";
 import { LeadNotes } from "./LeadNotes";
 import { MessageHistory } from "./MessageHistory";
 import { TaskList } from "./TaskList";
@@ -22,14 +30,15 @@ import { TaskList } from "./TaskList";
  *
  * O cabeçalho é o resumo do lead (nome, telefone, status do funil, etiquetas,
  * origem, base legal e finalidade) e as ABAS são as do wireframe: Conversa,
- * Notas, Tarefas e Histórico. A quinta aba (Compliance) entra na Task 3.
+ * Notas, Tarefas, Histórico e Compliance. A aba Compliance concentra o
+ * opt-out MANUAL com prova dupla (R-024/AR-005, R-064).
  *
  * A aba Conversa reaproveita o `MessageHistory` read-only do 03-04 e a aba
  * Histórico monta a `AuditTimeline` read-only do 03-06 — NADA aqui é
  * reimplementado, e nenhuma aba escreve histórico (D-23/R-043).
  */
 
-type Aba = "conversa" | "notas" | "tarefas" | "historico";
+type Aba = "conversa" | "notas" | "tarefas" | "historico" | "compliance";
 
 interface DefinicaoAba {
 	readonly id: Aba;
@@ -43,6 +52,7 @@ const ABAS: readonly DefinicaoAba[] = [
 	{ id: "notas", rotulo: "Notas", Icone: NotebookPen },
 	{ id: "tarefas", rotulo: "Tarefas", Icone: ListTodo },
 	{ id: "historico", rotulo: "Histórico", Icone: History },
+	{ id: "compliance", rotulo: "Compliance", Icone: ShieldCheck },
 ];
 
 export interface LeadDetailDrawerProps {
@@ -58,6 +68,11 @@ export interface LeadDetailDrawerProps {
 	readonly onFechar: () => void;
 	/** "Ver conversa completa": fecha a gaveta e leva o lead ao chat principal. */
 	readonly onAbrirConversaCompleta: (lead: LeadDetalhe) => void;
+	/**
+	 * Opt-out manual registrado no painel de compliance — o App re-sincroniza
+	 * o lead (e a lista) com o servidor.
+	 */
+	readonly onRegistrarOptOut?: (leadId: string) => void;
 }
 
 const mensagemDeErro = (causa: unknown): string => {
@@ -78,6 +93,7 @@ export function LeadDetailDrawer({
 	erro,
 	onFechar,
 	onAbrirConversaCompleta,
+	onRegistrarOptOut,
 }: LeadDetailDrawerProps) {
 	const dialogoRef = useRef<HTMLDialogElement | null>(null);
 	const botoesRef = useRef<(HTMLButtonElement | null)[]>([]);
@@ -306,6 +322,9 @@ export function LeadDetailDrawer({
 						{aba === "tarefas" ? <TaskList leadId={lead.id} /> : null}
 						{aba === "historico" ? (
 							<AuditTimeline conversationId={conversationId} />
+						) : null}
+						{aba === "compliance" ? (
+							<CompliancePanel lead={lead} onRegistrado={onRegistrarOptOut} />
 						) : null}
 					</div>
 

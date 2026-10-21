@@ -37,6 +37,7 @@ import { ChatPane } from "./components/ChatPane";
 import { CopilotPanel } from "./components/CopilotPanel";
 import { HandoffQueue } from "./components/HandoffQueue";
 import { LeadDetailDrawer } from "./components/LeadDetailDrawer";
+import { LeadHistoryPanel } from "./components/LeadHistoryPanel";
 import { LeadList } from "./components/LeadList";
 import { LeadNotes } from "./components/LeadNotes";
 import type {
@@ -191,9 +192,21 @@ export function App() {
 	const [erroLeads, setErroLeads] = useState<string | null>(null);
 
 	// --- Task 2 (03-06): gaveta de detalhe do lead -------------------------
-	/** Lead em detalhe na gaveta; `null` quando a gaveta está fechada. */
-	const [leadDetalhe, setLeadDetalhe] = useState<LeadDetalhe | null>(null);
+	/**
+	 * Lead em detalhe na GAVETA (botão "Ver detalhe" da lista). É um slot
+	 * separado do lead da COLUNA DIREITA porque o lead aberto na gaveta pode
+	 * não ser o lead selecionado no chat.
+	 */
+	const [leadGaveta, setLeadGaveta] = useState<LeadDetalhe | null>(null);
 	const [detalheAberto, setDetalheAberto] = useState(false);
+	const [carregandoGaveta, setCarregandoGaveta] = useState(false);
+	const [erroGaveta, setErroGaveta] = useState<string | null>(null);
+
+	/**
+	 * Lead em detalhe do lead SELECIONADO — alimenta o `LeadHistoryPanel` da
+	 * coluna direita (R-064: origem, base legal, finalidade, opt-out).
+	 */
+	const [leadDetalhe, setLeadDetalhe] = useState<LeadDetalhe | null>(null);
 	const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
 	const [erroDetalhe, setErroDetalhe] = useState<string | null>(null);
 
@@ -274,9 +287,8 @@ export function App() {
 	);
 
 	/**
-	 * Detalhe do lead para a gaveta (R-064): origem, base legal, finalidade,
-	 * etiquetas e o instante do opt-out. É a MESMA fonte que a coluna direita
-	 * usa na Task 3 — uma busca, um contrato.
+	 * Detalhe do lead SELECIONADO (coluna direita — R-064): origem, base legal,
+	 * finalidade, etiquetas, status do funil e o instante do opt-out.
 	 */
 	const carregarDetalhe = useCallback(async (leadId: string): Promise<void> => {
 		setCarregandoDetalhe(true);
@@ -292,13 +304,28 @@ export function App() {
 		}
 	}, []);
 
+	/** Detalhe do lead aberto na GAVETA — mesma rota, slot próprio. */
+	const carregarGaveta = useCallback(async (leadId: string): Promise<void> => {
+		setCarregandoGaveta(true);
+		try {
+			setLeadGaveta(await buscarLead(leadId));
+			setErroGaveta(null);
+		} catch (causa) {
+			if (tratarTokenInvalido(causa)) setTokenPresente(false);
+			setErroGaveta(mensagemDeErro(causa));
+			setLeadGaveta(null);
+		} finally {
+			setCarregandoGaveta(false);
+		}
+	}, []);
+
 	/** Abre a gaveta de detalhe do lead (botão "Ver detalhe" da lista). */
 	const aoAbrirDetalhe = useCallback(
 		(lead: ResumoLead): void => {
 			setDetalheAberto(true);
-			void carregarDetalhe(lead.id);
+			void carregarGaveta(lead.id);
 		},
-		[carregarDetalhe],
+		[carregarGaveta],
 	);
 
 	const aoFecharDetalhe = useCallback((): void => {
@@ -308,8 +335,30 @@ export function App() {
 	/** "Ver conversa completa": fecha a gaveta e leva o lead ao chat principal. */
 	const aoAbrirConversaCompleta = useCallback((lead: LeadDetalhe): void => {
 		setSelecionado(lead);
+		setLeadDetalhe(lead);
 		setDetalheAberto(false);
 	}, []);
+
+	/**
+	 * Opt-out manual registrado na aba Compliance: re-sincroniza a gaveta (o
+	 * lead otimizado É o da gaveta), a coluna direita (só se for o mesmo lead)
+	 * e a lista (o ponto de opt-out). A COLUNA DIREITA e a GAVETA são slots
+	 * separados de propósito — um nunca sobrescreve o outro.
+	 */
+	const aoRegistrarOptOut = useCallback(
+		(leadId: string): void => {
+			void carregarGaveta(leadId);
+			if (leadDetalhe?.id === leadId) void carregarDetalhe(leadId);
+			void carregarLeads(buscaAplicada);
+		},
+		[
+			carregarGaveta,
+			carregarDetalhe,
+			carregarLeads,
+			buscaAplicada,
+			leadDetalhe?.id,
+		],
+	);
 
 	/** Re-sync completo por GET — chamado no boot e a cada sinal SSE. */
 	const recarregarTudo = useCallback((): void => {
@@ -318,10 +367,15 @@ export function App() {
 		if (selecionado !== null && selecionado.conversationId !== null) {
 			void carregarConversa(selecionado.conversationId);
 		}
+		// O resumo R-064 do lead selecionado também é re-sincronizado: um
+		// opt-out detectado automaticamente (gate) precisa aparecer na coluna
+		// direita sem recarregar a página.
+		if (selecionado !== null) void carregarDetalhe(selecionado.id);
 	}, [
 		carregarSistema,
 		carregarLeads,
 		carregarConversa,
+		carregarDetalhe,
 		buscaAplicada,
 		selecionado,
 	]);
@@ -421,8 +475,23 @@ export function App() {
 		[carregarLeads, buscaAplicada],
 	);
 	const aoSelecionarHandoff = useCallback(
-		(item: ItemFilaHandoff) => setSelecionado(leadDoHandoff(item)),
-		[],
+		(item: ItemFilaHandoff) => {
+			setSelecionado(leadDoHandoff(item));
+			void carregarDetalhe(item.leadId);
+		},
+		[carregarDetalhe],
+	);
+
+	/**
+	 * Clique simples no item da lista: seleciona o lead para o chat (comportamento
+	 * do 03-04 preservado) e atualiza o resumo da coluna direita.
+	 */
+	const aoSelecionarLead = useCallback(
+		(lead: ResumoLead): void => {
+			setSelecionado(lead);
+			void carregarDetalhe(lead.id);
+		},
+		[carregarDetalhe],
 	);
 	const aoEntrarNoPainel = useCallback(() => setTokenPresente(true), []);
 
@@ -500,9 +569,10 @@ export function App() {
 	const abrirLeadNoPainel = useCallback((): void => {
 		if (leadCrm === null) return;
 		setSelecionado(leadDoCrm(leadCrm));
+		void carregarDetalhe(leadCrm.leadId);
 		fecharLeadCrm();
 		setVista("painel");
-	}, [leadCrm, fecharLeadCrm]);
+	}, [leadCrm, fecharLeadCrm, carregarDetalhe]);
 
 	/** O gate confirmou o envio feito pelo copiloto: limpa e re-sincroniza. */
 	const aoEnviarPeloCopiloto = useCallback((): void => {
@@ -623,7 +693,7 @@ export function App() {
 						carregando={carregandoLeads}
 						erro={erroLeads}
 						onBusca={setBusca}
-						onSelecionar={setSelecionado}
+						onSelecionar={aoSelecionarLead}
 						onRecarregar={aoRecarregarLeads}
 						onAbrirDetalhe={aoAbrirDetalhe}
 					/>
@@ -657,6 +727,11 @@ export function App() {
 							onIgnorar={aoIgnorar}
 							onEnviado={aoEnviarPeloCopiloto}
 						/>
+						<LeadHistoryPanel
+							lead={leadDetalhe}
+							carregando={carregandoDetalhe}
+							erro={erroDetalhe}
+						/>
 						<HandoffQueue
 							itens={resumo?.handoffQueue ?? []}
 							onSelecionar={aoSelecionarHandoff}
@@ -666,12 +741,13 @@ export function App() {
 			)}
 
 			<LeadDetailDrawer
-				lead={leadDetalhe}
+				lead={leadGaveta}
 				aberto={detalheAberto}
-				carregando={carregandoDetalhe}
-				erro={erroDetalhe}
+				carregando={carregandoGaveta}
+				erro={erroGaveta}
 				onFechar={aoFecharDetalhe}
 				onAbrirConversaCompleta={aoAbrirConversaCompleta}
+				onRegistrarOptOut={aoRegistrarOptOut}
 			/>
 
 			<dialog
