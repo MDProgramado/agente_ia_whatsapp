@@ -142,7 +142,7 @@ interface OpcoesRequisicao {
 }
 
 const requisitar = async (
-	metodo: "GET" | "POST",
+	metodo: "GET" | "POST" | "PATCH",
 	caminho: string,
 	corpo: unknown,
 	opcoes: OpcoesRequisicao,
@@ -223,6 +223,15 @@ export const apiGet = <T>(caminho: string): Promise<T> =>
  */
 export const apiPost = <T>(caminho: string, corpo: unknown): Promise<T> =>
 	requisitar("POST", caminho, corpo, {
+		toleranteAErroHttp: true,
+	}) as Promise<T>;
+
+/**
+ * PATCH tipado. Mesma política do POST: 4xx/5xx devolvem o corpo para a UI
+ * inspecionar (o PATCH de tarefa devolve `{erro, mensagem}` em 4xx).
+ */
+export const apiPatch = <T>(caminho: string, corpo: unknown): Promise<T> =>
+	requisitar("PATCH", caminho, corpo, {
 		toleranteAErroHttp: true,
 	}) as Promise<T>;
 

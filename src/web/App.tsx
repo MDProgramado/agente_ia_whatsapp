@@ -7,6 +7,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { rotulo } from "../domain/pipeline";
 import type {
 	ConversaDetalhe,
 	DesfechoDispatch,
@@ -31,10 +32,17 @@ import {
 import type { AcaoRapida } from "./components/ActionBar";
 import { ActionBar } from "./components/ActionBar";
 import { ChatPane } from "./components/ChatPane";
+import { CopilotPanel } from "./components/CopilotPanel";
 import { HandoffQueue } from "./components/HandoffQueue";
 import { LeadList } from "./components/LeadList";
-import { SuggestionCard } from "./components/SuggestionCard";
+import { LeadNotes } from "./components/LeadNotes";
+import type {
+	ConversaCrm,
+	EntradaHistoricoStatus,
+} from "./components/PipelineBoard";
+import { HistoricoStatus, PipelineBoard } from "./components/PipelineBoard";
 import { SystemHeader } from "./components/SystemHeader";
+import { TaskList } from "./components/TaskList";
 import { useSse } from "./useSse";
 
 /**
@@ -50,6 +58,11 @@ import { useSse } from "./useSse";
  */
 const tempoDaBusca = 250;
 
+const abaAtiva =
+	"rounded border border-acento bg-acento/10 px-md py-xs text-sm font-semibold";
+const abaInativa =
+	"rounded border border-transparent px-md py-xs text-sm text-suave hover:bg-superficie-alta";
+
 const leadDoHandoff = (item: ItemFilaHandoff): ResumoLead => ({
 	id: item.leadId,
 	name: item.leadName,
@@ -62,6 +75,21 @@ const leadDoHandoff = (item: ItemFilaHandoff): ResumoLead => ({
 	handoffActive: true,
 	lastInboundAt: null,
 	lastOutboundAt: null,
+});
+
+/** Conversa do CRM → resumo de lead, para abrir a conversa na vista Painel. */
+const leadDoCrm = (conversa: ConversaCrm): ResumoLead => ({
+	id: conversa.leadId,
+	name: conversa.name,
+	phoneNumber: conversa.phoneNumber,
+	originSource: "—",
+	optOut: conversa.optOut,
+	conversationId: conversa.conversationId,
+	state: conversa.state,
+	engagementMode: conversa.engagementMode,
+	handoffActive: conversa.handoffActive,
+	lastInboundAt: conversa.lastInboundAt,
+	lastOutboundAt: conversa.lastOutboundAt,
 });
 
 const mensagemDeErro = (causa: unknown): string => {
@@ -175,6 +203,19 @@ export function App() {
 	// id estável e único (evita duplicar `id` no DOM quando o painel renderiza
 	// mais de um dialog) — regra `useUniqueElementIds`.
 	const idKillSwitch = useId();
+
+	// --- Task 4 (03-08): vista CRM, histórico de status e detalhe do lead ----
+	const [vista, setVista] = useState<"painel" | "crm">("painel");
+	/** Histórico de mudanças de status — append-only, só cresce. */
+	const [historicoStatus, setHistoricoStatus] = useState<
+		readonly EntradaHistoricoStatus[]
+	>([]);
+	const [leadCrm, setLeadCrm] = useState<ConversaCrm | null>(null);
+	const [abaLead, setAbaLead] = useState<"notas" | "tarefas" | "historico">(
+		"notas",
+	);
+	const leadRef = useRef<HTMLDialogElement | null>(null);
+	const idLeadDrawer = useId();
 
 	const carregarSistema = useCallback(async (): Promise<void> => {
 		setCarregandoSistema(true);
@@ -383,6 +424,61 @@ export function App() {
 
 	const aoEnviar = useCallback(() => void enviar(), [enviar]);
 
+	// --- Task 4 handlers (03-08) --------------------------------------------
+
+	/**
+	 * O histórico de status é APPEND-ONLY: cada correção do painel vira uma
+	 * entrada nova no topo. Nada reescreve nem remove uma entrada (R-022/R-043).
+	 */
+	const aoRegistrarHistorico = useCallback(
+		(entrada: EntradaHistoricoStatus): void => {
+			setHistoricoStatus((atual) => [entrada, ...atual].slice(0, 200));
+		},
+		[],
+	);
+
+	const aoAbrirLeadCrm = useCallback((conversa: ConversaCrm): void => {
+		setLeadCrm(conversa);
+		setAbaLead("notas");
+		leadRef.current?.showModal();
+	}, []);
+
+	const fecharLeadCrm = useCallback((): void => {
+		leadRef.current?.close();
+		setLeadCrm(null);
+	}, []);
+
+	/** Abre a conversa do lead no Painel (mesma sessão, sem recarregar a página). */
+	const abrirLeadNoPainel = useCallback((): void => {
+		if (leadCrm === null) return;
+		setSelecionado(leadDoCrm(leadCrm));
+		fecharLeadCrm();
+		setVista("painel");
+	}, [leadCrm, fecharLeadCrm]);
+
+	/** O gate confirmou o envio feito pelo copiloto: limpa e re-sincroniza. */
+	const aoEnviarPeloCopiloto = useCallback((): void => {
+		setTexto("");
+		if (conversa === null) return;
+		void carregarConversa(conversa.id);
+		void carregarSistema();
+	}, [conversa, carregarConversa, carregarSistema]);
+
+	const aoEscolherAba = useCallback(
+		(aba: "notas" | "tarefas" | "historico"): void => setAbaLead(aba),
+		[],
+	);
+
+	const historicoDoLead = useMemo(
+		() =>
+			leadCrm === null
+				? []
+				: historicoStatus.filter(
+						(entrada) => entrada.conversationId === leadCrm.conversationId,
+					),
+		[historicoStatus, leadCrm],
+	);
+
 	const aoAcao = useCallback(
 		(acao: AcaoRapida) => {
 			void (async () => {
@@ -442,50 +538,83 @@ export function App() {
 				</div>
 			) : null}
 
-			<main className="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)_360px] divide-x divide-borda">
-				<LeadList
-					leads={leads}
-					selecionadoId={selecionado?.id ?? null}
-					busca={busca}
-					carregando={carregandoLeads}
-					erro={erroLeads}
-					onBusca={setBusca}
-					onSelecionar={setSelecionado}
-					onRecarregar={aoRecarregarLeads}
-				/>
-
-				<ChatPane
-					conversa={conversa}
-					mensagens={mensagens}
-					carregando={carregandoConversa}
-					motivoSilencio={motivoSilencio}
-					onAssumir={aoAssumir}
+			<nav
+				aria-label="Áreas do painel"
+				className="flex items-center gap-xs border-b border-borda bg-superficie px-md py-xs"
+			>
+				<button
+					type="button"
+					onClick={() => setVista("painel")}
+					aria-current={vista === "painel" ? "page" : undefined}
+					className={vista === "painel" ? abaAtiva : abaInativa}
 				>
-					<ActionBar
-						conversa={conversa}
-						resumo={resumo}
-						texto={texto}
-						enviando={enviando}
-						resultado={resultado}
-						campoRef={campoRef}
-						onTexto={setTexto}
-						onEnviar={aoEnviar}
-						onAcao={aoAcao}
-					/>
-				</ChatPane>
+					Painel
+				</button>
+				<button
+					type="button"
+					onClick={() => setVista("crm")}
+					aria-current={vista === "crm" ? "page" : undefined}
+					className={vista === "crm" ? abaAtiva : abaInativa}
+				>
+					CRM
+				</button>
+			</nav>
 
-				<div className="flex min-h-0 flex-col divide-y divide-borda">
-					<SuggestionCard
-						sugestao={sugestao}
-						onAplicar={aoAplicar}
-						onIgnorar={aoIgnorar}
+			{vista === "crm" ? (
+				<PipelineBoard
+					historico={historicoStatus}
+					onAbrirLead={aoAbrirLeadCrm}
+					onCorrecaoAplicada={aoRegistrarHistorico}
+				/>
+			) : (
+				<main className="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)_360px] divide-x divide-borda">
+					<LeadList
+						leads={leads}
+						selecionadoId={selecionado?.id ?? null}
+						busca={busca}
+						carregando={carregandoLeads}
+						erro={erroLeads}
+						onBusca={setBusca}
+						onSelecionar={setSelecionado}
+						onRecarregar={aoRecarregarLeads}
 					/>
-					<HandoffQueue
-						itens={resumo?.handoffQueue ?? []}
-						onSelecionar={aoSelecionarHandoff}
-					/>
-				</div>
-			</main>
+
+					<ChatPane
+						conversa={conversa}
+						mensagens={mensagens}
+						carregando={carregandoConversa}
+						motivoSilencio={motivoSilencio}
+						onAssumir={aoAssumir}
+					>
+						<ActionBar
+							conversa={conversa}
+							resumo={resumo}
+							texto={texto}
+							enviando={enviando}
+							resultado={resultado}
+							campoRef={campoRef}
+							onTexto={setTexto}
+							onEnviar={aoEnviar}
+							onAcao={aoAcao}
+						/>
+					</ChatPane>
+
+					<div className="flex min-h-0 flex-col divide-y divide-borda">
+						<CopilotPanel
+							sugestao={sugestao}
+							conversationId={conversa?.id ?? null}
+							texto={texto}
+							onAplicar={aoAplicar}
+							onIgnorar={aoIgnorar}
+							onEnviado={aoEnviarPeloCopiloto}
+						/>
+						<HandoffQueue
+							itens={resumo?.handoffQueue ?? []}
+							onSelecionar={aoSelecionarHandoff}
+						/>
+					</div>
+				</main>
+			)}
 
 			<dialog
 				ref={dialogoRef}
@@ -529,6 +658,82 @@ export function App() {
 						Pausar automação
 					</button>
 				</div>
+			</dialog>
+
+			<dialog
+				ref={leadRef}
+				aria-labelledby={idLeadDrawer}
+				className="m-auto max-h-[85vh] w-[560px] rounded-lg border border-borda bg-superficie p-lg text-texto backdrop:bg-black/60"
+			>
+				{leadCrm !== null ? (
+					<>
+						<div className="flex items-start gap-sm">
+							<div className="flex flex-col">
+								<h2 id={idLeadDrawer} className="text-base font-semibold">
+									{leadCrm.name ?? leadCrm.phoneNumber}
+								</h2>
+								<span className="text-xs text-suave">
+									{leadCrm.phoneNumber} · {rotulo(leadCrm.pipelineStatus)}
+								</span>
+							</div>
+							<button
+								type="button"
+								onClick={fecharLeadCrm}
+								className="ml-auto rounded border border-borda px-sm py-xs text-sm hover:bg-superficie-alta"
+							>
+								Fechar
+							</button>
+						</div>
+
+						<nav
+							aria-label="Abas do lead"
+							className="mt-md flex gap-xs border-b border-borda pb-xs"
+						>
+							{(
+								[
+									["notas", "Notas"],
+									["tarefas", "Tarefas"],
+									["historico", "Histórico"],
+								] as const
+							).map(([aba, rotuloAba]) => (
+								<button
+									key={aba}
+									type="button"
+									onClick={() => aoEscolherAba(aba)}
+									aria-current={abaLead === aba ? "page" : undefined}
+									className={abaLead === aba ? abaAtiva : abaInativa}
+								>
+									{rotuloAba}
+								</button>
+							))}
+						</nav>
+
+						<div className="mt-md max-h-[52vh] overflow-y-auto">
+							{abaLead === "notas" ? (
+								<LeadNotes leadId={leadCrm.leadId} />
+							) : null}
+							{abaLead === "tarefas" ? (
+								<TaskList leadId={leadCrm.leadId} />
+							) : null}
+							{abaLead === "historico" ? (
+								<HistoricoStatus
+									entradas={historicoDoLead}
+									className="w-full border-l-0"
+								/>
+							) : null}
+						</div>
+
+						<div className="mt-md flex justify-end">
+							<button
+								type="button"
+								onClick={abrirLeadNoPainel}
+								className="h-9 rounded border border-borda px-md text-sm hover:bg-superficie-alta"
+							>
+								Abrir conversa no painel
+							</button>
+						</div>
+					</>
+				) : null}
 			</dialog>
 		</div>
 	);
