@@ -376,7 +376,10 @@ describe("GET /api/leads/:id — funil e etiquetas (wireframe §4)", () => {
 				headers: { ...HOST_OK, ...AUTORIZADO },
 			});
 			expect(r.statusCode).toBe(200);
-			const corpo = r.json() as { pipelineStatus: string | null; tags: string[] };
+			const corpo = r.json() as {
+				pipelineStatus: string | null;
+				tags: string[];
+			};
 			expect(corpo.pipelineStatus).toBeNull();
 			expect(corpo.tags).toEqual([]);
 			await app.close();
