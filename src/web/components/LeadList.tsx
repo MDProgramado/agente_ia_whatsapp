@@ -1,4 +1,11 @@
-import { CircleAlert, Inbox, RefreshCw, Search, Users } from "lucide-react";
+import {
+	CircleAlert,
+	Inbox,
+	PanelRightOpen,
+	RefreshCw,
+	Search,
+	Users,
+} from "lucide-react";
 import type { KeyboardEvent as EventoTeclado } from "react";
 import { useCallback, useMemo, useRef } from "react";
 import type { ResumoLead } from "../api";
@@ -24,6 +31,11 @@ export interface LeadListProps {
 	readonly onBusca: (termo: string) => void;
 	readonly onSelecionar: (lead: ResumoLead) => void;
 	readonly onRecarregar: () => void;
+	/**
+	 * Abre a gaveta de detalhe do lead (wireframe §4). O clique simples no item
+	 * continua selecionando para o chat — as duas ações são independentes.
+	 */
+	readonly onAbrirDetalhe: (lead: ResumoLead) => void;
 }
 
 const instante = (iso: string | null): number => {
@@ -51,6 +63,7 @@ export function LeadList({
 	onBusca,
 	onSelecionar,
 	onRecarregar,
+	onAbrirDetalhe,
 }: LeadListProps) {
 	const ordenados = useMemo(() => ordenarPorPrioridade(leads), [leads]);
 
@@ -67,9 +80,12 @@ export function LeadList({
 			const proximo = ordenados[alvo];
 			if (proximo === undefined) return;
 			onSelecionar(proximo);
-			// move o foco real do DOM para o item recém-selecionado
-			const botoes =
-				listaRef.current?.querySelectorAll<HTMLButtonElement>("li > button");
+			// move o foco real do DOM para o item recém-selecionado — só o
+			// botão principal do item (`data-item-lead`), nunca o botão de
+			// detalhe que vive ao lado dele.
+			const botoes = listaRef.current?.querySelectorAll<HTMLButtonElement>(
+				"li > button[data-item-lead]",
+			);
 			botoes?.[alvo]?.focus();
 		},
 		[ordenados, onSelecionar],
@@ -148,13 +164,14 @@ export function LeadList({
 				{ordenados.map((lead, indice) => {
 					const ativo = lead.id === selecionadoId;
 					return (
-						<li key={lead.id}>
+						<li key={lead.id} className="flex items-stretch">
 							<button
 								type="button"
+								data-item-lead="true"
 								aria-current={ativo ? "true" : undefined}
 								onClick={() => onSelecionar(lead)}
 								onKeyDown={(evento) => navegar(evento, indice)}
-								className={`flex h-14 w-full flex-col justify-center gap-xs border-l-2 px-md text-left hover:bg-superficie-alta ${
+								className={`flex h-14 min-w-0 flex-1 flex-col justify-center gap-xs border-l-2 px-md text-left hover:bg-superficie-alta ${
 									ativo
 										? "border-l-acento bg-superficie-alta"
 										: "border-l-transparent"
@@ -183,6 +200,15 @@ export function LeadList({
 									<span aria-hidden="true">·</span>
 									<span>{rotuloEstado(lead)}</span>
 								</span>
+							</button>
+							<button
+								type="button"
+								aria-label="Ver detalhe do lead"
+								title="Ver detalhe do lead"
+								onClick={() => onAbrirDetalhe(lead)}
+								className="flex w-9 shrink-0 items-center justify-center text-suave hover:bg-superficie-alta hover:text-texto"
+							>
+								<PanelRightOpen className="size-4" aria-hidden="true" />
 							</button>
 						</li>
 					);

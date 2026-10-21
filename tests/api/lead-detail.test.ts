@@ -39,8 +39,7 @@ const SENTINELA = "rollback-intencional-do-teste";
 const AUTORIZADO = { authorization: `Bearer ${env.PANEL_TOKEN}` };
 const HOST_OK = { host: "127.0.0.1" };
 
-const rows = <T>(resultado: unknown): T[] =>
-	(resultado as { rows: T[] }).rows;
+const rows = <T>(resultado: unknown): T[] => (resultado as { rows: T[] }).rows;
 const primeiro = <T>(lista: readonly T[]): T => {
 	const [item] = lista;
 	if (item === undefined) throw new Error("esperava ao menos uma linha");
@@ -323,6 +322,63 @@ describe("GET /api/leads/:id — optOutAt (R-064)", () => {
 			expect(corpo.optOut).toBe(true);
 			expect(typeof corpo.optOutAt).toBe("string");
 			expect(Number.isNaN(Date.parse(corpo.optOutAt))).toBe(false);
+			await app.close();
+		});
+	});
+});
+
+describe("GET /api/leads/:id — funil e etiquetas (wireframe §4)", () => {
+	it("devolve o status do funil da conversa e as etiquetas do lead", async () => {
+		await emTransacaoRevertida(async (tx) => {
+			const contaId = await inserirConta(tx);
+			const leadId = await inserirLead(tx, telefoneUnico());
+			const conversaId = await inserirConversa(tx, leadId, contaId);
+
+			await tx.execute(sql`
+				UPDATE conversations SET pipeline_status = 'qualificado'
+				WHERE id = ${conversaId}
+			`);
+
+			const nomeTag = `detalhe-${randomUUID().slice(0, 8)}`;
+			const tag = primeiro(
+				rows<{ id: string }>(
+					await tx.execute(sql`
+						INSERT INTO tags (name) VALUES (${nomeTag}) RETURNING id
+					`),
+				),
+			);
+			await tx.execute(sql`
+				INSERT INTO lead_tags (lead_id, tag_id) VALUES (${leadId}, ${tag.id})
+			`);
+
+			const app = buildServer({ core: montarCore(tx) });
+			const r = await app.inject({
+				method: "GET",
+				url: `/api/leads/${leadId}`,
+				headers: { ...HOST_OK, ...AUTORIZADO },
+			});
+			expect(r.statusCode).toBe(200);
+			const corpo = r.json() as { pipelineStatus: string; tags: string[] };
+			expect(corpo.pipelineStatus).toBe("qualificado");
+			expect(corpo.tags).toEqual([nomeTag]);
+			await app.close();
+		});
+	});
+
+	it("lead sem conversa e sem etiquetas → funil nulo e lista vazia", async () => {
+		await emTransacaoRevertida(async (tx) => {
+			const leadId = await inserirLead(tx, telefoneUnico());
+			const app = buildServer({ core: montarCore(tx) });
+
+			const r = await app.inject({
+				method: "GET",
+				url: `/api/leads/${leadId}`,
+				headers: { ...HOST_OK, ...AUTORIZADO },
+			});
+			expect(r.statusCode).toBe(200);
+			const corpo = r.json() as { pipelineStatus: string | null; tags: string[] };
+			expect(corpo.pipelineStatus).toBeNull();
+			expect(corpo.tags).toEqual([]);
 			await app.close();
 		});
 	});

@@ -12,6 +12,7 @@ import type {
 	ConversaDetalhe,
 	DesfechoDispatch,
 	ItemFilaHandoff,
+	LeadDetalhe,
 	Mensagem,
 	ResumoLead,
 	ResumoSistema,
@@ -22,6 +23,7 @@ import {
 	acionarKillSwitch,
 	buscarConversa,
 	buscarHistorico,
+	buscarLead,
 	buscarLeads,
 	buscarResumoSistema,
 	definirToken,
@@ -34,6 +36,7 @@ import { ActionBar } from "./components/ActionBar";
 import { ChatPane } from "./components/ChatPane";
 import { CopilotPanel } from "./components/CopilotPanel";
 import { HandoffQueue } from "./components/HandoffQueue";
+import { LeadDetailDrawer } from "./components/LeadDetailDrawer";
 import { LeadList } from "./components/LeadList";
 import { LeadNotes } from "./components/LeadNotes";
 import type {
@@ -187,6 +190,13 @@ export function App() {
 	const [erroSistema, setErroSistema] = useState<string | null>(null);
 	const [erroLeads, setErroLeads] = useState<string | null>(null);
 
+	// --- Task 2 (03-06): gaveta de detalhe do lead -------------------------
+	/** Lead em detalhe na gaveta; `null` quando a gaveta está fechada. */
+	const [leadDetalhe, setLeadDetalhe] = useState<LeadDetalhe | null>(null);
+	const [detalheAberto, setDetalheAberto] = useState(false);
+	const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
+	const [erroDetalhe, setErroDetalhe] = useState<string | null>(null);
+
 	const dialogoRef = useRef<HTMLDialogElement | null>(null);
 	const [confirmacao, setConfirmacao] = useState("");
 	const [pausandoTudo, setPausandoTudo] = useState(false);
@@ -262,6 +272,44 @@ export function App() {
 		},
 		[],
 	);
+
+	/**
+	 * Detalhe do lead para a gaveta (R-064): origem, base legal, finalidade,
+	 * etiquetas e o instante do opt-out. É a MESMA fonte que a coluna direita
+	 * usa na Task 3 — uma busca, um contrato.
+	 */
+	const carregarDetalhe = useCallback(async (leadId: string): Promise<void> => {
+		setCarregandoDetalhe(true);
+		try {
+			setLeadDetalhe(await buscarLead(leadId));
+			setErroDetalhe(null);
+		} catch (causa) {
+			if (tratarTokenInvalido(causa)) setTokenPresente(false);
+			setErroDetalhe(mensagemDeErro(causa));
+			setLeadDetalhe(null);
+		} finally {
+			setCarregandoDetalhe(false);
+		}
+	}, []);
+
+	/** Abre a gaveta de detalhe do lead (botão "Ver detalhe" da lista). */
+	const aoAbrirDetalhe = useCallback(
+		(lead: ResumoLead): void => {
+			setDetalheAberto(true);
+			void carregarDetalhe(lead.id);
+		},
+		[carregarDetalhe],
+	);
+
+	const aoFecharDetalhe = useCallback((): void => {
+		setDetalheAberto(false);
+	}, []);
+
+	/** "Ver conversa completa": fecha a gaveta e leva o lead ao chat principal. */
+	const aoAbrirConversaCompleta = useCallback((lead: LeadDetalhe): void => {
+		setSelecionado(lead);
+		setDetalheAberto(false);
+	}, []);
 
 	/** Re-sync completo por GET — chamado no boot e a cada sinal SSE. */
 	const recarregarTudo = useCallback((): void => {
@@ -577,6 +625,7 @@ export function App() {
 						onBusca={setBusca}
 						onSelecionar={setSelecionado}
 						onRecarregar={aoRecarregarLeads}
+						onAbrirDetalhe={aoAbrirDetalhe}
 					/>
 
 					<ChatPane
@@ -615,6 +664,15 @@ export function App() {
 					</div>
 				</main>
 			)}
+
+			<LeadDetailDrawer
+				lead={leadDetalhe}
+				aberto={detalheAberto}
+				carregando={carregandoDetalhe}
+				erro={erroDetalhe}
+				onFechar={aoFecharDetalhe}
+				onAbrirConversaCompleta={aoAbrirConversaCompleta}
+			/>
 
 			<dialog
 				ref={dialogoRef}

@@ -53,6 +53,19 @@ interface LinhaLead {
 	 * em 50 linhas seria custo por nada.
 	 */
 	readonly opt_out_at?: Date | string | null;
+	/**
+	 * Status do FUNIL de vendas (`pipeline_status`, RN-078/D-14). Vem por
+	 * subquery — e não pelo `left join conversations` — porque o detalhe do lead
+	 * precisa de UM status determinístico mesmo quando o lead tem mais de uma
+	 * conversa; o join traria uma linha por conversa e o `rows[0]` seria
+	 * arbitrário.
+	 */
+	readonly pipeline_status?: string | null;
+	/**
+	 * Etiquetas do lead (D-22): `json_agg` sobre `lead_tags`×`tags`. Também
+	 * por subquery — um JOIN multiplicaria a linha do lead por etiqueta.
+	 */
+	readonly tags?: unknown;
 }
 
 /**
@@ -63,6 +76,16 @@ interface LinhaLead {
 const paraIso = (valor: Date | string | null | undefined): string | null => {
 	if (valor === null || valor === undefined) return null;
 	return valor instanceof Date ? valor.toISOString() : String(valor);
+};
+
+/**
+ * `json_agg` volta do driver `pg` já como array (o driver parseia `json`/`jsonb`).
+ * A normalização existe para o caso de lead SEM etiqueta: `coalesce` devolve
+ * `'[]'::json` e o array chega vazio, não nulo.
+ */
+const paraTags = (valor: unknown): string[] => {
+	if (!Array.isArray(valor)) return [];
+	return valor.filter((tag): tag is string => typeof tag === "string");
 };
 
 const paraItem = (row: LinhaLead) => ({
@@ -153,7 +176,20 @@ export const registrarLeads = (app: FastifyInstance, core: PanelCore): void => {
 				c.last_inbound_at,
 				c.last_outbound_at,
 				(select max(o.occurred_at) from optout_ledger o where o.lead_id = l.id)
-					as opt_out_at
+					as opt_out_at,
+				(
+					select c2.pipeline_status
+					from conversations c2
+					where c2.lead_id = l.id
+					order by c2.created_at desc
+					limit 1
+				) as pipeline_status,
+				(
+					select coalesce(json_agg(tg.name order by tg.name), '[]'::json)
+					from lead_tags lt
+					join tags tg on tg.id = lt.tag_id
+					where lt.lead_id = l.id
+				) as tags
 			from leads l
 			left join conversations c on c.lead_id = l.id
 			where l.id = ${parsed.data.id}
@@ -167,9 +203,13 @@ export const registrarLeads = (app: FastifyInstance, core: PanelCore): void => {
 		// Campos de compliance (LGPD, R-064) expostos junto do lead: o Admin
 		// precisa ver a base legal e a finalidade no próprio cartão do lead.
 		// `optOutAt` é a data "Solicitado em ___" do wireframe §4.3.
+		// `pipelineStatus` e `tags` alimentam o cabeçalho da gaveta de detalhe
+		// (wireframe §4) — o funil de vendas e as etiquetas do lead.
 		return {
 			...paraItem(row),
 			optOutAt: paraIso(row.opt_out_at),
+			pipelineStatus: row.pipeline_status ?? null,
+			tags: paraTags(row.tags),
 			compliance: {
 				legalBasis: row.legal_basis,
 				purpose: row.purpose,

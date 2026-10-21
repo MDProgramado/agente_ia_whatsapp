@@ -334,6 +334,74 @@ export interface HistoricoMensagens {
 }
 
 /**
+ * Detalhe de UM lead (R-046, R-064) — o contrato da gaveta de detalhe.
+ *
+ * É o `ResumoLead` mais o que só a rota de detalhe sabe: a data do opt-out
+ * (`optOutAt`), o status do funil de vendas (`pipelineStatus`), as etiquetas
+ * (`tags`) e o bloco de compliance (base legal, finalidade, registro e se o
+ * primeiro contato foi humano).
+ */
+export interface LeadDetalhe extends ResumoLead {
+	optOutAt: string | null;
+	pipelineStatus: string | null;
+	tags: readonly string[];
+	compliance: {
+		legalBasis: string | null;
+		purpose: string | null;
+		legalRegisteredAt: string | null;
+		firstContactByHuman: boolean;
+	};
+}
+
+/** Uma transição de estado registrada em `status_history` (append-only). */
+export interface EntradaStatusHistorico {
+	id: string;
+	conversationId: string;
+	fromState: string | null;
+	toState: string | null;
+	changedBy: string | null;
+	reason: string | null;
+	changedAt: string | null;
+}
+
+/** Um handoff registrado em `handoff_events` (append-only). */
+export interface EventoHandoff {
+	id: string;
+	conversationId: string;
+	leadId: string;
+	triggeredBy: string;
+	triggerDetail: string | null;
+	triggerValue: string | null;
+	excerpt: string | null;
+	simultaneousSendBlocked: boolean | null;
+	botStoppedAt: string | null;
+	humanAcknowledgedAt: string | null;
+	createdAt: string | null;
+}
+
+/** Um negativo do gate registrado em `blocked_attempts` (append-only). */
+export interface TentativaBloqueada {
+	id: string;
+	conversationId: string | null;
+	leadId: string | null;
+	direction: "in" | "out";
+	guard: string;
+	reasonCode: string;
+	ruleReference: string | null;
+	excerpt: string | null;
+	detail: string | null;
+	blockedAt: string | null;
+	createdAt: string | null;
+}
+
+/** A trilha de auditoria da conversa: as três fontes além das mensagens. */
+export interface TrilhaAuditoria {
+	statusHistory: readonly EntradaStatusHistorico[];
+	handoffEvents: readonly EventoHandoff[];
+	blockedAttempts: readonly TentativaBloqueada[];
+}
+
+/**
  * Desfecho de `POST /api/dispatch`. O gate responde com um destes — a UI nunca
  * "chuta" que a mensagem saiu.
  */
@@ -414,3 +482,50 @@ export const acionarKillSwitch = (): Promise<{
 	apiPost<{ mode: "paused"; from: string | null }>("/api/system/kill-switch", {
 		confirm: true,
 	});
+
+/** Detalhe de um lead (R-046/R-064) — gaveta de detalhe e coluna direita. */
+export const buscarLead = (leadId: string): Promise<LeadDetalhe> =>
+	apiGet<LeadDetalhe>(`/api/leads/${encodeURIComponent(leadId)}`);
+
+/**
+ * Trilha de auditoria da conversa (D-23) — `status_history` + `handoff_events`
+ * + `blocked_attempts`. As mensagens têm rota própria (`buscarHistorico`) e a
+ * linha do tempo funde as quatro fontes.
+ */
+export const buscarAuditTrail = (
+	conversationId: string,
+): Promise<TrilhaAuditoria> =>
+	apiGet<TrilhaAuditoria>(
+		`/api/conversations/${encodeURIComponent(conversationId)}/audit`,
+	);
+
+// ---------------------------------------------------------------------------
+// Rótulos pt-BR dos campos de compliance (R-064)
+// ---------------------------------------------------------------------------
+//
+// A base legal e a finalidade são gravadas no banco como valores técnicos
+// (`legitimo_interesse`, `contato_comercial_b2b`) e mostradas ao Admin como
+// texto. A tradução mora AQUI — no módulo que define o contrato — para que a
+// gaveta, a aba Compliance e a coluna direita nunca discordem do rótulo.
+
+const ROTULO_BASE_LEGAL: Record<string, string> = {
+	legitimo_interesse: "Legítimo interesse",
+	consentimento: "Consentimento",
+};
+
+const ROTULO_FINALIDADE: Record<string, string> = {
+	contato_comercial_b2b: "Contato comercial B2B",
+	prospectacao_b2b: "Prospecção B2B",
+};
+
+/** Rótulo pt-BR da base legal; valor desconhecido passa crudo, nunca some. */
+export const rotuloBaseLegal = (valor: string | null): string => {
+	if (valor === null || valor === "") return "Não registrada";
+	return ROTULO_BASE_LEGAL[valor] ?? valor;
+};
+
+/** Rótulo pt-BR da finalidade; valor desconhecido passa crudo, nunca some. */
+export const rotuloFinalidade = (valor: string | null): string => {
+	if (valor === null || valor === "") return "Não registrada";
+	return ROTULO_FINALIDADE[valor] ?? valor;
+};
