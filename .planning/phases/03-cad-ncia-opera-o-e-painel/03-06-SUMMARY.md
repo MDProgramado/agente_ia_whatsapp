@@ -60,7 +60,7 @@ key-decisions:
 
 patterns-established:
   - "Primitiva de diálogo nativo: `showModal()` com guard `!dialogo.open`, `Esc` pelo evento `close`, focus-trap do próprio elemento (sem `div` simulando modal)."
-  - "Busca de detalhe poraggregate nunca é feita duas vezes para o mesmo slot: o App tem uma função `carregarDetalhe`/`carregarGaveta` por slot, e a re-sincronização pós-mutação só recarrega o slot afetado."
+  - "Busca de detalhe por aggregate nunca é feita duas vezes para o mesmo slot: o App tem uma função `carregarDetalhe`/`carregarGaveta` por slot, e a re-sincronização pós-mutação só recarrega o slot afetado."
   - "Verificação estrutural por grep como critério de aceite de anti-requisito (`dangerouslySetInnerHTML`, `Excluir dados`, `sendText`, `update|delete from` na rota nova)."
 
 requirements-completed: [NFRQ-05]
@@ -103,7 +103,9 @@ Commits auxiliares:
 
 - `caefb0f` (style) — formatação do biome em `tests/api/lead-detail.test.ts` (arquivo já previsto no plano; sem mudança de comportamento), isolada para não sujar o commit da Task 3.
 
-**Plan metadata:** (commit de metadata deste plano)
+**Plan metadata:** `docs(03-06): registra o resumo do plano de detalhe do lead` (este SUMMARY — `edcb91b`)
+
+_Note: TDD tasks may have multiple commits (test → feat → refactor)_
 
 ## Files Created/Modified
 
@@ -180,6 +182,15 @@ None - no external service configuration required.
 - **Para o 03-07/ COMP-01:** o `optout_ledger` já reserva `event_type='erasure_request'` para quando a política de retenção/exclusão chegar; esta fase **não** cria caminho de exclusão (`grep "Excluir dados" src/web` == 0 e `delete from leads|erasure` == 0 em `src/api/routes/leads.ts`), conforme decisão documentada no plano.
 - **Sem bloqueios.** R-024, AR-005, R-043, R-064, D-23 e NFRQ-05 cobertos; nenhuma rota de escrita fora do opt-out foi criada.
 
+## Self-Check: PASSED
+
+- **Arquivos criados/modificados verificados (13/13 presentes + este SUMMARY):** `src/web/components/LeadDetailDrawer.tsx`, `src/web/components/AuditTimeline.tsx`, `src/web/components/CompliancePanel.tsx`, `src/web/components/LeadHistoryPanel.tsx`, `src/web/components/ConfirmDialog.tsx`, `tests/api/lead-detail.test.ts`, `src/api/routes/leads.ts`, `src/api/routes/conversations.ts`, `src/api/schemas.ts`, `src/infra/db/queries/leads.ts`, `src/web/api.ts`, `src/web/App.tsx`, `src/web/components/LeadList.tsx`, `.planning/phases/03-cad-ncia-opera-o-e-painel/03-06-SUMMARY.md`.
+- **Commits verificados (6/6 presentes em `git log --all`):** `9a19915` (T1 RED), `ff5871a` (T1 GREEN), `8c4f12c` (T2), `caefb0f` (style), `32851b8` (T3), `edcb91b` (SUMMARY).
+- **Verificação final:** `npm test` → 69 arquivos / 426 testes verdes; `npm run typecheck` → exit 0; `npm run lint` → 0 erros (16 warnings pré-existentes, nenhum em arquivo tocado); `npm run web:build` → exit 0.
+- **Choke-points intactos:** `sendText` com 1 único chamador de produção (`src/application/dispatcher.ts`) e 0 ocorrências em `src/web/**`/`src/api/**`; `dangerouslySetInnerHTML` = 0; "Excluir dados" = 0 em `src/web`.
+- **Working tree limpo** — nenhum arquivo não rastreado ou modificado pendente.
+
 ---
+
 *Phase: 03-cad-ncia-opera-o-e-painel*
 *Completed: 2026-10-21*
