@@ -144,7 +144,7 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 03-06-PLAN.md — Gaveta de detalhe de lead + compliance: `LeadDetailDrawer` (`<dialog>` com abas Conversa/Notas/Tarefas/Histórico/Compliance) + `AuditTimeline` + `CompliancePanel` (LGPD: origem, base legal, opt-out) + `LeadHistoryPanel` + busca/filtros server-side paginados (NFRQ-05)
+- [x] 03-06-PLAN.md — Gaveta de detalhe de lead + compliance: `LeadDetailDrawer` (`<dialog>` com abas Conversa/Notas/Tarefas/Histórico/Compliance) + `AuditTimeline` + `CompliancePanel` (LGPD: origem, base legal, opt-out) + `LeadHistoryPanel` + busca/filtros server-side paginados (NFRQ-05)
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
@@ -180,7 +180,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Fundação, Canal e Gate de Envio | 4/5 | In Progress (01-03 deferido — `P-004` (corrida `requestPairingCode` x WS open) corrigido em `2d64728`. Bloqueio atual: `P-007` (socket cai após `channel_ready`; rc14 vs servidor WhatsApp). Ambos deferidos; não bloqueiam Fase 3.) |  |
 | 2. IA, Handoff e Shadow Mode | 4/4 | Complete   | 2026-10-14 |
-| 3. Cadência, Operação e Painel | 6/8 | In Progress|  |
+| 3. Cadência, Operação e Painel | 7/8 | In Progress|  |
 | 4. Piloto, Calibração e Apuração | 0/2 | Not started | - |
 
 ## Notas de Cobertura e Decisões de Mapeamento
