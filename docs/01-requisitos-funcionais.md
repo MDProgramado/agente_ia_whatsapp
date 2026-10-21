@@ -80,6 +80,11 @@
 - **Descrição:** Follow-up agendado fora da janela → enviar **assim que o app abrir**, mesmo fora da janela.
 - **Risco:** ALTO — disparo em rajada pode causar banimento.
 
+### R-058 — Silêncio do bot fora da janela operacional
+- **Descrição:** Lead que responde **fora da janela** (fim de semana, feriado ou fora de 7h–17h) **não recebe resposta automática**: o bot fica em silêncio, notifica o Admin e aguarda decisão manual.
+- **Regra:** A janela (dias úteis, 7h–17h) é fronteira **dura** — vale para o silêncio tanto quanto para o envio. Follow-ups vencidos fora da janela são **enfileirados** e enviados **dentro** da janela, pelo dreno limitado (nunca em rajada).
+- **Reconciliado com ADR-009 — Fase 3:** requisito **acrescentado** na Fase 3 — já era citado por AR-007, por RN-008 e por AC-002, mas não existia neste documento. A leitura canônica de R-007 é "ao abrir o app, enfileira; envia dentro da janela" (ver ADR-014, Seção 2.9).
+
 ### R-015 — Definição do canal
 - **Descrição:** Opções em avaliação: API oficial, biblioteca não oficial, WhatsApp Web, híbrido.
 - **Regra:** Equilibrar custo, risco de banimento, esforço e operação local 24/7.
@@ -173,12 +178,14 @@
 - **Descrição:** Se lead não responde, bot aguarda tempo configurável e envia follow-up curto. Inicia sequência programada.
 
 ### R-004 — Cadência de follow-up
-- **Descrição:** Cadência: **1h → 1d → 3d → 7d → 15d** (inicialmente).
+- **Descrição:** Cadência de **4 toques: 1h → 1d → 3d → 7d**, contados a partir do **último toque** da conversa (`last_outbound_at`), não de horário fixo.
 - **Regra:** Interromper se lead responder, opt-out, handoff ou pausa manual.
+- **Reconciliado com ADR-009 — Fase 3:** o intervalo de **15 dias não existe** (ver R-005). O 4º toque (7d) é o último; a cadência é encerrada depois dele, sem resposta do lead. A âncora é o último toque e o teto de 4 é **duro** — nenhuma configuração o amplia. Detalhe em `docs/08-adr/014-scheduler-cadencia.md` (ADR-014).
 
 ### R-005 — Limite da sequência (revisado)
-- **Descrição:** Máximo **4 tentativas: 1h, 1d, 3d, 7d**. Após 7 dias sem resposta → encerrar e marcar "sem resposta".
-- **Regra:** Follow-up de 15 dias NÃO deve ser executado.
+- **Descrição:** Máximo **4 tentativas: 1h, 1d, 3d, 7d**. Após 7 dias sem resposta → encerrar a cadência e marcar **"sem resposta"**.
+- **Regra:** Follow-up de 15 dias NÃO deve ser executado. O teto de 4 toques é **duro**: nenhuma configuração pode ampliá-lo.
+- **Reconciliado com ADR-009 — Fase 3:** "marcar sem resposta" é o encerramento no eixo da máquina de estados (`state='encerrado'` com `closed_reason='sem_resposta'`, registrado em `status_history`); no funil de CRM o mesmo evento aparece como `pipeline_status='perdido'` (ADR-015). O `motivo` do encerramento é enumerado (`sem_resposta`, `sem_interesse`, `sem_verba`, `sem_decisao`, `concorrente`, `fora_do_perfil`, `opt_out`, `bad_timing`, `outro`) e `opt_out` é terminal e irreversível (AR-005). Detalhe em `docs/08-adr/014-scheduler-cadencia.md` (ADR-014).
 
 ### R-012 — Gatilhos de handoff
 - **Descrição:** Handoff acionado quando lead pede **preço/proposta/orçamento** OU demonstra **intenção de agendar reunião/chamada**.

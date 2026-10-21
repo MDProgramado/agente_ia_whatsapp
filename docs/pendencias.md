@@ -312,6 +312,42 @@ prova nos testes do 02-02 (idempotência via `FOR UPDATE`, notificação fora da
 
 ---
 
+## P-008 — Defeitos de documentação da Fase 3 (R-004 × R-005, R-058 inexistente, RN-009 × AR-007) ✅ RESOLVIDO (2026-10-21)
+
+**Status:** Resolvido em 2026-10-21 (plano 03-08, Task 2 — reconciliação D-26).
+
+**Origem:** `.planning/research/FEATURES.md` §8 ("R-058 é citado no anti-requisito AR-007 mas não
+existe no doc de requisitos") e `.planning/research/SUMMARY.md` ("Defeitos de doc"). Decisões de
+fase: `03-CONTEXT.md` (D-11, D-26).
+
+**Sintoma:** três defeitos de texto nos documentos canônicos:
+
+1. **R-004 × R-005** — R-004 descrevia a cadência como `1h → 1d → 3d → 7d → 15d`, enquanto R-005
+   dizia que o máximo é de **4 tentativas** e que o toque de 15 dias **não** deve ser executado.
+   O roadmap já tinha reconciliado isso no `PROJECT.md`, mas não no doc de requisitos.
+2. **R-058 não existia** — AR-007, RN-008 e AC-002 citavam "R-058" como se o requisito existisse;
+   a varredura de `docs/01-requisitos-funcionais.md` não encontrava o item.
+3. **RN-009 × AR-007/R-058** — RN-009 mandava enviar follow-ups vencidos "ao abrir o app, **mesmo
+   fora da janela**", contradizendo a fronteira dura da janela (dias úteis, 7h–17h).
+
+**Correção aplicada (2026-10-21, plano 03-08):**
+
+- `docs/01-requisitos-funcionais.md` — R-004 e R-005 reconciliados (marca "reconciliado com
+  ADR-009 — Fase 3" + referência cruzada ao ADR-014) e **R-058 acrescentado** ("Silêncio do bot
+  fora da janela operacional"), com a mesma marca.
+- `docs/03-regras-de-negocio.md` — RN-009 reconciliado (fora da janela **enfileira**, dentro dela
+  **envia**; o excedente é adiado, nunca descartado) e **`isCatchupDrain` documentado como
+  PARÂMETRO de boot**, não campo de `settings` nem modo global (nova seção §2.1).
+- `docs/08-adr/014-scheduler-cadencia.md` (novo) e `docs/08-adr/015-pipeline-crm-copiloto.md`
+  (novo) — D-26. O **ADR-009 permanece a autoridade** da cadência: o ADR-014 detalha o motor
+  (âncora no último toque, teto duro de 4, dreno como válvula) sem contradizê-lo.
+
+**Como confirmar:** `grep -c "R-058" docs/01-requisitos-funcionais.md` ≥ 1;
+`grep -c "reconciliado com ADR-009" docs/01-requisitos-funcionais.md docs/03-regras-de-negocio.md`
+≥ 1 em cada arquivo; `grep -c "isCatchupDrain" docs/03-regras-de-negocio.md` ≥ 1.
+
+---
+
 ## Verificações humanas registradas
 
 Resultados atestados por **humano** (e não por teste automatizado), com data e evidência:
@@ -336,8 +372,10 @@ Resultados atestados por **humano** (e não por teste automatizado), com data e 
   caminho, o desfecho é ADR-002 (avaliação de fork).
 - **Ao ver `aumid_registration_skipped` no log:** não é regressão. Ver P-002.
 - **Ao rodar `pg-hba-apply.ps1`:** esperar o Scope 2 abortar. Ver P-003.
+- **Ao citar a cadência de follow-up:** a leitura canônica é o ADR-009 (1h/1d/3d/7d, 4 toques) e
+  o detalhe do motor é o ADR-014. O 15º dia não existe. Ver P-008.
 - **Ao fechar uma pendência:** mudar o status para ✅, datar, e registrar a decisão tomada.
 
 ---
 
-*Criado em 2026-10-05 (Task 4 do plano 01-02). P-001, P-002, P-003, P-004 e P-005 (2026-10-13); P-006 (2026-10-13, fechado 2026-10-14); P-007 (2026-10-15, experimentos concluídos 2026-10-15 — ambos falharam, desfecho ADR-002).*
+*Criado em 2026-10-05 (Task 4 do plano 01-02). P-001, P-002, P-003, P-004 e P-005 (2026-10-13); P-006 (2026-10-13, fechado 2026-10-14); P-007 (2026-10-15, experimentos concluídos 2026-10-15 — ambos falharam, desfecho ADR-002); P-008 (2026-10-21, reconciliação documental da Fase 3 — plano 03-08).*

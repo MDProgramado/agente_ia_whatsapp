@@ -24,12 +24,27 @@
 | **RN-006** | A automação opera apenas em **dias úteis, das 7h às 17h**. | R-006 |
 | **RN-007** | Fora da janela, nenhuma mensagem automática é enviada. | R-006 |
 | **RN-008** | Se o lead responder fora da janela, o bot **não responde automaticamente**. Apenas notifica o Admin e aguarda decisão manual. | R-058 |
-| **RN-009** | Follow-ups agendados para fora da janela são **enfileirados** e enviados **ao abrir o app**, mesmo fora da janela. | R-007 |
+| **RN-009** | Follow-ups vencidos fora da janela são **enfileirados** e enviados **ao abrir o app**, mas **dentro da janela operacional** (dias úteis, 7h–17h). Fora da janela, abrir o app apenas **enfileira** — não envia — e o excedente é **adiado**, nunca descartado. _(reconciliado com ADR-009 — Fase 3)_ | R-007 |
 | **RN-010** | O limite diário é de **até 20 leads abordados** e **20–30 mensagens enviadas** no número dedicado. | R-023 |
 | **RN-011** | Ao atingir o limite diário, o sistema para de enviar e enfileira o restante para o próximo dia útil. | R-023, AR-008 |
 | **RN-012** | O limite pode ser ajustado manualmente pelo Admin, mas nunca ultrapassado sem confirmação explícita. | R-023 |
 | **RN-013** | Respostas a mensagens recebidas **não contam** para o limite diário de mensagens proativas (a definir com mais precisão na implementação). | R-023 |
 | **RN-014** | O contador diário é reiniciado à 00:00 do próximo dia útil. | R-023 |
+
+### 2.1 Parâmetros de execução (não são `settings`)
+
+> **Reconciliado com ADR-009 — Fase 3.** O dreno de catch-up (R-007/RN-009) é um **parâmetro de
+> execução**, não uma configuração persistida.
+
+| Parâmetro | Onde é decidido | O que significa |
+|---|---|---|
+| `isCatchupDrain` | No **boot** do processo (`src/index.ts`), passado para `drenarCatchup(...)` | `true` → a passada de drenagem acontece **uma vez**, neste boot (≤ 3 iminentes, 1 follow-up por lead por dia, jitter de 3–12 s; o restante é adiado). `false` → **no-op**: nada é enviado, nada é adiado. |
+
+**Por que não é campo de `settings` nem modo global:** um dreno é um **evento de boot**, não um
+**estado do sistema**. Persisti-lo em `settings` criaria a tentação de religá-lo — e religar o
+dreno transformaria o R-007 em um loop de reenvio. Como parâmetro, a decisão é auto-evidente
+no código e a função não tem memória. Detalhe em `docs/08-adr/014-scheduler-cadencia.md`
+(ADR-014).
 
 ---
 
