@@ -80,3 +80,23 @@ export const killSwitchBody = z.object({
 	}),
 });
 export type KillSwitchBody = z.infer<typeof killSwitchBody>;
+
+/**
+ * `GET /api/system/events` — trilha de auditoria append-only do R-045.
+ * `pageSize` limitado em 200 (ASVS V11 — anti-DoS).
+ */
+export const eventosQuery = z.object({
+	severity: z
+		.enum(["debug", "info", "warn", "error", "critical"], {
+			message: "severity deve ser: debug | info | warn | error | critical",
+		})
+		.optional(),
+	page: z.coerce.number().int().min(1).default(1),
+	pageSize: z.coerce
+		.number()
+		.int()
+		.min(1)
+		.max(200, "pageSize max 200")
+		.default(50),
+});
+export type EventosQuery = z.infer<typeof eventosQuery>;

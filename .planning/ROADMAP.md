@@ -148,7 +148,7 @@ Plans:
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
-- [ ] 03-07-PLAN.md — Eventos e falhas: rota `system.ts` (event_log read-only, pageSize ≤ 200) + `ErrorPanel` filtrável por severidade + `ConnectionIndicator` (SSE: ao vivo/reconectando/sem conexão) + `SystemHeader` (R-045 painel de erros formalizado, NFRQ-04, NFRQ-05)
+- [x] 03-07-PLAN.md — Eventos e falhas: rota `system.ts` (event_log read-only, pageSize ≤ 200) + `ErrorPanel` filtrável por severidade + `ConnectionIndicator` (SSE: ao vivo/reconectando/sem conexão) + `SystemHeader` (R-045 painel de erros formalizado, NFRQ-04, NFRQ-05)
 
 ### Phase 4: Piloto, Calibração e Apuração
 
@@ -168,8 +168,8 @@ Plans:
 
 Plans:
 
-- [ ] 04-01: Piloto real e calibração — 30 dias no número dedicado com shadow como comparação, recalibração da cadência (1h/1d/3d/7d só fixados com dado), decisão de break-up, plano de appeal preparado antecipadamente, tensão R-059 (SIM descartável) registrada e decidida
-- [ ] 04-02: Apuração e relatório — apuração mensal R-061/R-062 em visão mínima (reaproveita o painel da Fase 3, sem analytics avançado), revisão do teste de balanceamento LGPD, relatório de guardrails (nenhuma fronteira cruzada), lições do piloto para v2 (R-016 migração oficial, multiusuário, analytics)
+- [x] 04-01-PLAN.md: Piloto real e calibração — rotinas do Admin, calibração da cadência (tempo mediano, taxa por toque), plano de appeal preparado antecipadamente (OPRE-02, OPRE-03, PILO-01, PILO-03)
+- [x] 04-02-PLAN.md: Apuração e relatório — motor de KPIs mensais R-061/R-062 (reuniões >= 5, qualificação >= 30%), auditoria de segurança (blocked_attempts, opt-outs) e CLI de apuração (PILO-02, PILO-03)
 
 ## Progress
 
@@ -180,8 +180,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Fundação, Canal e Gate de Envio | 4/5 | In Progress (01-03 deferido — `P-004` (corrida `requestPairingCode` x WS open) corrigido em `2d64728`. Bloqueio atual: `P-007` (socket cai após `channel_ready`; rc14 vs servidor WhatsApp). Ambos deferidos; não bloqueiam Fase 3.) |  |
 | 2. IA, Handoff e Shadow Mode | 4/4 | Complete   | 2026-10-14 |
-| 3. Cadência, Operação e Painel | 7/8 | In Progress|  |
-| 4. Piloto, Calibração e Apuração | 0/2 | Not started | - |
+| 3. Cadência, Operação e Painel | 8/8 | Complete   | 2026-11-19 |
+| 4. Piloto, Calibração e Apuração | 2/2 | Complete   | 2026-11-19 |
 
 ## Notas de Cobertura e Decisões de Mapeamento
 

@@ -14,6 +14,10 @@
  */
 import { sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { importLeads } from "../../application/lead-importer.js";
+import { processarPlanilhaCsv } from "../../application/spreadsheet-importer.js";
+import { env } from "../../config/env.js";
+import type { LeadSourcePort } from "../../domain/ports/LeadSourcePort.js";
 import type { Db } from "../../infra/db/client.js";
 import { applyOptOut } from "../../infra/db/queries/leads.js";
 import { confirmarOptOutBody, idParams, listarLeadsQuery } from "../schemas.js";
@@ -303,5 +307,55 @@ export const registrarLeads = (app: FastifyInstance, core: PanelCore): void => {
 		});
 
 		return { optOut: true, mudou: resultado.mudou };
+	});
+
+	/**
+	 * `POST /api/leads/import-csv` — Ingestão de leads via arquivo CSV / texto tabular.
+	 */
+	app.post("/api/leads/import-csv", async (req, reply) => {
+		const body = req.body as { csv?: string; origin?: string } | undefined;
+		if (!body || typeof body.csv !== "string" || body.csv.trim() === "") {
+			return reply.code(400).send({
+				erro: "corpo da requisição deve conter o campo 'csv' com o conteúdo do arquivo",
+			});
+		}
+
+		const origem =
+			typeof body.origin === "string" && body.origin.trim() !== ""
+				? body.origin.trim()
+				: "planilha_excel";
+
+		const parseResult = processarPlanilhaCsv(body.csv, origem);
+		if (parseResult.leads.length === 0) {
+			return reply.code(400).send({
+				erro: "nenhum lead válido encontrado no arquivo",
+				detalhes: parseResult.ignorados.map(
+					(i) => `Linha ${i.linha}: ${i.motivo}`,
+				),
+			});
+		}
+
+		// Fonte pontual para o importador em lote
+		const sourcePort: LeadSourcePort = {
+			fetchNewLeads: async () => parseResult.leads,
+			markValidNewLead: () => {},
+		};
+
+		const resultadoImport = await importLeads(core.db, sourcePort, {
+			dailyLeadLimit: env.DAILY_LEAD_LIMIT,
+			tz: env.TZ,
+			agora: core.agora?.() ?? new Date(),
+		});
+
+		return {
+			totalNoArquivo: parseResult.totalLinhas,
+			validosIdentificados: parseResult.leads.length,
+			importadosComSucesso: resultadoImport.importados,
+			duplicadosIgnorados: resultadoImport.duplicados.length,
+			invalidosNoFormato: parseResult.ignorados.length,
+			semCotaDisponivel: resultadoImport.semCota,
+			rejeitados: resultadoImport.rejeitados,
+			detalhesInvalidos: parseResult.ignorados,
+		};
 	});
 };

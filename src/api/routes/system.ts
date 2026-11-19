@@ -21,7 +21,7 @@ import {
 	nextWindow,
 } from "../../domain/business-hours.js";
 import type { Db } from "../../infra/db/client.js";
-import { killSwitchBody } from "../schemas.js";
+import { eventosQuery, killSwitchBody } from "../schemas.js";
 import type { PanelCore } from "../server.js";
 
 /** `YYYY-MM-DD` no fuso do negócio — a chave de `daily_counters`. */
@@ -194,5 +194,40 @@ export const registrarSystem = (
 		});
 
 		return { mode: "paused", from: de };
+	});
+
+	app.get("/api/system/events", async (req, reply) => {
+		const parsed = eventosQuery.safeParse(req.query);
+		if (!parsed.success) {
+			return reply.code(400).send({
+				erro: "parametros de busca invalidos",
+				detalhes: parsed.error.issues.map((i) => i.message),
+			});
+		}
+
+		const { severity, page, pageSize } = parsed.data;
+		const offset = (page - 1) * pageSize;
+
+		const whereClause = severity ? sql`where severity = ${severity}` : sql``;
+
+		const result = await core.db.execute(sql`
+			select
+				id,
+				event_type as "eventType",
+				entity_type as "entityType",
+				entity_id as "entityId",
+				lead_id as "leadId",
+				conversation_id as "conversationId",
+				payload,
+				severity,
+				created_at as "createdAt"
+			from event_log
+			${whereClause}
+			order by created_at desc
+			limit ${pageSize} offset ${offset}
+		`);
+
+		const itens = (result as unknown as { rows: unknown[] }).rows ?? [];
+		return { page, pageSize, itens };
 	});
 };

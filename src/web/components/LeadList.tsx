@@ -1,5 +1,6 @@
 import {
 	CircleAlert,
+	FileSpreadsheet,
 	Inbox,
 	PanelRightOpen,
 	RefreshCw,
@@ -10,18 +11,6 @@ import type { KeyboardEvent as EventoTeclado } from "react";
 import { useCallback, useMemo, useRef } from "react";
 import type { ResumoLead } from "../api";
 
-/**
- * Lista de leads (coluna esquerda, UI-SPEC §Component Inventory).
- *
- * Busca server-side por nome/telefone (D-22), navegação por teclado
- * (`ArrowUp`/`ArrowDown` movem a seleção E o foco real do DOM) e ordenação por
- * prioridade: handoff pendente no topo, depois atividade recente (ADR-011 §6.8).
- *
- * Cada item é um `<button>` real: o foco move de verdade, então não há
- * `role="listbox"` nem `aria-activedescendant` — o estado selecionado é
- * exposto por `aria-current`. O item mostra dot de status + nome + telefone +
- * origem.
- */
 export interface LeadListProps {
 	readonly leads: readonly ResumoLead[];
 	readonly selecionadoId: string | null;
@@ -31,11 +20,8 @@ export interface LeadListProps {
 	readonly onBusca: (termo: string) => void;
 	readonly onSelecionar: (lead: ResumoLead) => void;
 	readonly onRecarregar: () => void;
-	/**
-	 * Abre a gaveta de detalhe do lead (wireframe §4). O clique simples no item
-	 * continua selecionando para o chat — as duas ações são independentes.
-	 */
 	readonly onAbrirDetalhe: (lead: ResumoLead) => void;
+	readonly onAbrirImportacao?: () => void;
 }
 
 const instante = (iso: string | null): number => {
@@ -64,6 +50,7 @@ export function LeadList({
 	onSelecionar,
 	onRecarregar,
 	onAbrirDetalhe,
+	onAbrirImportacao,
 }: LeadListProps) {
 	const ordenados = useMemo(() => ordenarPorPrioridade(leads), [leads]);
 
@@ -103,6 +90,17 @@ export function LeadList({
 					aria-label="Buscar leads"
 					className="w-full rounded border border-borda bg-fundo px-sm py-xs text-sm outline-none placeholder:text-suave focus-visible:ring-2 focus-visible:ring-acento"
 				/>
+				{onAbrirImportacao ? (
+					<button
+						type="button"
+						onClick={onAbrirImportacao}
+						title="Importar lista de leads (planilha Excel / CSV)"
+						aria-label="Importar leads"
+						className="flex size-8 shrink-0 items-center justify-center rounded border border-borda hover:bg-superficie-alta text-acento"
+					>
+						<FileSpreadsheet className="size-4" />
+					</button>
+				) : null}
 			</div>
 
 			{erro !== null ? (

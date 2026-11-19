@@ -35,7 +35,9 @@ import type { AcaoRapida } from "./components/ActionBar";
 import { ActionBar } from "./components/ActionBar";
 import { ChatPane } from "./components/ChatPane";
 import { CopilotPanel } from "./components/CopilotPanel";
+import { ErrorPanel } from "./components/ErrorPanel";
 import { HandoffQueue } from "./components/HandoffQueue";
+import { ImportModal } from "./components/ImportModal";
 import { LeadDetailDrawer } from "./components/LeadDetailDrawer";
 import { LeadHistoryPanel } from "./components/LeadHistoryPanel";
 import { LeadList } from "./components/LeadList";
@@ -201,6 +203,8 @@ export function App() {
 	const [detalheAberto, setDetalheAberto] = useState(false);
 	const [carregandoGaveta, setCarregandoGaveta] = useState(false);
 	const [erroGaveta, setErroGaveta] = useState<string | null>(null);
+	const [painelErrosAberto, setPainelErrosAberto] = useState(false);
+	const [importacaoAberta, setImportacaoAberta] = useState(false);
 
 	/**
 	 * Lead em detalhe do lead SELECIONADO — alimenta o `LeadHistoryPanel` da
@@ -639,6 +643,7 @@ export function App() {
 				carregando={carregandoSistema}
 				onAtualizar={recarregarTudo}
 				onAbrirKillSwitch={abrirKillSwitch}
+				onAbrirEventos={() => setPainelErrosAberto(true)}
 			/>
 
 			{resumo?.mode === "paused" ? (
@@ -696,6 +701,7 @@ export function App() {
 						onSelecionar={aoSelecionarLead}
 						onRecarregar={aoRecarregarLeads}
 						onAbrirDetalhe={aoAbrirDetalhe}
+						onAbrirImportacao={() => setImportacaoAberta(true)}
 					/>
 
 					<ChatPane
@@ -869,6 +875,20 @@ export function App() {
 					</>
 				) : null}
 			</dialog>
+
+			<ErrorPanel
+				aberto={painelErrosAberto}
+				onFechar={() => setPainelErrosAberto(false)}
+			/>
+
+			<ImportModal
+				aberto={importacaoAberta}
+				onFechar={() => setImportacaoAberta(false)}
+				onSucesso={() => {
+					void carregarLeads(busca);
+					void carregarSistema();
+				}}
+			/>
 		</div>
 	);
 }

@@ -549,3 +549,74 @@ export const rotuloFinalidade = (valor: string | null): string => {
 	if (valor === null || valor === "") return "Não registrada";
 	return ROTULO_FINALIDADE[valor] ?? valor;
 };
+
+// ---------------------------------------------------------------------------
+// Eventos e Falhas do Sistema (R-045, 03-07)
+// ---------------------------------------------------------------------------
+
+export type SeveridadeEvento = "debug" | "info" | "warn" | "error" | "critical";
+
+export interface EventoItem {
+	id: string;
+	eventType: string;
+	entityType: string;
+	entityId: string | null;
+	leadId: string | null;
+	conversationId: string | null;
+	payload: Record<string, unknown>;
+	severity: SeveridadeEvento;
+	createdAt: string;
+}
+
+export interface RespostaEventos {
+	page: number;
+	pageSize: number;
+	itens: EventoItem[];
+}
+
+export interface BuscarEventosParams {
+	severity?: SeveridadeEvento;
+	page?: number;
+	pageSize?: number;
+}
+
+/**
+ * Busca eventos estruturados de `event_log` (R-045, read-only).
+ */
+export const buscarEventos = (
+	params: BuscarEventosParams = {},
+): Promise<RespostaEventos> => {
+	const qs = new URLSearchParams();
+	if (params.severity) qs.set("severity", params.severity);
+	if (params.page !== undefined) qs.set("page", String(params.page));
+	if (params.pageSize !== undefined)
+		qs.set("pageSize", String(params.pageSize));
+
+	const query = qs.toString();
+	const url = query ? `/api/system/events?${query}` : "/api/system/events";
+	return apiGet<RespostaEventos>(url);
+};
+
+// ---------------------------------------------------------------------------
+// Importação de Leads via Planilha (CSV)
+// ---------------------------------------------------------------------------
+
+export interface RespostaImportacaoPlanilha {
+	totalNoArquivo: number;
+	validosIdentificados: number;
+	importadosComSucesso: number;
+	duplicadosIgnorados: number;
+	invalidosNoFormato: number;
+	semCotaDisponivel: boolean;
+	rejeitados: number;
+	detalhesInvalidos: Array<{ linha: number; motivo: string; dado: unknown }>;
+}
+
+export const importarPlanilhaCsv = (
+	csvConteudo: string,
+	origem?: string,
+): Promise<RespostaImportacaoPlanilha> =>
+	apiPost<RespostaImportacaoPlanilha>("/api/leads/import-csv", {
+		csv: csvConteudo,
+		origin: origem,
+	});
