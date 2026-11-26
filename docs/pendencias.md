@@ -178,17 +178,19 @@ rede fria (TLS medido em ~370 ms) perdia a corrida e morria no throw. Corrigido 
 `aguardarSocketAberto` (`waitForSocketOpen` + timeout de 30 s) antes de todo pareamento, log de boot
 no `app.log`, `SIGINT`/`SIGTERM` registrados cedo e `cd /d "%~dp0.."` no launcher (commit `2d64728`).
 Boot ao vivo em 2026-10-15 11:41 chegou a `connected to WA` → `pairing_code` → `channel_ready`
-(antes morria em `loaded tctoken index`). **O suspeito de versão de protocolo foi descartado** (T4a:
-`fetchLatestBaileysVersion()` == hardcoded, `isLatest=true`). O bloqueio restante do pareamento é
-**P-007**.
+(antes morria em `loaded tctoken index`). O suspeito de versão foi **parcialmente** descartado em T4a:
+`fetchLatestBaileysVersion()` == hardcoded, `isLatest=true`. Em 2026-11-24 essa conclusão foi revisada:
+o runtime usa `fetchLatestWaWebVersion()`, não a função testada em T4a (ver P-007). O bloqueio restante
+do pareamento é **P-007**.
 
 ---
 
 ## P-007 — Socket cai logo após `channel_ready`, antes do pareamento completar (T6) ⚠️ ABERTO
 
-**Status:** Aberto — **experimentos executados e ambos falharam (2026-10-15)**; critério de parada atingido.
-P-007 é um **bloqueio conhecido do rc14** contra o servidor atual, **deferido como ADR-002** (avaliação de
-fork futura). Bloqueia a Task 3 do plano 01-03 (pareamento do número dedicado) mas **não bloqueia a Fase 3**
+**Status:** Aberto — experimentos de 2026-10-15 e reteste de 2026-11-24 falharam; em 2026-11-25 recebeu
+backport oficial do PR #2872 via `patch-package`, restando apenas o pareamento controlado. P-007 segue como
+bloqueio conhecido do rc14 até a prova ao vivo; nenhum fork foi adotado. Bloqueia a Task 3 do plano 01-03
+(pareamento do número dedicado) mas **não bloqueia a Fase 3**
 (ROADMAP: "em caso de insucesso dos 2 experimentos, seguir para Fase 3"). É o **próximo
 bloqueio**, revelado depois de corrigir a corrida do P-004 — o boot agora chega a `channel_ready`.
 Diagnóstico em `.planning/phases/01-funda-o-canal-e-gate-de-envio/01-03-DIAG.md` (§T6 e §Resultado).
@@ -212,8 +214,10 @@ de 8 dígitos. Não há tempo útil para parear; `creds.json` segue `registered=
 | desfecho | seguiu vivo até SIGINT (~87 s) | shutdown limpo ~2,5 s depois |
 
 O drop pós-pareamento **já existia** (10/09, 237 ms após `channel_ready`); o que muda é a
-classificação. O rc14 **não loga** o `reason` real do `CB:failure` (`socket.js:798` não loga
-`node.attrs`), então não há visibilidade do que o servidor recusou.
+classificação. Desde 15/10/2026 12:17 o vendor `lib/Socket/socket.js:798-802` loga `failureAttrs`,
+`failureNode` e `failureChildren`; em 2026-11-24 esse diagnóstico foi internalizado em
+`src/channel/baileys/runtime.ts` via `sock.ws.on('CB:failure', ...)`, sem patch de vendor. Os logs de
+`C:\whatsapp_prospecao\logs\app.log` mostram `reason:"401"` e `location:"vll"/"cln"/"atn"/"cco"`.
 
 **Por que bloqueia:** o fluxo do código de pareamento exige o socket VIVO até o telefone confirmar (a
 credencial chega pelo socket que pediu o par). 2,5 s (e 237 ms em 10/09) é curto demais para um
@@ -225,7 +229,9 @@ humano digitar o par.
 2. Creds de "pareamento abandonado" (`registered=false` + `pairingCode`) podem induzir rejeição: a
    sessão de 15/10 era um pareamento abandonado; a de 10/09 era nova (`pasta_existia=false`).
 3. `companion_reg_refresh` ignorado pelo rc14 (hipótese 2 do T4; patch T4c candidato).
-4. Falta de visibilidade do `reason` do `CB:failure` (`socket.js:798` não loga `node.attrs`).
+4. Versão anunciada pelo runtime: `runtime.ts:59` usava `fetchLatestWaWebVersion()` e enviava revisões
+   como `[2,3000,1055661931]`, enquanto o default do rc14/master é `[2,3000,1043857760]`. O wiki FAQ
+   recomenda o default e desaconselha `fetchLatestWaWebVersion()` a cada conexão.
 
 **Como fechar:** (Exp. 1) boot com auth 100% limpo para ver se o socket sobrevive ao pedido de par;
 (Exp. 2) se cair igual, aplicar o patch T4c (`case 'companion_reg_refresh'`) via `patch-package`;
@@ -252,6 +258,63 @@ por este caminho sem ADR-002.
 **ADR-002** (avaliação futura, comparando exports e revalidando WHS-04/LEAD-03 antes de trocar).
 **Seguir para a Fase 3** (não bloqueia o roadmap) — o pareamento por este caminho permanece bloqueado
 até uma decisão de ADR-002.
+
+### Retomada (2026-11-24) — P-007 reaberto para teste controlado
+
+A leitura de `https://baileys.wiki/faq.md` mostrou que T4a testou a função errada: o projeto chama
+`fetchLatestWaWebVersion()` (`runtime.ts:59`) e envia `[2,3000,1055661931]`, enquanto
+`fetchLatestBaileysVersion()` (testado em T4a) e o default do rc14/master valem
+`[2,3000,1043857760]`. A wiki diz textualmente: *“Avoid calling `fetchLatestWaWebVersion` on every
+connect — newer versions can be incompatible… The default version Baileys ships with is the
+recommended one.”*
+
+Além disso, o `CB:failure` **tem reason**: `C:\whatsapp_prospecao\logs\app.log:1334,1354,3061,3089,3174`
+registram `reason:"401"` com `location` `vll`, `cln`, `atn` e `cco`. A afirmação antiga de
+“sem reason” era apenas falta de log no vendor; o patch de `socket.js:798-802` (15/10 12:17) já o
+exibia, e agora `runtime.ts` também expõe `attrs.reason`/`attrs.location` via API pública
+`sock.ws.on('CB:failure')`, sobrevivendo a `npm ci`.
+
+Ambiente isolado usado: `BAILEYS_VERSION_SOURCE=default|wa-web` em `src/config/env.ts`,
+`DATA_ROOT=C:\whatsapp_prospecao_p007`, schema `p007` no DB existente
+(`PGOPTIONS='-c search_path=p007'`), número descartável `+5571982166238` e `PANEL_PORT=8788`.
+A criação de um DB separado `whatsapp_prospecao_p007` falhou com `permissão negada ao criar banco de
+dados`; o schema `p007` isolou os dados sem exigir CREATEDB. Máximo de dois pareamentos, sem usar o
+número dedicado `+5571989211292`.
+
+### Resultado (2026-11-24) — hipótese da revisão WA Web refutada
+
+| Teste | `BAILEYS_VERSION_SOURCE` | Versão anunciada | Desfecho |
+|---|---|---|---|
+| A | `default` | `[2,3000,1043857760]` (rc14/master) | `pairing_code=XPCKJ9EL` → `channel_ready` → ~3,3 s depois `CB:failure reason="401" location="rva"` → `logged_out` terminal |
+| B | `wa-web` | `[2,3000,1056052669]` (revisão mudou outra vez; antes era `[2,3000,1055661931]`) | `pairing_code=5N6HEKVY` → `channel_ready` → ~5,7 s depois `CB:failure reason="401" location="odn"` → `logged_out` terminal |
+
+**Conclusão:** a revisão anunciada **não** é a causa. O default recomendado pela wiki e a revisão mais
+nova do WA Web falham da mesma forma, com `401` em `location` diferente (`rva` vs `odn`) — padrão
+compatível com attestation/checkpoint server-side, não com incompatibilidade de protobufs. O hook
+público `sock.ws.on('CB:failure', ...)` em `src/channel/baileys/runtime.ts` capturou `reason` e
+`location` sem patch de vendor. P-007 permanece aberto como **bloqueio do `7.0.0-rc14` × servidor
+atual**; desfecho **ADR-002** (avaliação futura de fork, revalidando WHS-04/LEAD-03) inalterado.
+
+### Backport oficial do PR #2872 aplicado (2026-11-25)
+
+O spike `.planning/spikes/001-pr2872-backport/` comparou três caminhos e o usuário escolheu o backport:
+
+| Caminho | Veredito |
+|---|---|
+| Backport do PR #2872 mantendo `7.0.0-rc14` | **Escolhido** — patch oficial aplica limpo no tag `v7.0.0-rc14`, `npm run build` passa em temp dir e as APIs `fetchNewChatMessageCap`/`fetchAccountReachoutTimelock` permanecem |
+| `@chaeulso/baileys@7.5.0` | Rejeitado — publicado em 2026-08-30, não contém os fixes do PR #2872 (2026-10-22), versão `[2,3000,1046341789]`, 1 star; o `whatsapp-rust-bridge@0.5.4` já é dependência do próprio rc14 |
+| Subir revisão WA Web | Refutado pelos Testes A/B (`rva` vs `odn`) |
+
+O PR corrige três defeitos confirmados no rc14 instalado: `link_code_companion_reg` sem checagem
+`stage === 'primary_hello'`, `link_code_pairing_nonce` com `'0'` em vez de `Buffer.alloc(1)` e
+`validateConnection` usando login quando `creds.me` é provisório do pareamento; também marca
+`registered: true` no sucesso do pareamento QR. Aplicação no repo: `patch-package@8.0.1` (MIT, sem
+`postinstall` próprio) em `devDependencies`, script `postinstall: patch-package` e patch auditável em
+`patches/@whiskeysockets+baileys+7.0.0-rc14.patch`. O ciclo reverse→reapply passou e o patch contém
+somente as quatro mudanças do PR, sem o diagnóstico antigo que logava `failureNode`/`failureChildren`.
+
+P-007 continua **aberto**: falta um pareamento controlado com `+5571982166238`, auth limpa e schema `p007`.
+Nenhum código de pareamento, credencial ou auth folder foi versionado.
 
 ---
 

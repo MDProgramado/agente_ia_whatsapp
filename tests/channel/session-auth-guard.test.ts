@@ -62,23 +62,29 @@ describe("avaliarGuardDeAuth — estados de auth em disco", () => {
 		expect(veredicto.acao).toBe("pareamento_pendente");
 	});
 
-	it("JSON em disco, registered=false e SEM pairingCode é auth corrompido", () => {
+	it("JSON em disco, registered=false e SEM pairingCode é resíduo de QR re-pareável", () => {
 		const veredicto = avaliarGuardDeAuth({
 			pastaExistiaAntes: true,
 			arquivosJson: 2,
 			registered: false,
 			pairingCode: undefined,
 		});
-		expect(veredicto.acao).toBe("corrompido");
+		expect(veredicto.acao).toBe("pareamento_pendente");
+		if (veredicto.acao !== "pareamento_pendente") {
+			throw new Error(
+				`esperado pareamento_pendente, recebido ${veredicto.acao}`,
+			);
+		}
+		expect(veredicto.motivo).toContain("residuo de QR Code interrompido");
 	});
 
-	it("pairingCode vazio não conta como pareamento em andamento", () => {
+	it("pairingCode vazio também é re-pareável, nunca corrupção", () => {
 		const veredicto = avaliarGuardDeAuth({
 			pastaExistiaAntes: true,
 			arquivosJson: 1,
 			registered: false,
 			pairingCode: "",
 		});
-		expect(veredicto.acao).toBe("corrompido");
+		expect(veredicto.acao).toBe("pareamento_pendente");
 	});
 });

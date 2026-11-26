@@ -112,6 +112,15 @@ export const envSchema = z.object({
 	 */
 	BAILEYS_BROWSER_MODE: z.enum(["default", "custom"]).default("default"),
 
+	BAILEYS_VERSION_SOURCE: z.enum(["default", "wa-web"]).default("default"),
+
+	/**
+	 * Modo de pareamento inicial (quando restoreRequired = true):
+	 * - "qr": Exibe QR code em texto/ASCII no terminal (recomendado e infalível).
+	 * - "code": Gera código de pareamento de 8 dígitos para digitação no celular.
+	 */
+	PAIRING_MODE: z.enum(["qr", "code"]).default("qr"),
+
 	/**
 	 * Token Bearer do painel local (D-18, T-03-12). Obrigatório: sem ele o boot
 	 * falha no parse do zod — um painel sem token autenticável é uma superfície
@@ -138,8 +147,10 @@ export const envSchema = z.object({
 	 * Provider/modelo são validados AQUI (fail-closed no boot), nunca lidos à
 	 * solta de `process.env` no módulo de boot.
 	 */
-	LLM_PROVIDER: z.enum(["openai", "anthropic", "google"]).default("openai"),
-	LLM_MODEL: z.string().min(1).default("gpt-4o-mini"),
+	LLM_PROVIDER: z
+		.enum(["openai", "anthropic", "google", "openrouter"])
+		.default("openrouter"),
+	LLM_MODEL: z.string().min(1).default("google/gemma-4-31b-it:free"),
 	/**
 	 * Chave do provider. Pode vir vazia do `.env`: nesse caso o adaptador é
 	 * injetado mesmo assim e as chamadas falham fail-closed (`provider_indisponivel`

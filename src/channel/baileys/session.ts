@@ -127,11 +127,14 @@ export const avaliarGuardDeAuth = (entrada: {
 		};
 	}
 
+	// Json em disco sem pairingCode e sem registered: pode ser resíduo de um
+	// pareamento via QR Code interrompido (o Baileys grava creds.json durante o
+	// handshake do QR, antes do registered=true chegar). Re-pareável.
 	return {
-		acao: "corrompido",
+		acao: "pareamento_pendente",
 		motivo:
-			`${arquivosJson} arquivo(s) json em ${PASTA_AUTH}, mas as credenciais ` +
-			"carregaram sem registro (registered !== true) e sem pairingCode",
+			`${arquivosJson} arquivo(s) json em ${PASTA_AUTH} sem registro nem pairingCode: ` +
+			"possivel residuo de QR Code interrompido — re-pareavel",
 	};
 };
 

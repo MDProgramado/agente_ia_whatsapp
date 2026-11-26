@@ -16,6 +16,8 @@ import { join } from "node:path";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import qrcode from "qrcode-terminal";
 import { Cron } from "croner";
 import { sql } from "drizzle-orm";
 import { Client } from "pg";
@@ -40,7 +42,7 @@ import {
 	type WASocket,
 } from "./channel/baileys/runtime.js";
 import { createSession } from "./channel/baileys/session.js";
-import { translateDisconnect } from "./channel/baileys/signals.js";
+import { isRestartRequired, translateDisconnect } from "./channel/baileys/signals.js";
 import { type Env, ensureDataDirs, env, logsDir } from "./config/env.js";
 import { feriadosNacionais } from "./domain/feriados-br.js";
 import { closeDb, openDb } from "./infra/db/client.js";
@@ -266,7 +268,7 @@ const main = async (): Promise<void> => {
 	//     só é tocado dentro de `src/channel/baileys/**` (T-01-12) — aqui só se
 	//     orquestra, nenhum import do pacote de protocolo.
 	const sessao = await createSession();
-	const sock = abrirSocketDoCanal(sessao);
+	let sock = await abrirSocketDoCanal(sessao);
 	canalSock = sock;
 	log.info(
 		{
@@ -300,6 +302,7 @@ const main = async (): Promise<void> => {
 		openai: "OPENAI_API_KEY",
 		anthropic: "ANTHROPIC_API_KEY",
 		google: "GOOGLE_GENERATIVE_AI_API_KEY",
+		openrouter: "OPENROUTER_API_KEY",
 	};
 	const chaveLlm =
 		env.LLM_API_KEY ||
@@ -307,6 +310,9 @@ const main = async (): Promise<void> => {
 		"";
 	const criarModeloLlm = (): LanguageModel => {
 		const apiKey = chaveLlm || undefined;
+		if (env.LLM_PROVIDER === "openrouter") {
+			return createOpenRouter({ apiKey })(env.LLM_MODEL);
+		}
 		if (env.LLM_PROVIDER === "anthropic") {
 			return createAnthropic({ apiKey })(env.LLM_MODEL);
 		}
@@ -344,28 +350,30 @@ const main = async (): Promise<void> => {
 		});
 	});
 
-	// Pareamento: só quando não há sessão registrada. O Admin DIGITA o par de 8
-	// dígitos (o WhatsApp o oferece como alternativa oficial ao scan). O código é
-	// segredo de sessão: vai SÓ para `logs\qr.txt`, nunca para o log estruturado.
+	// Pareamento: só quando não há sessão registrada.
 	if (sessao.restoreRequired) {
-		const destino = join(logsDir(), "qr.txt");
-		// O WS precisa estar ABERTO antes do handshake (P-004): `requestPairingCode`
-		// -> `sendRawMessage` lança `Connection Closed` se `ws.isOpen` for falso, e sem
-		// esta espera o pareamento competia com o handshake de rede (~240 ms de PBKDF2
-		// contra TLS frio) e morria no throw silencioso.
-		await aguardarSocketAberto(sock, SOCKET_OPEN_TIMEOUT_MS);
-		const par = await sock.requestPairingCode(
-			env.CHANNEL_PHONE_E164.replace(/^\+/, ""),
-		);
-		writeFileSync(destino, String(par), { encoding: "utf8" });
-		log.info(
-			{
-				step: "pairing_code",
-				arquivo: destino,
-				dica: "digite o par de 8 digitos no celular",
-			},
-			"par de codigo gravado; aguardando connection === open",
-		);
+		if (env.PAIRING_MODE === "code") {
+			const destino = join(logsDir(), "qr.txt");
+			await aguardarSocketAberto(sock, SOCKET_OPEN_TIMEOUT_MS);
+			const par = await sock.requestPairingCode(
+				env.CHANNEL_PHONE_E164.replace(/^\+/, ""),
+			);
+			writeFileSync(destino, String(par), { encoding: "utf8" });
+			log.info(
+				{
+					step: "pairing_code",
+					arquivo: destino,
+					dica: "digite o par de 8 digitos no celular",
+				},
+				"par de codigo gravado; aguardando connection === open",
+			);
+		} else {
+			console.log("\n=======================================================");
+			console.log("👉 AGUARDANDO QR CODE DO WHATSAPP NO TERMINAL...");
+			console.log("   Abra o WhatsApp no celular -> Aparelhos conectados");
+			console.log("   Toque em 'Conectar um aparelho' e aponte a camera");
+			console.log("=======================================================\n");
+		}
 	}
 
 	// `readCapabilities()` é chamado na ABERTURA (não antes de conectar): as duas
@@ -394,12 +402,62 @@ const main = async (): Promise<void> => {
 		}
 	};
 
+	/**
+	 * Recria o socket do Baileys após stream error 515 (restartRequired) recebido
+	 * logo depois de um pareamento bem-sucedido. O servidor WhatsApp pede para
+	 * reiniciar a conexão; o Baileys fecha o socket via end() e não o reabre.
+	 * Como creds.me já está persistido (configureSuccessfulPairing + saveCreds),
+	 * o novo socket faz login (não registro) e abre normalmente.
+	 *
+	 * Declarada como function declaration (hoisted) para ser referenciada em
+	 * aoDesconectar (definida abaixo) antes de `canal` existir (linha ~602).
+	 * Só é chamada após o boot completar, quando canal já está inicializado.
+	 */
+	async function recriarSocketAposPareamento(): Promise<void> {
+		log.info(
+			{ step: "channel_recreate" },
+			"recriando socket apos stream error 515 (restart required) apos pareamento",
+		);
+		const novoSock = await abrirSocketDoCanal(sessao);
+		await aguardarSocketAberto(novoSock, SOCKET_OPEN_TIMEOUT_MS);
+
+		// Atualiza referências de nível de módulo
+		sock = novoSock;
+		canalSock = novoSock;
+
+		// Re-registra handlers no novo socket
+		novoSock.ev.on("connection.update", onBaileysConnectionUpdate);
+		novoSock.ev.on("messages.upsert", onBaileysMessage);
+
+		// Atualiza o BaileysChannel (drainLoop, dispatcher, painel usam a mesma instância)
+		if (canal) {
+			canal.setSock(novoSock);
+		}
+
+		// Lê capabilities na nova conexão
+		void lerCapacidades();
+
+		log.info(
+			{ step: "channel_recreated" },
+			"socket recriado com sucesso apos 515",
+		);
+	}
+
 	// Registro explícito dos handlers nomeados do contrato do checkpoint.
 	const { onBaileysConnectionUpdate, onBaileysMessage } = criarHandlersDoCanal({
 		// `sock.user` só existe após o registro, por isso um GETTER: o runtime o
 		// reavalia por mensagem para carimbar o emissor do `fromMe` (CR-01). Acesso
 		// a propriedade — nenhum import do pacote Baileys aqui (T-01-12).
 		canalSelfJid: () => sock.user?.id,
+		aoQrCode: (qrStr: string) => {
+			if (sessao.restoreRequired) {
+				console.log("\n=======================================================");
+				console.log("📲 ESCANEIE O QR CODE ABAIXO NO SEU WHATSAPP:");
+				console.log("=======================================================\n");
+				qrcode.generate(qrStr, { small: true });
+				console.log("\n(Abra o WhatsApp -> Aparelhos conectados -> Conectar um aparelho)\n");
+			}
+		},
 		aoConectar: () => {
 			canalEstado = "open";
 			// O emissor do número dedicado precisa de E.164 para o Gate 0 (R-001).
@@ -416,6 +474,24 @@ const main = async (): Promise<void> => {
 			void lerCapacidades();
 		},
 		aoDesconectar: (status) => {
+			// 515 (restartRequired) após pareamento bem-sucedido: o servidor WA pede
+			// para reiniciar a conexão. O Baileys já fechou o socket via end();
+			// precisamos recriá-lo. creds.me já está persistido, então o novo
+			// socket faz login e abre normalmente.
+			if (isRestartRequired(status) && sessao.restoreRequired) {
+				log.info(
+					{ step: "channel_disconnected", status },
+					"stream error 515 (restart required) apos pareamento; recriando socket",
+				);
+				void recriarSocketAposPareamento().catch((erro: unknown) => {
+					log.error(
+						{ err: erro },
+						"falha ao recriar socket apos 515",
+					);
+				});
+				return;
+			}
+
 			const estadoDoSocket = translateDisconnect(status ?? 0);
 			canalEstado =
 				estadoDoSocket.event === "logged_out" ? "logged_out" : "close";
@@ -429,6 +505,15 @@ const main = async (): Promise<void> => {
 				"socket do canal caiu",
 			);
 			if (estadoDoSocket.terminal) {
+				// Durante o primeiro pareamento (quando restoreRequired = true), o WhatsApp fecha
+				// o socket com 401 temporario antes do scan. Nao devemos derrubar o processo nesse caso!
+				if (sessao.restoreRequired) {
+					log.info(
+						{ step: "channel_disconnected", sinal: estadoDoSocket.event },
+						"socket fechou durante pareamento inicial; aguardando conexao",
+					);
+					return;
+				}
 				// Reconectar num número deslogado/bloqueado é o pior cenário (T-01-14):
 				// fecha e sai em erro em vez de entrar em loop de reconexão.
 				void encerra(conn, log, `canal_${estadoDoSocket.event}`).then(() => {

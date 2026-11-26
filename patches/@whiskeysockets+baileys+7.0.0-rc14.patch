@@ -1,0 +1,59 @@
+diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
+index f2003ac..626ffdc 100644
+--- a/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
++++ b/node_modules/@whiskeysockets/baileys/lib/Socket/messages-recv.js
+@@ -878,8 +878,9 @@ export const makeMessagesRecvSocket = (config) => {
+                     }
+                 }
+                 break;
+-            case 'link_code_companion_reg':
++            case 'link_code_companion_reg': {
+                 const linkCodeCompanionReg = getBinaryNodeChild(node, 'link_code_companion_reg');
++                if (linkCodeCompanionReg?.attrs?.stage !== 'primary_hello') break;
+                 const ref = toRequiredBuffer(getBinaryNodeChildBuffer(linkCodeCompanionReg, 'link_code_pairing_ref'));
+                 const primaryIdentityPublicKey = toRequiredBuffer(getBinaryNodeChildBuffer(linkCodeCompanionReg, 'primary_identity_pub'));
+                 const primaryEphemeralPublicKeyWrapped = toRequiredBuffer(getBinaryNodeChildBuffer(linkCodeCompanionReg, 'link_code_pairing_wrapped_primary_ephemeral_pub'));
+@@ -940,6 +941,7 @@ export const makeMessagesRecvSocket = (config) => {
+                 authState.creds.registered = true;
+                 ev.emit('creds.update', authState.creds);
+                 break;
++            }
+             case 'privacy_token':
+                 await handlePrivacyTokenNotification(node);
+                 break;
+diff --git a/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js b/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js
+index ae34a8f..450c328 100644
+--- a/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js
++++ b/node_modules/@whiskeysockets/baileys/lib/Socket/socket.js
+@@ -317,7 +317,7 @@ export const makeSocket = (config) => {
+         logger.trace({ handshake }, 'handshake recv from WA');
+         const keyEnc = noise.processHandshake(handshake, creds.noiseKey);
+         let node;
+-        if (!creds.me) {
++        if (!creds.me || (!!creds.pairingCode && !creds.registered)) {
+             node = generateRegistrationNode(creds, config);
+             logger.info({ node }, 'not logged in, attempting registration...');
+         }
+@@ -644,7 +644,7 @@ export const makeSocket = (config) => {
+                         {
+                             tag: 'link_code_pairing_nonce',
+                             attrs: {},
+-                            content: '0'
++                            content: Buffer.alloc(1)
+                         }
+                     ]
+                 }
+diff --git a/node_modules/@whiskeysockets/baileys/lib/Utils/validate-connection.js b/node_modules/@whiskeysockets/baileys/lib/Utils/validate-connection.js
+index 6a65a73..dc8517d 100644
+--- a/node_modules/@whiskeysockets/baileys/lib/Utils/validate-connection.js
++++ b/node_modules/@whiskeysockets/baileys/lib/Utils/validate-connection.js
+@@ -191,7 +191,8 @@ export const configureSuccessfulPairing = (stanza, { advSecretKey, signedIdentit
+         account,
+         me: { id: jid, name: bizName, lid },
+         signalIdentities: [...(signalIdentities || []), identity],
+-        platform: platformNode?.attrs.name
++        platform: platformNode?.attrs.name,
++        registered: true
+     };
+     return {
+         creds: authUpdate,

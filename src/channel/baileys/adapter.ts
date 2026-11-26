@@ -71,7 +71,7 @@ const diaLocal = (agora: Date): string =>
 
 export class BaileysChannel implements ChannelPort {
 	private readonly db: Db;
-	private readonly sock: SocketDoCanal;
+	private sock: SocketDoCanal;
 	private readonly notifier: NotifyPort;
 	private readonly dormir: (ms: number) => Promise<void>;
 
@@ -80,6 +80,16 @@ export class BaileysChannel implements ChannelPort {
 		this.sock = deps.sock;
 		this.notifier = deps.notifier;
 		this.dormir = deps.dormir ?? dormirPadrao;
+	}
+
+	/**
+	 * Substitui a referência do socket internamente. Usado após recriação do
+	 * socket do Baileys (ex.: stream error 515 / restartRequired após pareamento).
+	 * Todos os consumidores (drainLoop, dispatcher via dispatchDeps, painel) que
+	 * seguram a mesma instância de BaileysChannel passam a usar o novo socket.
+	 */
+	setSock(sock: SocketDoCanal): void {
+		this.sock = sock;
 	}
 
 	/**

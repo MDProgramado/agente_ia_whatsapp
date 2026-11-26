@@ -59,6 +59,16 @@ const DESCONHECIDO: Sinal = {
 };
 
 /**
+ * 515 (restartRequired): o servidor WhatsApp pede para reiniciar a conexão após
+ * pareamento bem-sucedido. Não é terminal, mas o socket do Baileys é destruído
+ * pelo end() e o app precisa recriá-lo. Após o re-pareamento, creds.me já está
+ * setado (via configureSuccessfulPairing + saveCreds), então o novo socket faz
+ * login (não registro) e abre normalmente.
+ */
+export const isRestartRequired = (status: number | null): boolean =>
+	status === DisconnectReason.restartRequired;
+
+/**
  * `DisconnectReason` → evento. Os literais do enum vêm do rc14
  * (`Types/index.d.ts`): 401 loggedOut, 403 forbidden, 408 connectionLost/timedOut,
  * 411 multideviceMismatch, 428 connectionClosed, 440 connectionReplaced,

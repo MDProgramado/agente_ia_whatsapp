@@ -19,11 +19,13 @@
  */
 import {
 	type BaileysEventMap,
+	fetchLatestWaWebVersion,
 	makeWASocket,
 	type WAMessage,
 	type WASocket,
 } from "@whiskeysockets/baileys";
 import type { EventoInbound } from "../../application/event-bus.js";
+import { env } from "../../config/env.js";
 import { childLogger } from "../../infra/logger.js";
 import { normalizeJid } from "./jid-resolver.js";
 import { type SessionState, socketConfigOverrides } from "./session.js";
@@ -44,15 +46,59 @@ const TIPOS_MIDIA = [
 
 /**
  * Abre o socket com `emitOwnEvents: true` e logger de debug (via
- * `socketConfigOverrides`, WHS-05/R-001). NÃO conecta sozinho: quem espera
+ * `socketConfigOverrides`, WHS-05/R-001). Por default usa a revisão que vem
+ * no rc14; `BAILEYS_VERSION_SOURCE=wa-web` mantém o comportamento anterior de
+ * buscar a revisão do WA Web. NÃO conecta sozinho: quem espera
  * `connection === 'open'` é o `index.ts`.
  */
-export const abrirSocketDoCanal = (session: SessionState): WASocket => {
+export const abrirSocketDoCanal = async (
+	session: SessionState,
+): Promise<WASocket> => {
 	const logger = childLogger("baileys_socket");
-	return makeWASocket({
+	let version: [number, number, number] | undefined;
+	if (env.BAILEYS_VERSION_SOURCE === "wa-web") {
+		try {
+			const { version: v } = await fetchLatestWaWebVersion();
+			version = v;
+			logger.info(
+				{ version_source: "wa-web", version },
+				"versao WA Web obtida do servidor",
+			);
+		} catch (err) {
+			logger.warn(
+				{
+					version_source: "wa-web",
+					err: err instanceof Error ? err.message : String(err),
+				},
+				"nao foi possivel obter versao WA Web; usando default do Baileys",
+			);
+		}
+	} else {
+		logger.info(
+			{ version_source: "default" },
+			"usando versao default do Baileys",
+		);
+	}
+	const sock = makeWASocket({
 		auth: session.authState,
+		...(version ? { version } : {}),
 		...socketConfigOverrides(logger),
 	});
+	sock.ws.on("CB:failure", (node: unknown) => {
+		const attrs = (
+			node as { attrs?: Record<string, string | undefined> } | null
+		)?.attrs;
+		logger.error(
+			{
+				failureAttrs: {
+					reason: attrs?.reason,
+					location: attrs?.location,
+				},
+			},
+			"CB:failure recebido (diagnostico)",
+		);
+	});
+	return sock;
 };
 
 /**
@@ -174,6 +220,8 @@ export interface DepsHandlersCanal {
 	readonly aoDesconectar: (status: number | null) => void;
 	/** Um `EventoInbound` por mensagem acionável. */
 	readonly aoEventoInbound: (evt: EventoInbound) => void;
+	/** Disparado quando um QR code chega no connection.update */
+	readonly aoQrCode?: (qr: string) => void;
 	/**
 	 * Getter do JID próprio (`() => sock.user?.id`): `sock.user` só existe após o
 	 * registro, então o valor precisa ser reavaliado por mensagem, não capturado
@@ -190,6 +238,9 @@ export interface DepsHandlersCanal {
  */
 export const criarHandlersDoCanal = (deps: DepsHandlersCanal) => {
 	const onBaileysConnectionUpdate = (update: UpdateConexao): void => {
+		if (update.qr && deps.aoQrCode) {
+			deps.aoQrCode(update.qr);
+		}
 		if (update.connection === "open") {
 			deps.aoConectar();
 			return;
