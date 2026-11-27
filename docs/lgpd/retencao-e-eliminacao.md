@@ -22,7 +22,8 @@ janela em que o dado sobrevive. |
 | Ledger de opt-out e eliminação | `optout_ledger` | **INDEFINIDO** | — | É a prova de que o pedido foi atendido. Ver seção 2. |
 | Eventos de handoff | `handoff_events` | **INDEFINIDO** | — | É a prova de que a automação parou no instante certo. Ver seção 2. |
 | Sessão do WhatsApp | pasta `auth_info_baileys` | **Enquanto o número estiver em uso** | — | Não é dado pessoal de terceiro — é a credencial do canal. Enquanto o número dedicado existir, ela precisa existir. Perder a pasta é o WhatsApp ver um "dispositivo novo", que é sinal de banimento por si só (R-059). Ver seção 5. |
-| Backups | `*.dump` em `backups\` | **30 dias com rotação** | timestamp `AAAAMMDDTHHMMSS` no nome da pasta | Um dump é o banco inteiro em um arquivo: o mesmo risco de R-033, amplificado pelo volume. 30 dias é a janela de recuperação realisticamente útil para um MVP local; mais que isso, o dump vira um segundo banco sem ninguém gerenciá-lo. |
+| Backups | `*.dump` em `backups\` | **30 dias com rotação + piso de 3** | timestamp `AAAAMMDDTHHMMSS` no nome da pasta | Um dump é o banco inteiro em um arquivo: o mesmo risco de R-033, amplificado pelo volume. 30 dias é a janela de recuperação realisticamente útil para um MVP local; mais que isso, o dump vira um segundo banco sem ninguém gerenciá-lo. Os 3 dumps mais recentes nunca saem, qualquer que seja a idade (ver seção 5). |
+| Sessão copiada (`-IncludeAuth`) | `backups\auth\*` | **3 cópias mais recentes, sem corte por data** | `AAAAMMDDTHHMMSS` | Cópia da credencial fora das pastas datadas, para não morrer junto com o dump; rotação só por contagem, porque perder a última sessão válida é R-059. Ver seção 5. |
 | Logs | `logs\*.log` | rotatividade do `pino-roll` | data no nome do arquivo | R-045. Log não guarda corpo de mensagem: guarda `message_id`, `lead_id`, `direction` e contagem de caracteres. Ver seção 6. |
 
 ## 2. Por que `optout_ledger` e `handoff_events` não têm prazo
@@ -141,14 +142,19 @@ versão do servidor que o produziu, e o `pg_restore` recusa um dump de major inc
 de falhar parcialmente. Um backup sem carimbo no nome é um backup que só se descobre se está
 quebrado no dia em que ele é preciso — que é o pior dia possível. A rotação de 30 dias lê esse
 carimbo do nome; `CreationTime` não é critério, porque copiar um dump antigo para um diretório
-novo não pode ressuscitar dado vencido.
+novo não pode ressuscitar dado vencido. Piso de 3: os três dumps mais recentes (pelo carimbo do
+nome) **nunca** saem, qualquer que seja a idade — a regra dos 30 dias só apaga o que está fora
+desse piso. Sem o piso, uma semana sem rodar o backup apagaria tudo que era velho e deixaria o
+repositório sem nenhum dump restaurável.
 
 Regra adicional: **usar o `pg_dump` da mesma instalação do servidor.** `pg_dump` de major
 diferente da do servidor falha na conexão ou produz formato incompatível.
 
-A rotação de 30 dias vale para o dump **e** para a sessão copiada, com uma ressalva:
-a pasta de sessão **não** é rotacionada por data. Perder a sessão do WhatsApp é evento raro e
-custoso (R-059, sem redundância de número). A sessão fica em `C:\whatsapp_prospecao\auth\`
+A rotação de dumps e a da sessão são coisas diferentes. A sessão copiada com `-IncludeAuth` vai
+para `backups\auth\<AAAAMMDDTHHMMSS>` — **fora** das pastas datadas, para não morrer junto com o
+dump na rotação de 30 dias — e **nunca** é rotacionada por data: ficam as 3 cópias mais recentes
+por contagem, e é só isso. Perder a sessão do WhatsApp é evento raro e
+custoso (R-059, sem redundância de número). A sessão viva fica em `C:\whatsapp_prospecao\auth\`
 (`DATA_ROOT\auth`, o mesmo diretório usado por `authDir()`), que é
 **backupada separadamente do banco** e nunca mora dentro do OneDrive — o OneDrive sincroniza
 credencial para a nuvem em claro, o que contradiz R-033 e pode corromper a sessão com um

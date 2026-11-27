@@ -38,4 +38,21 @@ describe("backup.ps1 - tokens estaticos", () => {
 			script.indexOf("SHOW server_version"),
 		);
 	});
+	it("mantém um piso de 3 dumps e rota só depois do dump/verify", () => {
+		expect(script).toContain("$Manter = 3");
+		expect(script).toContain("-Skip $Manter");
+		const ultimaChamada = script.lastIndexOf(
+			"Remove-BackupsExpirados -Diretorio",
+		);
+		expect(ultimaChamada).toBeGreaterThan(script.indexOf("if ($Verify)"));
+		expect(ultimaChamada).toBeGreaterThan(script.indexOf("pg_dump -Fc falhou"));
+	});
+	it("guarda a sessão em backups\\auth, fora das pastas datadas", () => {
+		expect(script).toContain('Join-Path $BackupsDir "auth"');
+		expect(script).toContain("Remove-AuthBackupsAntigos");
+		expect(script).toContain("auth_rotacionado");
+		expect(
+			script.lastIndexOf("Remove-AuthBackupsAntigos -Diretorio"),
+		).toBeGreaterThan(script.indexOf("if ($Verify)"));
+	});
 });

@@ -42,23 +42,49 @@ function Invoke-Nativa {
 
 function Get-BackupTimestamp {
   param([string]$Nome)
-  $match = [regex]::Match($Nome, '^(\d{8})T(\d{6})_pg\d+$')
+  $match = [regex]::Match($Nome, '^(\d{8})T(\d{6})(?:_pg\d+)?$')
   if (!$match.Success) { return $null }
   $bruto = $match.Groups[1].Value + $match.Groups[2].Value
   return [datetime]::ParseExact($bruto, 'yyyyMMddHHmmss', [Globalization.CultureInfo]::InvariantCulture)
 }
+
+# Dumps: os $Manter mais recentes (por carimbo do nome) NUNCA saem, qualquer que
+# seja a idade; entre os demais, apaga só o que passou de 30 dias. Pasta sem
+# carimbo não é tocada — sem carimbo não há como ler a data sem adivinhar.
 function Remove-BackupsExpirados {
-  param([string]$Diretorio, [datetime]$Agora)
+  param([string]$Diretorio, [datetime]$Agora, [int]$Manter = 3)
   if (!(Test-Path $Diretorio)) { return @() }
   $removidos = @()
   $limite = $Agora.AddDays(-30)
-  foreach ($item in (Get-ChildItem $Diretorio -Directory)) {
+  $ordenados = @(Get-ChildItem $Diretorio -Directory |
+    Where-Object { $null -ne (Get-BackupTimestamp $_.Name) } |
+    Sort-Object { Get-BackupTimestamp $_.Name } -Descending)
+  for ($i = $Manter; $i -lt $ordenados.Count; $i++) {
+    $item = $ordenados[$i]
     $quando = Get-BackupTimestamp $item.Name
-    if ($quando -and $quando -lt $limite) {
+    if ($quando -lt $limite) {
       Remove-Item -Path $item.FullName -Recurse -Force
       $removidos += $item.Name
       Write-Host "backup_rotacionado nome=$($item.Name)"
     }
+  }
+  return $removidos
+}
+
+# Sessão: NUNCA rotação por data — perder a sessão é evento raro e custoso
+# (R-059). Contagem apenas: ficam as $Manter cópias mais recentes de
+# `backups\auth\`; o resto (inclusive cópia recente) sai.
+function Remove-AuthBackupsAntigos {
+  param([string]$Diretorio, [int]$Manter = 3)
+  if (!(Test-Path $Diretorio)) { return @() }
+  $removidos = @()
+  $ordenados = @(Get-ChildItem $Diretorio -Directory |
+    Where-Object { $null -ne (Get-BackupTimestamp $_.Name) } |
+    Sort-Object { Get-BackupTimestamp $_.Name } -Descending)
+  foreach ($item in ($ordenados | Select-Object -Skip $Manter)) {
+    Remove-Item -Path $item.FullName -Recurse -Force
+    $removidos += $item.Name
+    Write-Host "auth_rotacionado nome=$($item.Name)"
   }
   return $removidos
 }
@@ -98,6 +124,10 @@ $PgAdminUser = "postgres"
 
 $DataRoot = if ($env:DATA_ROOT) { $env:DATA_ROOT } else { "C:\whatsapp_prospecao" }
 $BackupsDir = Join-Path $DataRoot "backups"
+# Sessão copiada fica FORA das pastas datadas: `backups\auth\<timestamp>`.
+# Dentro de uma pasta datada ela morreria junto com o dump na rotação de 30
+# dias, e a sessão não é rotacionada por data (ver Remove-AuthBackupsAntigos).
+$AuthRoot = Join-Path $BackupsDir "auth"
 
 if (!$LogOnly -and !(Test-Path $BackupsDir)) {
   New-Item -ItemType Directory -Path $BackupsDir -Force | Out-Null
@@ -105,6 +135,7 @@ if (!$LogOnly -and !(Test-Path $BackupsDir)) {
 
 if ($RotateOnly) {
   Remove-BackupsExpirados -Diretorio $BackupsDir -Agora (Get-Date) | Out-Null
+  Remove-AuthBackupsAntigos -Diretorio $AuthRoot | Out-Null
   exit 0
 }
 
@@ -139,11 +170,10 @@ if ($script:ultimoExit -ne 0) { throw "pg_dump -Fc falhou (exit $script:ultimoEx
 if ($IncludeAuth) {
   $authSrc = Join-Path $DataRoot "auth"
   if (Test-Path $authSrc) {
-    Copy-Item -Path $authSrc -Destination $backupDir -Recurse -Force
+    $authDest = Join-Path $AuthRoot $timestamp
+    Copy-Item -Path $authSrc -Destination $authDest -Recurse -Force
   }
 }
-
-Remove-BackupsExpirados -Diretorio $BackupsDir -Agora (Get-Date) | Out-Null
 
 if ($Verify) {
   $testDb = "whatsapp_restore_test"
@@ -169,4 +199,10 @@ if ($Verify) {
   Write-Host "orig_dc=$cDcSrc dst_dc=$cDcDst"
   Invoke-Nativa $Psql @("-U", $PgAdminUser, "-d", "postgres", "-c", "DROP DATABASE IF EXISTS $testDb;") | Out-Null
 }
+
+# Rotação por último: só depois que o dump existe e (com -Verify) foi restaurado
+# com sucesso. Rotacionar antes do dump/verify é decidir o que apagar com base em
+# um backup que ainda pode falhar no meio do caminho.
+Remove-BackupsExpirados -Diretorio $BackupsDir -Agora (Get-Date) | Out-Null
+Remove-AuthBackupsAntigos -Diretorio $AuthRoot | Out-Null
 exit 0
