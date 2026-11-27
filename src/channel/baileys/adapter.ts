@@ -45,6 +45,8 @@ export interface DepsCanal {
 	readonly db: Db;
 	readonly sock: SocketDoCanal;
 	readonly notifier: NotifyPort;
+	/** Estado vivo do socket, injetado pelo boot; sem ele o adaptador assume aberto. */
+	readonly estaAberto?: () => boolean;
 	/** Espera injetável (teste); o default usa `setTimeout`. */
 	readonly dormir?: (ms: number) => Promise<void>;
 }
@@ -77,13 +79,19 @@ export class BaileysChannel implements ChannelPort {
 	private readonly db: Db;
 	private readonly sock: SocketDoCanal;
 	private readonly notifier: NotifyPort;
+	private readonly estaAberto?: () => boolean;
 	private readonly dormir: (ms: number) => Promise<void>;
 
 	constructor(deps: DepsCanal) {
 		this.db = deps.db;
 		this.sock = deps.sock;
 		this.notifier = deps.notifier;
+		this.estaAberto = deps.estaAberto;
 		this.dormir = deps.dormir ?? dormirPadrao;
+	}
+
+	isOpen(): boolean {
+		return this.estaAberto?.() ?? true;
 	}
 
 	/**

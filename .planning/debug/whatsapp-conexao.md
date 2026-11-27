@@ -22,10 +22,10 @@ updated: 2026-11-20T21:55:00-03:00
 - Múltiplos processos node estavam listados via tasklist (IDs: 948, 3756, 5544, 10348, 12328, 13548, 15612, 16628, 16672, 18832, 21128, 24396)
 - **NO FINAL DO LOG (linha 3267-3269): processo ENCERRADO via SIGINT** — não há processo rodando atualmente
 
-### 2. .env (C:\Users\11\...\automacao_whatsapp\.env)
+### 2. .env (C:\USUARIO\...\automacao_whatsapp\.env)
 - `BAILEYS_BROWSER_MODE=custom` — **CORRETO, presente na linha 11**
-- `WHATSAPP_PHONE=+557189211292`
-- `CHANNEL_PHONE_E164=+557189211292`
+- `WHATSAPP_PHONE=+5511900000001`
+- `CHANNEL_PHONE_E164=+5511900000001`
 - `DATA_ROOT=C:\whatsapp_prospecao`
 - `DAILY_MESSAGE_LIMIT=25`
 - `WINDOW_START_HOUR=7`, `WINDOW_END_HOUR=17`
@@ -36,7 +36,7 @@ updated: 2026-11-20T21:55:00-03:00
 - `creds.json` presente, 1729 bytes, última gravação: 20/11/2026 21:51:54
 - `"registered": false` — pareamento nunca concluído com sucesso
 - `"platform": "android"`
-- `"me":{"id":"557189211292:19@s.whatsapp.net","lid":"165029924102261:19@lid"}`
+- `"me":{"id":"5511900000001:19@s.whatsapp.net","lid":"999000000000001:19@lid"}`
 
 ### 4. app.log — total de 3269 linhas
 ### 5. notifications.log — notificações de toast/sound, sem erros específicos de conexão 515
@@ -72,7 +72,7 @@ updated: 2026-11-20T21:55:00-03:00
 
 4. **O `BAILEYS_BROWSER_MODE=custom` está configurado no .env**, mas tentativas 1-14 ainda usaram browser "Mac OS". O Windows Chrome só apareceu nas tentativas 15-16, sugerindo que a mudança de browser pode ter sido feita por outra via (variável de ambiente diferente, código, ou o custom mode não sobrescreve completamente o user agent padrão).
 
-5. **`creds.json` mostra `"registered": false`** — nenhum pareamento foi finalizado com sucesso. O `me.id` no creds.json (`557189211292:19@s.whatsapp.net`) coincide com a tentativa 16 (Windows Chrome), mas o registro nunca foi confirmado pelo WhatsApp devido ao 515.
+5. **`creds.json` mostra `"registered": false`** — nenhum pareamento foi finalizado com sucesso. O `me.id` no creds.json (`5511900000001:19@s.whatsapp.net`) coincide com a tentativa 16 (Windows Chrome), mas o registro nunca foi confirmado pelo WhatsApp devido ao 515.
 
 6. **Intervalo entre tentativas com pareamento bem-sucedido + 515:** tentativa 11 → 12 (aprox. 32 min), 12 → 14 (aprox. 74 min), 14 → 16 (aprox. 26h). Não há intervalo fixo; o 515 ocorre imediatamente após o pareamento (diferença de ~1 segundo entre "pairing configured successfully" e "stream error 515").
 

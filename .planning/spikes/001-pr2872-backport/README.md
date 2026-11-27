@@ -56,4 +56,4 @@ npm run lint
 
 ## Results
 
-Verdict **PARTIAL**: patch oficial aplicado no repo via `patch-package@8.0.1`, `postinstall` configurado, patch limitado às quatro mudanças do PR #2872 e ciclo reverse→reapply verificado. Build do rc14 patched passou em temp dir e as APIs críticas continuam presentes. `npm run typecheck` ✓, suíte completa `438/438` ✓, guard de auth `6/6` ✓ e `biome check` nos arquivos tocados ✓. Falta o pareamento real controlado com `+5571982166238` para virar `VALIDATED`.
+Verdict **PARTIAL**: patch oficial aplicado no repo via `patch-package@8.0.1`, `postinstall` configurado, patch limitado às quatro mudanças do PR #2872 e ciclo reverse→reapply verificado. Build do rc14 patched passou em temp dir e as APIs críticas continuam presentes. `npm run typecheck` ✓, suíte completa `438/438` ✓, guard de auth `6/6` ✓ e `biome check` nos arquivos tocados ✓. Falta o pareamento real controlado com `+5511900000002` para virar `VALIDATED`.

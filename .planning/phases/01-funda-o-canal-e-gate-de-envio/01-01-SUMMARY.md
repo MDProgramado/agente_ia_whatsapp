@@ -190,7 +190,7 @@ Um shell aberto **antes** da mudança de `PATH` do usuário continua resolvendo 
 Prefixo necessário em qualquer shell já aberto:
 
 ```bash
-export PATH="/c/Users/11/AppData/Roaming/fnm/node-versions/v24.21.0/installation:$PATH"; hash -r
+export PATH="/c/USUARIO/AppData/Roaming/fnm/node-versions/v24.21.0/installation:$PATH"; hash -r
 ```
 
 `C:\Program Files\nodejs` (v22.14.0) **não** deve ser desinstalado — é runtime de outros projetos da máquina.

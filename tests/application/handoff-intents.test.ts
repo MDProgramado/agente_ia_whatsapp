@@ -213,6 +213,8 @@ describe("contrato do conjunto INTENCOES_HANDOFF (FLUP-09/R-065)", () => {
 describe("handoff determinístico aditivo (R-012/R-025/R-057/R-065)", () => {
 	it.each([
 		["preço", "quanto custa esse serviço?"],
+		["preço sem acento", "qual e o preço desse site?"],
+		["preço com é", "é quanto o investimento?"],
 		["agendamento", "podemos agendar uma conversa amanhã?"],
 		["bot", "você é um bot?"],
 		["irritação", "que irritante, isso não resolve nada"],
@@ -242,6 +244,29 @@ describe("handoff determinístico aditivo (R-012/R-025/R-057/R-065)", () => {
 			expect(he.triggered_by).toBe("keyword");
 			expect(llm.chamadas).toEqual([]);
 			expect(notificacoes.length).toBeGreaterThanOrEqual(1);
+		});
+	});
+
+	it("gatilho determinístico vence falha da LLM e não chama a LLM", async () => {
+		await emTransacaoRevertida(async (tx) => {
+			const fx = await semear(tx);
+			const llm = scriptedLlmAdapter({
+				falhaExtracao: {
+					kind: "provider_indisponivel",
+					detail: "api fora do ar",
+				},
+			});
+			const { notifier } = notifierEspiao();
+
+			await processInboundFromMe(
+				tx,
+				makeSock(),
+				{ ...evento(fx), body: "e quanto?" },
+				{ llm, notifier, agora: AGORA },
+			);
+
+			expect(await contar(tx, "handoff_events", fx.conversationId)).toBe(1);
+			expect(llm.chamadas).toEqual([]);
 		});
 	});
 

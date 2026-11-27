@@ -13,6 +13,8 @@ export interface ChannelSendResult {
 }
 
 export interface ChannelPort {
+	/** Estado de presença do socket; `false` impede qualquer tentativa de envio. */
+	isOpen(): boolean;
 	sendText(
 		conversationId: string,
 		text: string,

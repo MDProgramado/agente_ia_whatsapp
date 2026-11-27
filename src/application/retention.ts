@@ -6,7 +6,9 @@ import { childLogger } from "../infra/logger.js";
 const CRON_PADRAO = "37 3 * * *";
 
 export interface RetencaoResultado {
-	readonly corte: string;
+	readonly corte_lead: string;
+	readonly corte_conversa: string;
+	readonly leades_anonimizados: number;
 	readonly mensagens_eliminadas: number;
 	readonly eventos_eliminados: number;
 	readonly llm_runs_eliminados: number;
@@ -55,7 +57,9 @@ export const startRetencaoJob = (deps: RetencaoDeps): RetencaoJob => {
 		log.info(
 			{
 				event: "retencao_aplicada",
-				corte: resultado.corte,
+				corte_lead: resultado.corte_lead,
+				corte_conversa: resultado.corte_conversa,
+				leades_anonimizados: resultado.leades_anonimizados,
 				mensagens_eliminadas: resultado.mensagens_eliminadas,
 				eventos_eliminados: resultado.eventos_eliminados,
 				llm_runs_eliminados: resultado.llm_runs_eliminados,
@@ -63,7 +67,7 @@ export const startRetencaoJob = (deps: RetencaoDeps): RetencaoJob => {
 				outbox_eliminado: resultado.outbox_eliminado,
 				blocked_attempts_reduzidos: resultado.blocked_attempts_reduzidos,
 			},
-			"retencao de 180 dias aplicada",
+			"retencao de 90/180 dias aplicada",
 		);
 		return resultado;
 	};

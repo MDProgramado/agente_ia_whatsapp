@@ -14,7 +14,7 @@ foi eliminado**. Uma regra de retenção sem chave de corte é uma intenção.
 
 | Categoria | Tabela | Prazo | Contagem a partir de | Justificativa |
 |-----------|--------|-------|----------------------|---------------|
-| Lead sem interação | `leads` | **90 dias** | `conversations.last_inbound_at` do lead, ou `leads.created_at` se nunca houve conversa | O contato que não responde não é pipeline, é registro. 90 dias cobrem uma cadência de follow-up inteira (1h, 1d, 3d, 7d) com folga de mais de um mês. Passado isso, o número está muerto e guardá-lo só amplia exposição de dado sem contrapartida comercial. |
+| Lead sem interação | `leads` | **90 dias — anonimizar** | `conversations.last_inbound_at` do lead, ou `leads.created_at` se nunca houve conversa | O contato que não responde não é pipeline, é registro. 90 dias cobrem uma cadência de follow-up inteira (1h, 1d, 3d, 7d) com folga de mais de um mês. Passado isso, os identificadores são substituídos por um E.164 sintético e a linha permanece só com origem, base legal e finalidade: LEAD-04 proíbe remover a linha, e a prova do tratamento não pode desaparecer. |
 | Conversa encerrada | `conversations` | **180 dias** | o instante do encerramento — `state = 'encerrado'` com `closed_reason` preenchido e `closed_at` gravado por trigger (migração 0010) | Meio ano. É o prazo mais defensável para dado de contato comercial em B2B: cobre o exercício
 regular de direitos pelo titular e permite responder "o que vocês têm de mim?" durante toda a
 janela em que o dado sobrevive. |
@@ -22,7 +22,7 @@ janela em que o dado sobrevive. |
 | Ledger de opt-out e eliminação | `optout_ledger` | **INDEFINIDO** | — | É a prova de que o pedido foi atendido. Ver seção 2. |
 | Eventos de handoff | `handoff_events` | **INDEFINIDO** | — | É a prova de que a automação parou no instante certo. Ver seção 2. |
 | Sessão do WhatsApp | pasta `auth_info_baileys` | **Enquanto o número estiver em uso** | — | Não é dado pessoal de terceiro — é a credencial do canal. Enquanto o número dedicado existir, ela precisa existir. Perder a pasta é o WhatsApp ver um "dispositivo novo", que é sinal de banimento por si só (R-059). Ver seção 5. |
-| Backups | `*.dump` em `backups\` | **30 dias com rotação** | data/hora no nome da pasta | Um dump é o banco inteiro em um arquivo: o mesmo risco de R-033, amplificado pelo volume. 30 dias é a janela de recuperação realisticamente útil para um MVP local; mais que isso, o dump vira um segundo banco sem ninguém gerenciá-lo. |
+| Backups | `*.dump` em `backups\` | **30 dias com rotação** | timestamp `AAAAMMDDTHHMMSS` no nome da pasta | Um dump é o banco inteiro em um arquivo: o mesmo risco de R-033, amplificado pelo volume. 30 dias é a janela de recuperação realisticamente útil para um MVP local; mais que isso, o dump vira um segundo banco sem ninguém gerenciá-lo. |
 | Logs | `logs\*.log` | rotatividade do `pino-roll` | data no nome do arquivo | R-045. Log não guarda corpo de mensagem: guarda `message_id`, `lead_id`, `direction` e contagem de caracteres. Ver seção 6. |
 
 ## 2. Por que `optout_ledger` e `handoff_events` não têm prazo
@@ -72,8 +72,9 @@ A regra completa, sem abreviatura:
 > - `optout_ledger`, `handoff_events`, `auth_info_baileys` → sem corte.
 > - Backups → a data/hora no nome da pasta.
 >
-> **O que acontece com o que já foi eliminado:** a linha **é destruída**, não anonimizada e não
-> esvaziada. `messages` é append-only (R-043) e o `REVOKE UPDATE, DELETE ON messages FROM PUBLIC`
+> **O que acontece com o que já foi eliminado:** conversas e mensagens **são destruídas**;
+> leads **são anonimizados**, sem remover a linha, porque LEAD-04 exige a prova de origem/base/finalidade.
+> `messages` é append-only (R-043) e o `REVOKE UPDATE, DELETE ON messages FROM PUBLIC`
 > nega o privilégio — a eliminação por prazo é a **única** operação de `DELETE` que o sistema
 > executa sobre `messages`, e ela é disparada por relógio, não por pessoa. Depois da eliminação,
 > o que resta é o evento `retencao_aplicada` em `event_log` (ou `erasure_request` em
@@ -107,11 +108,12 @@ SELECT event_type, occurred_at, recorded_at, legal_basis, purpose
 ```
 
 **Sobre a eliminação de `messages`:** ela implica remover as linhas de `messages` das conversas
-que venceram o prazo. Como `messages` é append-only, a rotina de retenção usa o caminho
-implementado na migração 0011: `fn_aplicar_retencao` liga `app.retencao_autorizada` apenas dentro
-da própria transação, e `fn_append_only` só permite `DELETE` nas tabelas de prazo vencido enquanto
-essa chave está ligada. O cron diário às 03:37 (`src/application/retention.ts`) chama a função e
-registra `retencao_aplicada` em `event_log`; nenhum outro código tem esse caminho.
+**encerradas** que venceram o prazo. Como `messages` é append-only, a rotina de retenção usa o
+papel `whatsapp_retencao` (migrações 0012 e 0013): `fn_aplicar_retencao` é `SECURITY DEFINER` e
+pertence a esse papel, e `fn_append_only` só permite `DELETE` quando `current_user` é ele. Nenhum
+GUC pode autorizar o bypass — `SET app.retencao_autorizada=on` é explicitamente barrado por teste.
+O cron diário às 03:37 (`src/application/retention.ts`) chama a função e registra
+`retencao_aplicada` em `event_log`; nenhum outro código tem esse caminho.
 
 ## 4. Eliminação por pedido do titular
 
@@ -133,18 +135,21 @@ O mecanismo é `pg_dump` em formato custom (`-Fc`), com restauração por `pg_re
 com PII é uma cópia de PII que ninguém decidiu fazer.
 
 **O nome da pasta de backup leva o carimbo da major version do servidor.** O servidor desta
-máquina é PostgreSQL 18.3, e a pasta segue `backups\pg18_<AAAAMMDD-HHMMSS>\`. Isso não é
+máquina é PostgreSQL 18.3, e a pasta segue `backups\<AAAAMMDDTHHMMSS>_pg18\`. Isso não é
 organização: `pg_dump` de outra major version **não restaura**. O formato de dump carrega a
 versão do servidor que o produziu, e o `pg_restore` recusa um dump de major incompatível em vez
 de falhar parcialmente. Um backup sem carimbo no nome é um backup que só se descobre se está
-quebrado no dia em que ele é preciso — que é o pior dia possível.
+quebrado no dia em que ele é preciso — que é o pior dia possível. A rotação de 30 dias lê esse
+carimbo do nome; `CreationTime` não é critério, porque copiar um dump antigo para um diretório
+novo não pode ressuscitar dado vencido.
 
 Regra adicional: **usar o `pg_dump` da mesma instalação do servidor.** `pg_dump` de major
 diferente da do servidor falha na conexão ou produz formato incompatível.
 
-A rotação de 30 dias vale para o dump **e** para a pasta `auth_info_baileys`, com uma ressalva:
+A rotação de 30 dias vale para o dump **e** para a sessão copiada, com uma ressalva:
 a pasta de sessão **não** é rotacionada por data. Perder a sessão do WhatsApp é evento raro e
-custoso (R-059, sem redundância de número). A sessão fica em `C:\whatsapp_prospecao\auth\`, que é
+custoso (R-059, sem redundância de número). A sessão fica em `C:\whatsapp_prospecao\auth\`
+(`DATA_ROOT\auth`, o mesmo diretório usado por `authDir()`), que é
 **backupada separadamente do banco** e nunca mora dentro do OneDrive — o OneDrive sincroniza
 credencial para a nuvem em claro, o que contradiz R-033 e pode corromper a sessão com um
 arquivo "online-only" no meio de uma escrita (PITFALLS §9).

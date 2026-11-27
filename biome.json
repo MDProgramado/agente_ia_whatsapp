@@ -10,6 +10,9 @@
 			"!**/dist"
 		]
 	},
+	"formatter": {
+		"lineEnding": "crlf"
+	},
 	"css": {
 		"parser": {
 			"tailwindDirectives": true

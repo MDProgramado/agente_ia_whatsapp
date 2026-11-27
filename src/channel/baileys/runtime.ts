@@ -31,7 +31,7 @@ import { env } from "../../config/env.js";
 import { childLogger } from "../../infra/logger.js";
 import { normalizeJid } from "./jid-resolver.js";
 import { type SessionState, socketConfigOverrides } from "./session.js";
-import { statusHttpDoErro } from "./signals.js";
+import { isReconectavel, statusHttpDoErro } from "./signals.js";
 
 /** Payloads de evento direto do `BaileysEventMap` — sem tipar à mão e errar. */
 export type UpdateConexao = BaileysEventMap["connection.update"];
@@ -220,16 +220,71 @@ export const aguardarSocketAberto = async (
 	}
 };
 
+export const mensagemPareamentoInicialTerminal = (motivo: string): string =>
+	`pareamento abortado (${motivo}): limpe auth_info_baileys e tente de novo`;
+
+export const aguardarPrimeiroQr = async (
+	sock: Pick<WASocket, "ev">,
+	timeoutMs: number,
+): Promise<boolean> =>
+	new Promise<boolean>((resolve, reject) => {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const limpar = (): void => {
+			if (timer) clearTimeout(timer);
+			sock.ev.off("connection.update", aoUpdate);
+		};
+		const aoUpdate = (update: UpdateConexao): void => {
+			if (update.qr) {
+				limpar();
+				resolve(true);
+				return;
+			}
+			if (update.connection === "open") {
+				limpar();
+				resolve(false);
+				return;
+			}
+			if (update.connection === "close") {
+				const status = statusHttpDoErro(update.lastDisconnect?.error);
+				limpar();
+				if (isReconectavel(status)) resolve(false);
+				else
+					reject(
+						new Error(
+							mensagemPareamentoInicialTerminal(String(status ?? "sem status")),
+						),
+					);
+			}
+		};
+		timer = setTimeout(() => {
+			limpar();
+			reject(new Error(`pareamento nao recebeu qr em ${timeoutMs}ms`));
+		}, timeoutMs);
+		sock.ev.on("connection.update", aoUpdate);
+	});
+
 export const pedirCodigoDoSocket = async (
-	sock: Pick<WASocket, "waitForSocketOpen" | "requestPairingCode">,
+	sock: Pick<WASocket, "ev" | "requestPairingCode">,
 	telefoneE164: string,
 	timeoutMs: number,
 	arquivoCodigo: string,
-): Promise<string> => {
-	await aguardarSocketAberto(sock, timeoutMs);
+): Promise<string | undefined> => {
+	if (!(await aguardarPrimeiroQr(sock, timeoutMs))) return undefined;
 	const par = await sock.requestPairingCode(telefoneE164.replace(/^\+/, ""));
 	writeFileSync(arquivoCodigo, String(par), { encoding: "utf8" });
 	return String(par);
+};
+
+export const criarPedidoCodigoPorSocket = (
+	pedir: (socket: object) => Promise<void>,
+): ((socket: object) => boolean) => {
+	const pedidos = new WeakSet<object>();
+	return (socket) => {
+		if (pedidos.has(socket)) return false;
+		pedidos.add(socket);
+		void pedir(socket);
+		return true;
+	};
 };
 
 /** `messageTimestamp` pode vir como number ou Long; normaliza para number. */

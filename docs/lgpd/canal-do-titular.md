@@ -7,8 +7,8 @@
 
 ## 1. O canal NÃO é a conversa de WhatsApp
 
-**O canal do titular é o e-mail do encarregado (mdprogamacao@outlook.com) OU o telefone
-dedicado a pedidos LGPD (+5571989211292). Nunca a conversa de WhatsApp.**
+**O canal do titular é o e-mail do encarregado (encarregado@example.com) OU o telefone
+dedicado a pedidos LGPD (+5511900000001). Nunca a conversa de WhatsApp.**
 
 Isso não é preferência de estilo. É uma contradição técnica, e ela é a razão de este documento
 existir.

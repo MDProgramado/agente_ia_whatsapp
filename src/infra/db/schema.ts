@@ -132,6 +132,11 @@ export const leads = pgTable(
 		responsibleUserId: uuid("responsible_user_id"),
 		createdBy: uuid("created_by"),
 		createdAt: timestamp("created_at").notNull().defaultNow(),
+		/**
+		 * Retenção de 90 dias (LEAD-04): a linha permanece como prova de origem,
+		 * finalidade e base legal; os identificadores são substituídos.
+		 */
+		anonymizedAt: timestamp("anonymized_at", { withTimezone: true }),
 	},
 	(_t) => [
 		check("leads_phone_number_check", sql`phone_number ~ ${E164_CHECK}`),

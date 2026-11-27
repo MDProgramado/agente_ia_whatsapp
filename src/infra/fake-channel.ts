@@ -28,6 +28,8 @@ export const criarFakeChannel = (
 ): ChannelPort & { enviados: EnvioFake[] } => ({
 	enviados,
 
+	isOpen: () => true,
+
 	async sendText(conversationId, text, idempotencyKey) {
 		enviados.push({ conversationId, text, idempotencyKey });
 		const resultado = { providerMsgId: null, latencyMs: 0 };

@@ -11,7 +11,8 @@
 param(
   [Parameter(Mandatory=$false)][switch]$LogOnly,
   [Parameter(Mandatory=$false)][switch]$Verify,
-  [Parameter(Mandatory=$false)][switch]$IncludeAuth
+  [Parameter(Mandatory=$false)][switch]$IncludeAuth,
+  [Parameter(Mandatory=$false)][switch]$RotateOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,6 +38,29 @@ function Invoke-Nativa {
   } finally {
     $ErrorActionPreference = $anterior
   }
+}
+
+function Get-BackupTimestamp {
+  param([string]$Nome)
+  $match = [regex]::Match($Nome, '^(\d{8})T(\d{6})_pg\d+$')
+  if (!$match.Success) { return $null }
+  $bruto = $match.Groups[1].Value + $match.Groups[2].Value
+  return [datetime]::ParseExact($bruto, 'yyyyMMddHHmmss', [Globalization.CultureInfo]::InvariantCulture)
+}
+function Remove-BackupsExpirados {
+  param([string]$Diretorio, [datetime]$Agora)
+  if (!(Test-Path $Diretorio)) { return @() }
+  $removidos = @()
+  $limite = $Agora.AddDays(-30)
+  foreach ($item in (Get-ChildItem $Diretorio -Directory)) {
+    $quando = Get-BackupTimestamp $item.Name
+    if ($quando -and $quando -lt $limite) {
+      Remove-Item -Path $item.FullName -Recurse -Force
+      $removidos += $item.Name
+      Write-Host "backup_rotacionado nome=$($item.Name)"
+    }
+  }
+  return $removidos
 }
 
 # --- Ambiente: carrega PG*/DATA_ROOT/PGBIN do .env do repo --------------------
@@ -79,6 +103,11 @@ if (!$LogOnly -and !(Test-Path $BackupsDir)) {
   New-Item -ItemType Directory -Path $BackupsDir -Force | Out-Null
 }
 
+if ($RotateOnly) {
+  Remove-BackupsExpirados -Diretorio $BackupsDir -Agora (Get-Date) | Out-Null
+  exit 0
+}
+
 $serverVer = Invoke-Nativa $Psql @("-d", "whatsapp_prospect", "-tAc", "SHOW server_version;")
 if ($script:ultimoExit -ne 0) { throw "Erro ao obter server_version: $serverVer" }
 $majorSrv = (("$serverVer" -split '\.')[0]).Trim()
@@ -108,17 +137,13 @@ Invoke-Nativa $PgDump @("-Fc", "-d", "whatsapp_prospect", "-f", $dumpFile) | Out
 if ($script:ultimoExit -ne 0) { throw "pg_dump -Fc falhou (exit $script:ultimoExit)" }
 
 if ($IncludeAuth) {
-  $authSrc = Join-Path $DataRoot "auth_info_baileys"
+  $authSrc = Join-Path $DataRoot "auth"
   if (Test-Path $authSrc) {
     Copy-Item -Path $authSrc -Destination $backupDir -Recurse -Force
   }
 }
 
-Get-ChildItem $BackupsDir -Directory | Where-Object {
-  $_.CreationTime -lt (Get-Date).AddDays(-30)
-} | ForEach-Object {
-  Remove-Item -Path $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
-}
+Remove-BackupsExpirados -Diretorio $BackupsDir -Agora (Get-Date) | Out-Null
 
 if ($Verify) {
   $testDb = "whatsapp_restore_test"

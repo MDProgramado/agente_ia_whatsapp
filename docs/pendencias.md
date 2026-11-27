@@ -276,10 +276,10 @@ exibia, e agora `runtime.ts` também expõe `attrs.reason`/`attrs.location` via 
 
 Ambiente isolado usado: `BAILEYS_VERSION_SOURCE=default|wa-web` em `src/config/env.ts`,
 `DATA_ROOT=C:\whatsapp_prospecao_p007`, schema `p007` no DB existente
-(`PGOPTIONS='-c search_path=p007'`), número descartável `+5571982166238` e `PANEL_PORT=8788`.
+(`PGOPTIONS='-c search_path=p007'`), número descartável `+5511900000002` e `PANEL_PORT=8788`.
 A criação de um DB separado `whatsapp_prospecao_p007` falhou com `permissão negada ao criar banco de
 dados`; o schema `p007` isolou os dados sem exigir CREATEDB. Máximo de dois pareamentos, sem usar o
-número dedicado `+5571989211292`.
+número dedicado `+5511900000001`.
 
 ### Resultado (2026-11-24) — hipótese da revisão WA Web refutada
 
@@ -313,7 +313,7 @@ O PR corrige três defeitos confirmados no rc14 instalado: `link_code_companion_
 `patches/@whiskeysockets+baileys+7.0.0-rc14.patch`. O ciclo reverse→reapply passou e o patch contém
 somente as quatro mudanças do PR, sem o diagnóstico antigo que logava `failureNode`/`failureChildren`.
 
-P-007 continua **aberto**: falta um pareamento controlado com `+5571982166238`, auth limpa e schema `p007`.
+P-007 continua **aberto**: falta um pareamento controlado com `+5511900000002`, auth limpa e schema `p007`.
 Nenhum código de pareamento, credencial ou auth folder foi versionado.
 
 ---
@@ -421,6 +421,43 @@ Resultados atestados por **humano** (e não por teste automatizado), com data e 
 - **Restauração de backup (2026-10-13):** `backup.ps1 -Verify` terminou com exit 0 — `pg_restore` numa
   base temporária com as 4 contagens conferidas contra a origem: leads 2=2, conversations 0=0,
   messages 0=0, daily_counters 0=0 (NFRQ-02, R-032).
+
+---
+
+## Auditoria 27/11 — dados pessoais versionados (item 8) ✅ SANADO NO WORKTREE (2026-11-27)
+
+Telefones reais (`+5571989211292`, `557189211292`, `+5571982166238`), LID `165029924102261`,
+nome/email do encarregado e caminhos `C:\Users\11\...` / `C:/Users/11/...` foram substituídos por
+valores fictícios em `tests/`, `docs/` e `.planning/`. Valores adotados: `+5511900000001`
+(dedicado), `+5511900000002` (descartável), LID `999000000000001`, `Administrador Ficticio`,
+`encarregado@example.com` e `C:/USUARIO/...`.
+
+O histórico do git **não** foi reescrito. Commits que ainda contêm os valores reais, confirmados com
+`git log --all --oneline -S<token>`:
+
+- `47a80aa`, `648c0d5`, `8044c47`, `cb094d4`, `03ea113`, `4edf8d4` — telefones/LID.
+- `aab6bd2`, `fefcf6b`, `8e8e8a8`, `95b41b3`, `38cc4af` — caminhos `C:/Users/11/...`.
+
+Para publicar o repositório, reescrever o histórico **antes do primeiro push**, com autorização
+explícita:
+
+```powershell
+$map = @'
+5571989211292==>5511900000001
+557189211292==>5511900000001
+5571982166238==>5511900000002
+165029924102261==>999000000000001
+C:/Users/11/==>C:/USUARIO/
+/c/Users/11/==>/c/USUARIO/
+C:\Users\11\==>C:\USUARIO\
+Maicon Douglas Alves de Oliveira==>Administrador Ficticio
+mdprogamacao@outlook.com==>encarregado@example.com
+'@
+[System.IO.File]::WriteAllText("$PWD\replace-text.txt", $map, (New-Object System.Text.UTF8Encoding $false))
+git filter-repo --force --replace-text "$PWD\replace-text.txt"
+```
+
+`git filter-repo` reescreve todos os refs; não executado nesta auditoria.
 
 ---
 

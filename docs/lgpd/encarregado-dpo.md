@@ -10,10 +10,10 @@ Este documento é operacional. Ele diz quem responde, em quanto tempo, e o que e
 
 | Campo | Valor |
 |-------|-------|
-| Encarregado | **Maicon Douglas Alves de Oliveira** |
+| Encarregado | **Administrador Ficticio** |
 | Cargo | **Admin / Proprietário** |
-| E-mail de contato | **mdprogamacao@outlook.com** |
-| Telefone de contato | **+5571989211292** — canal dedicado a pedidos LGPD (não é o número de vendas) |
+| E-mail de contato | **encarregado@example.com** |
+| Telefone de contato | **+5511900000001** — canal dedicado a pedidos LGPD (não é o número de vendas) |
 | Data de nomeação | **2026-10-13** |
 | Titularidade do tratamento | o Admin do sistema |
 
@@ -24,7 +24,7 @@ começa a correr mesmo assim.
 **Encarregado nomeado em 2026-10-13 (SC5, Opção A):** o Admin acumula a função de encarregado no
 piloto. A dualidade de papéis é conhecida e temporária — o Admin é ao mesmo tempo o responsável
 pelo tratamento e a pessoa que responde aos titulares (seção 6, opção 1). O canal de contato do
-titular é o e-mail **mdprogamacao@outlook.com** ou o telefone **+5571989211292** (dedicado a
+titular é o e-mail **encarregado@example.com** ou o telefone **+5511900000001** (dedicado a
 pedidos LGPD) — ver `docs/lgpd/canal-do-titular.md`.
 
 ## 2. Prazo de resposta
@@ -118,4 +118,4 @@ contrário.
 |------|-----------|
 | 2026-10-01 | Documento criado no plano 01-01 (Task 4 do 01-02), com o marcador `PREENCHER` |
 | 2026-10-05 | Reescrito como procedimento operacional: prazo de 5 dias úteis, o que o encarregado **não** faz, e a seção de nomeação |
-| 2026-10-13 | **Encarregado nomeado (SC5, Opção A):** Maicon Douglas Alves de Oliveira — Admin/Proprietário; e-mail mdprogamacao@outlook.com; telefone +5571989211292 (dedicado a pedidos LGPD). Dualidade de papéis conhecida e temporária. |
+| 2026-10-13 | **Encarregado nomeado (SC5, Opção A):** Administrador Ficticio — Admin/Proprietário; e-mail encarregado@example.com; telefone +5511900000001 (dedicado a pedidos LGPD). Dualidade de papéis conhecida e temporária. |
