@@ -11,7 +11,7 @@
 		]
 	},
 	"formatter": {
-		"lineEnding": "crlf"
+		"lineEnding": "lf"
 	},
 	"css": {
 		"parser": {
