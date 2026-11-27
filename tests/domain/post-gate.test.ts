@@ -9,9 +9,11 @@
  *
  * Três decisões que o teste trava:
  *
- * 1. **Fail-closed, mas não cego.** "Sem custo para você" é frase de venda
- *    legítima e NÃO pode bloquear por causa da palavra "custo" (que não é termo
- *    de preço). O anexo `.pdf`/`áudio` é mídia (AR-004) e bloqueia.
+ * 1. **Fail-closed, mas não cego.** "custo" virou termo de preço na auditoria
+ *    27/11b ("O custo é de 3 mil."), então "Sem custo para você" passou a
+ *    bloquear — decisão do usuário: falar de custo é falar de preço, e quem fala
+ *    de preço é o Admin. O que continua liberado é o contorno sem preço
+ *    ("cada projeto é único"). O anexo `.pdf`/`áudio` é mídia (AR-004) e bloqueia.
  * 2. **Precedência estável.** Quando o texto casa mais de um termo (ex.:
  *    "me manda uma proposta com o valor"), o motivo devolvido é o do primeiro
  *    classificador — o mesmo `ar001_preco` que o gate canônico reportaria.
@@ -37,6 +39,15 @@ const PROIBIDOS: readonly CasoProibido[] = [
 	{ texto: "promoção", reason: "ar001_preco" },
 	{ texto: "é só 250 reais por mês", reason: "ar001_preco" },
 	{ texto: "o investimento começa em 500", reason: "ar001_preco" },
+	// Auditoria 27/11b, item 5 — preço coloquial sem moeda.
+	{ texto: "Sem custo para você", reason: "ar001_preco" },
+	{ texto: "Fica em 2 mil por mês.", reason: "ar001_preco" },
+	{ texto: "Fica 1.500 mensais.", reason: "ar001_preco" },
+	{ texto: "O custo é de 3 mil.", reason: "ar001_preco" },
+	{ texto: "São 12 parcelas de 199.", reason: "ar001_preco" },
+	{ texto: "Fazemos por 5k.", reason: "ar001_preco" },
+	{ texto: "Sai a 1500 por mês.", reason: "ar001_preco" },
+	{ texto: "Uns 800 por mês resolve.", reason: "ar001_preco" },
 	// ── documento comercial (AR-002) ────────────────────────────────────────
 	{ texto: "me manda uma proposta", reason: "ar002_proposta" },
 	{ texto: "segue o contrato assinado", reason: "ar002_proposta" },
@@ -44,6 +55,12 @@ const PROIBIDOS: readonly CasoProibido[] = [
 	{ texto: "marquei terça às 14h", reason: "ar003_agendamento" },
 	{ texto: "retornamos às 14h", reason: "ar003_agendamento" },
 	{ texto: "podemos marcar uma reunião amanhã?", reason: "ar003_agendamento" },
+	{
+		texto: "Te chamo amanhã 15h pra gente alinhar?",
+		reason: "ar003_agendamento",
+	},
+	{ texto: "Bora uma ligação rápida?", reason: "ar003_agendamento" },
+	{ texto: "Tem 5 minutinhos amanhã de manhã?", reason: "ar003_agendamento" },
 	// ── mídia no outbound (AR-004) ──────────────────────────────────────────
 	{ texto: "PDF", reason: "ar004_midia_saida" },
 	{ texto: "áudio", reason: "ar004_midia_saida" },
@@ -58,8 +75,11 @@ const PROIBIDOS: readonly CasoProibido[] = [
 const LIBERADOS: readonly string[] = [
 	"posso te explicar como funciona",
 	"cada projeto é único",
-	// Frase de venda com "custo" — explicitamente NÃO é termo de preço.
-	"Sem custo para você",
+	// Número que não é preço (auditoria 27/11b, item 5).
+	"Temos mais de 50 clientes.",
+	"Trabalhamos com empresas há 10 anos.",
+	"Atendemos mais de 2 mil empresas.",
+	"Fazemos 1 entrega mensal.",
 	"Entendo perfeitamente. Cada projeto é único, e a gente gosta de entender o seu momento antes de sugerir qualquer caminho.",
 	// "agenda" (substantivo) não é "agendar" (verbo): não pode bloquear.
 	"Faz sentido. Nossa agenda é cheia, então prefiro entender seu cenário primeiro.",
