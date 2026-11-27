@@ -13,6 +13,8 @@
 5. **Ajuste do usuário na regex (item 5):** substituir três termos largos e incluir as frases de apresentação na lista "têm que continuar passando" (ver Task 5).
 6. **Ajuste do usuário no `.gitattributes` (item 2):** exceções CRLF para `.cmd`/`.bat`/`.ps1` (cmd.exe falha com labels/blocos em LF); `npm run format` em **commit separado**, só de finais de linha.
 
+7. **`parcelas` com número (item 5):** `\b\d+\s+parcelas?\b` em vez de `\bparcelas?\b` — "São 12 parcelas de 199." bloqueia como AR-001 e "o número de parcelas pode mudar" continua `ar002_proposta`.
+
 ## Tasks
 
 ### Task 1 — lifecycle: `aoAbrir` só no `connection: open` real
@@ -32,6 +34,7 @@
   ```
   Commit 1 = biome + .gitattributes. Commit 2 = **só** `npm run format` (EOL-only, isolado para revisão).
 - **Verify:** `npx biome check .` → 0 erros; `git diff` do commit 2 sem mudança de conteúdo (só EOL).
+- **Execução:** o índice já estava inteiro em LF; `npm run format` não gerou diff no Git, então o commit 2 não existe (no-op).
 - **Done:** `npm run lint` verde.
 
 ### Task 3 — dados pessoais fora do Git
@@ -53,7 +56,9 @@
 ### Task 5 — gate de saída: termos de preço/agenda (regex ajustada pelo usuário)
 - **Files:** `src/domain/gate/patterns/automation-disclosure.ts`, `tests/gate/ar-001.test.ts`, `tests/gate/ar-003.test.ts`, `tests/gate/post-gate-parity.test.ts`, `tests/adversarial/corpus.ts`, `tests/adversarial/adversarial.test.ts`, `tests/domain/post-gate.test.ts`
 - **Action:** adicionar aos termos (vocabulário único compartilhado por guard + pós-gate):
-  - `PRICE_TERM`: `|\bcusto\b|\bparcelas?\b|\d+(?:[.,]\d+)?\s?(?:mil|k)\b(?!\s+(?:clientes|empresas|usu[áa]rios|pessoas|seguidores))|\d\s+mensa(?:l|is)\b|\b\d+(?:[.,]\d+)?\s+por\s+m[êe]s\b|\bpor\s+r\$|\bpor\s+\d+(?:[.,]\d+)?\s?(?:mil|k|reais?)\b`
+  - `PRICE_TERM`: `|\bcusto\b|\b\d+\s+parcelas?\b|`
+    (decisão 7: `parcelas` exige número, para "o número de parcelas" continuar `ar002_proposta`)
+    `|\d+(?:[.,]\d+)?\s?(?:mil|k)\b(?!\s+(?:clientes|empresas|usu[áa]rios|pessoas|seguidores))|\d\s+mensa(?:l|is)\b|\b\d+(?:[.,]\d+)?\s+por\s+m[êe]s\b|\bpor\s+r\$|\bpor\s+\d+(?:[.,]\d+)?\s?(?:mil|k|reais?)\b`
     (substitui `\bpor\s+(?:r\$\s*)?\d`, `\d+(?:[.,]\d+)?\s?(?:mil|k)\b` e `\bmensa(?:l|is)\b`)
   - `SCHEDULE_TERM`: `|\bliga[çc](?:[ãa]o|[õo]es)\b|\bte\s+chamo\b|(?<!\w)(?!24\s?h)\d{1,2}\s?h(?:\d{2})?(?!\w)|\bminutinhos?\b`
   - Testes: 10 frases-alvo bloqueiam; as 5 frases comuns do usuário ("Estamos no mercado por 10 anos.", "Atendemos por 3 estados.", "Atendemos mais de 2 mil empresas.", "Fazemos 1 entrega mensal.") entram em LIBERADOS; "Respondemos em até 2h." fica **bloqueado por decisão do usuário** (aceito, documentado no teste).
@@ -64,7 +69,7 @@
 ### Task 6 — matcher de entrada: dispara/não-dispara
 - **Files:** `src/domain/gate/patterns/automation-disclosure.ts`, `tests/application/handoff-intents.test.ts`, `tests/application/qualification.test.ts`
 - **Action:** adicionar aos termos de handoff (aditivo, nunca anula a LLM):
-  - `HANDOFF_PRICE_TERM`: `|\bvalor(?:es)?\b|\bpre[çc]os?\b|\bproposta\b|\bor[çc]amento\b|\bcobra(?:m|r)?\b|\bquanto\s+(?:custa|fica|[ée]|sai|obra|cobra)\b|\btabela\b`
+  - `HANDOFF_PRICE_TERM`: `|\bvalor(?:es)?\b|\bpre[çc]os?\b|\bproposta\b|\bor[çc]amento\b|\bcobra(?:m|r)?\b|\bquanto\s+(?:custa|fica|[ée]|sai|cobra)\b|\btabela\b` (o `obra` da primeira versão era erro de digitação, removido)
   - `HANDOFF_SCHEDULE_TERM`: `|\bligar\b|\bliga[çc][ãa]o\b|\bsemana\s+que\s+vem\b`
   - Testes: 9 frases × LLM neutra e LLM falhando → handoff 1 (`triggered_by='keyword'`, `llm.chamadas=[]`); 4 frases neutras → handoff 0 (`llm.chamadas=['extract']`); unitário puro em `detectarGatilhoHandoff`.
   - `qualification.test.ts`: corpo de `objecao_preco` sem pedido de orçamento ("achei um pouco caro, mas me conta mais") + novo caso "me passa um orçamento" → handoff.
