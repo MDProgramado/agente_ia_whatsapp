@@ -57,6 +57,7 @@ export const apagarTitularNaTransacao = async (
 			addressLine: null,
 			waJid: null,
 			lid: null,
+			anonymizedAt: agora,
 		})
 		.where(eq(leads.id, lead.id));
 

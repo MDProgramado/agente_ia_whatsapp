@@ -9,7 +9,7 @@ Destravar P-007 sem abandonar o pin `@whiskeysockets/baileys@7.0.0-rc14`. A hip�
 - Preservar `fetchNewChatMessageCap`, `fetchAccountReachoutTimelock`, o tratamento do erro `463` e o hook público `CB:failure`.
 - Patch deve ser auditável, versionado e reaplicável via `patch-package`.
 - Não trocar para Evolution API nem para fork sem ADR explícito.
-- Nenhum pareamento com o número dedicado `+5571989211292`; usar somente `+5571982166238` em ambiente isolado.
+- Nenhum pareamento com o número dedicado `+5511900000001`; usar somente `+5511900000002` em ambiente isolado.
 
 ## Spikes
 

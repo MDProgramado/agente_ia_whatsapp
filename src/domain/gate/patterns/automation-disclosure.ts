@@ -80,11 +80,13 @@ export const MEDIA_LINK_EXT =
  * formas foram listadas explicitamente, sem `\bagend\w*`, para não casar `agenda`
  * (o substantivo: "minha agenda") — um falso positivo que calaria conversa
  * normal. `-feira` entra como dia da semana citado ("quinta-feira"); o sufixo é
- * obrigatório justamente para não casar "segunda opção". (`horário` já torna o
- * guard intencionalmente amplo para menções de expediente.)
+ * obrigatório justamente para não casar "segunda opção". `Atendimento 24h` é
+ * expediente genérico, não horário de reunião, e precisa continuar passando.
+ * A hora usa `(?<!\w)`/`(?!\w)`: `\bàs` nunca casava, porque "à" é não-`\w` em JS,
+ * e o sufixo `h`/`horas` é opcional dentro da fronteira final ("às 14h").
  */
 export const SCHEDULE_TERM =
-	/\bagend(?:ar|ei|ou|ando|em|amos)\b|\bmar(?:car|quei|que|quem|cou|cando|camos|cada|cado)\b|\bte\s+ligar\b|\btelefonar\b|\batendimento\s+24\s?h\b|\breuni[ãa]o\b|\bchamada\b|\bcall\b|\bhor[áa]rio\b|\bàs\s+\d{1,2}\b|\b(?:segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)-feira\b/i;
+	/\bagend(?:ar|ei|ou|ando|em|amos)\b|\bmar(?:car|quei|que|quem|cou|cando|camos|cada|cado)\b|\bte\s+ligar\b|\btelefonar\b|\breuni[ãa]o\b|\bchamada\b|\bcall\b|\bhor[áa]rio\b|(?<!\w)às\s+\d{1,2}(?:h|horas?)?(?!\w)|\b(?:segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)-feira\b/i;
 
 /**
  * AR-006. `\bia\b` é o caso perigoso: sem `\b` ele casaria "dia".
@@ -139,7 +141,7 @@ export const primeiroTermoQueCasa = (
 };
 
 export const HANDOFF_PRICE_TERM =
-	/\bquanto\s+custa\b|\bqual\s+é\s+o\s+pre[çc]o\b|\bme\s+passe\s+o\s+pre[çc]o\b|\bquanto\s+sa[ií]\b/i;
+	/\bquanto\s+custa\b|\bqual\s+(?:[ée]\s+)?o\s+pre[çc]o\b|\bme\s+passe\s+o\s+pre[çc]o\b|\bquanto\s+sa[ií]\b|(?<!\w)[ée]\s+quanto\b/i;
 
 export const HANDOFF_SCHEDULE_TERM =
 	/\bagend(?:ar|ei|ou|ando|em|amos)\b|\bmar(?:car|quei|que|quem|cou|cando|camos|cada|cado)\b|\breuni[ãa]o\b|\bchamada\b|\bcall\b/i;

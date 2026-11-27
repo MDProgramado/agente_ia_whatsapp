@@ -7,6 +7,7 @@ import {
 	criarReferenciaSocket,
 	pedirCodigoDoSocket,
 	registrarPersistenciaCreds,
+	type UpdateConexao,
 } from "../../src/channel/baileys/runtime.js";
 import { isReconectavel } from "../../src/channel/baileys/signals.js";
 
@@ -114,20 +115,35 @@ describe("Fase 0.5 — sockets do canal", () => {
 		const raiz = mkdtempSync(join(tmpdir(), "pairing-"));
 		try {
 			const destino = join(raiz, "qr.txt");
+			const ouvintes: Array<(update: UpdateConexao) => void> = [];
 			const sock = {
-				waitForSocketOpen: vi.fn(async () => undefined),
+				ev: {
+					on: (_evento: string, callback: (update: UpdateConexao) => void) => {
+						if (_evento === "connection.update") ouvintes.push(callback);
+					},
+					off: (_evento: string, callback: (update: UpdateConexao) => void) => {
+						if (_evento !== "connection.update") return;
+						const indice = ouvintes.indexOf(callback);
+						if (indice >= 0) ouvintes.splice(indice, 1);
+					},
+				},
 				requestPairingCode: vi.fn(async () => "AB12CD34"),
-			} as unknown as SocketDePareamento;
+			} as unknown as SocketDePareamento & {
+				requestPairingCode: ReturnType<typeof vi.fn>;
+			};
 
-			const par = await pedirCodigoDoSocket(
+			const promessa = pedirCodigoDoSocket(
 				sock,
-				"+5571982166238",
+				"+5511900000001",
 				1_000,
 				destino,
 			);
+			await Promise.resolve();
+			for (const ouvinte of [...ouvintes]) ouvinte({ qr: "qr-de-teste" });
+			const par = await promessa;
 
 			expect(par).toBe("AB12CD34");
-			expect(sock.requestPairingCode).toHaveBeenCalledWith("5571982166238");
+			expect(sock.requestPairingCode).toHaveBeenCalledWith("5511900000001");
 			expect(readFileSync(destino, "utf8")).toBe("AB12CD34");
 		} finally {
 			rmSync(raiz, { recursive: true, force: true });

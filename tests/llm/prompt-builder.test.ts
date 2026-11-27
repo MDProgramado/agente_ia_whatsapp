@@ -17,7 +17,7 @@ import {
 	type PayloadLlm,
 } from "../../src/domain/llm/prompt-builder.js";
 
-const TELEFONE_LEAD = "+5571989211292";
+const TELEFONE_LEAD = "+5511900000001";
 const ENDERECO_LEAD = "Rua das Flores, 123";
 
 const payloadCru = (): PayloadLlm => ({
@@ -28,7 +28,7 @@ const payloadCru = (): PayloadLlm => ({
 	},
 	// A 1ª mensagem do Admin também carrega o telefone — todo egresso é mascarado.
 	adminPrimeiraMensagem:
-		"Olá João, sou consultor. Pode me chamar em +5571989211292",
+		"Olá João, sou consultor. Pode me chamar em +5511900000001",
 	historico: [
 		{ autor: "lead", texto: "Oi, moro na Rua das Flores, 123" },
 		{ autor: "admin", texto: "Perfeito, obrigado" },

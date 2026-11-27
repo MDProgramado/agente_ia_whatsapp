@@ -26,6 +26,7 @@ import {
 	LIMITE_WHATSAPP,
 	splitLongMessage,
 } from "../../src/application/humanize.js";
+import { enqueue } from "../../src/application/outbox.js";
 import { env } from "../../src/config/env.js";
 import type { ChannelPort } from "../../src/domain/ports/ChannelPort.js";
 import {
@@ -225,6 +226,75 @@ describe("dispatch — texto longo vira varios pedacos (CONV-13)", () => {
 				`),
 			);
 			expect(Number(primeiro(contador).count)).toBe(usado);
+		});
+	});
+
+	it("canal fechado defere sem consumir cota nem marcar falha", async () => {
+		await emTransacaoRevertida(async (tx) => {
+			const contaId = await inserirConta(tx);
+			const leadId = await inserirLead(tx, `+55${Date.now() % 10_000_000_000}`);
+			const conversaId = await inserirConversa(tx, leadId, contaId);
+			const enviados: EnvioFake[] = [];
+			const channel = {
+				...criarFakeChannel(new Map(), enviados),
+				isOpen: () => false,
+			};
+			const chave = `canal-fechado-${randomUUID()}`;
+			const jobId = await enqueue(tx, {
+				conversationId: conversaId,
+				origin: "followup",
+				body: "Passando para retomar nosso contato",
+				idempotencyKey: chave,
+				scheduledFor: DENTRO_DA_JANELA,
+			});
+			if (!jobId) throw new Error("esperava job enfileirado");
+
+			const r = await dispatch(
+				{
+					db: tx,
+					channel,
+					ctx: CTX,
+					humanizer: HUMANO_RAPIDO,
+				},
+				{
+					conversationId: conversaId,
+					text: "Passando para retomar nosso contato",
+					now: DENTRO_DA_JANELA,
+					idempotencyKey: chave,
+					outboxJobId: jobId,
+				},
+			);
+
+			expect(r.action).toBe("deferred");
+			if (r.action !== "deferred") return;
+			const deltaMinutos =
+				(r.scheduledFor.getTime() - DENTRO_DA_JANELA.getTime()) / 60_000;
+			expect(deltaMinutos).toBeGreaterThanOrEqual(2);
+			expect(deltaMinutos).toBeLessThanOrEqual(5);
+			expect(enviados).toHaveLength(0);
+
+			const contador = rows<{ count: number | string }>(
+				await tx.execute(sql`
+					SELECT count FROM daily_counters
+					WHERE day = ${DIA} AND kind = 'sent'
+				`),
+			);
+			expect(contador).toHaveLength(0);
+
+			const gravadas = rows<{ id: string }>(
+				await tx.execute(sql`
+					SELECT id FROM messages WHERE conversation_id = ${conversaId}
+				`),
+			);
+			expect(gravadas).toHaveLength(0);
+
+			const obs = rows<{ status: string; last_error: string | null }>(
+				await tx.execute(
+					sql`SELECT status, last_error FROM outbox WHERE id = ${jobId}`,
+				),
+			);
+			expect(primeiro(obs).status).toBe("pending");
+			expect(primeiro(obs).last_error).toBeNull();
 		});
 	});
 });

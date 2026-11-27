@@ -40,6 +40,8 @@ const ESPERADO_BLOQUEIO: Record<string, boolean> = {
 	"qual o orçamento para um site?": true,
 	"podemos marcar uma reunião amanhã?": true,
 	"consigo ver com o pessoal e te falo": false,
+	"o investimento começa em 500": true,
+	"retornamos às 14h": true,
 	// midia — anúncio/pedido de mídia (AR-004)
 	"te mandei uma foto, dá uma olhada": true,
 	"segue o pdf com os dados": true,

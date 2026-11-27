@@ -50,13 +50,19 @@ describe("AR-003 — agendamento", () => {
 		"Posso te ligar amanhã às 14h?",
 		"marquei terça às 14h",
 		"vamos telefonar na quinta",
-		"atendimento 24h",
 	])("bloqueia proposta de ligação com horário: %s", (texto) => {
 		const decisao = evaluatePolicy(validInbound({ outbound: { text: texto } }));
 		expect(decisao).toMatchObject({
 			action: "block",
 			reason: "ar003_agendamento",
 		});
+	});
+
+	it("libera expediente genérico sem promessa de horário", () => {
+		const decisao = evaluatePolicy(
+			validInbound({ outbound: { text: "Atendimento 24h" } }),
+		);
+		expect(decisao.action).toBe("send");
 	});
 
 	it("o limite diário é AR-008, NÃO AR-003", () => {

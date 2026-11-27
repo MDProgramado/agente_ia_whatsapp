@@ -36,11 +36,17 @@ import { criarBaileysChannel } from "./channel/baileys/adapter.js";
 import { readCapabilities } from "./channel/baileys/capabilities.js";
 import { normalizeJid } from "./channel/baileys/jid-resolver.js";
 import {
+	type CicloVidaSocket,
+	criarCicloVidaSocket,
+	type SocketCicloVida,
+} from "./channel/baileys/lifecycle.js";
+import {
 	abrirSocketDoCanal,
 	aguardarSocketAberto,
-	backoffComJitter,
 	criarHandlersDoCanal,
+	criarPedidoCodigoPorSocket,
 	criarReferenciaSocket,
+	mensagemPareamentoInicialTerminal,
 	pedirCodigoDoSocket,
 	type WASocket,
 } from "./channel/baileys/runtime.js";
@@ -80,6 +86,25 @@ const BOOT_CHECK_ONLY = process.env.BOOT_CHECK_ONLY === "1";
  * antigo throw silencioso do `requestPairingCode` numa falha VISÍVEL no `app.log`.
  */
 const SOCKET_OPEN_TIMEOUT_MS = 30_000;
+
+let cicloVidaCanal: CicloVidaSocket | undefined;
+
+const dormirComCancelamento = (ms: number, sinal: AbortSignal): Promise<void> =>
+	new Promise<void>((resolve, reject) => {
+		if (sinal.aborted) {
+			reject(new Error("encerrado"));
+			return;
+		}
+		const aoAbortar = (): void => {
+			clearTimeout(timer);
+			reject(new Error("encerrado"));
+		};
+		const timer = setTimeout(() => {
+			sinal.removeEventListener("abort", aoAbortar);
+			resolve();
+		}, ms);
+		sinal.addEventListener("abort", aoAbortar, { once: true });
+	});
 
 /**
  * Handle que segura o processo vivo no boot de produção. Vive no escopo do módulo
@@ -351,36 +376,63 @@ const main = async (): Promise<void> => {
 	});
 
 	let fasePareamentoInicial = sessao.restoreRequired;
-	let tentativasReabertura = 0;
+	let pareamentoEncerrado = false;
 
-	const pedirCodigoDePareamento = async (): Promise<void> => {
-		await pedirCodigoDoSocket(
-			sock,
+	const falharPareamento = (motivo: string, mensagem: string): void => {
+		if (pareamentoEncerrado) return;
+		pareamentoEncerrado = true;
+		console.error(`\n${mensagem}\n`);
+		log.error({ event: "pairing_inicial_terminal", sinal: motivo }, mensagem);
+		void encerra(conn, log, `pareamento_${motivo}`).then(() => {
+			flushLogSync();
+			process.exit(1);
+		});
+	};
+
+	const pedirCodigoDePareamento = async (
+		socket: SocketCicloVida,
+	): Promise<void> => {
+		const codigo = await pedirCodigoDoSocket(
+			socket as unknown as Pick<WASocket, "ev" | "requestPairingCode">,
 			env.CHANNEL_PHONE_E164,
 			SOCKET_OPEN_TIMEOUT_MS,
 			join(logsDir(), "qr.txt"),
 		);
+		if (!codigo) {
+			log.info(
+				{ step: "pairing_code", arquivo: join(logsDir(), "qr.txt") },
+				"pareamento concluido antes do pedido de codigo",
+			);
+			return;
+		}
+		log.info(
+			{
+				step: "pairing_code",
+				arquivo: join(logsDir(), "qr.txt"),
+				dica: "digite o par de 8 digitos no celular",
+			},
+			"par de codigo gravado; aguardando connection === open",
+		);
 	};
 
-	// Pareamento: só quando não há sessão registrada.
-	if (fasePareamentoInicial) {
-		if (env.PAIRING_MODE === "code") {
-			await pedirCodigoDePareamento();
-			log.info(
-				{
-					step: "pairing_code",
-					arquivo: join(logsDir(), "qr.txt"),
-					dica: "digite o par de 8 digitos no celular",
-				},
-				"par de codigo gravado; aguardando connection === open",
-			);
-		} else {
-			console.log("\n=======================================================");
-			console.log("👉 AGUARDANDO QR CODE DO WHATSAPP NO TERMINAL...");
-			console.log("   Abra o WhatsApp no celular -> Aparelhos conectados");
-			console.log("   Toque em 'Conectar um aparelho' e aponte a camera");
-			console.log("=======================================================\n");
-		}
+	const pedirCodigoUmaVez = criarPedidoCodigoPorSocket((socket) =>
+		pedirCodigoDePareamento(socket as SocketCicloVida).catch(
+			(erro: unknown) => {
+				if (!fasePareamentoInicial) return;
+				falharPareamento(
+					"pairing_code",
+					erro instanceof Error ? erro.message : String(erro),
+				);
+			},
+		),
+	);
+
+	if (fasePareamentoInicial && env.PAIRING_MODE === "qr") {
+		console.log("\n=======================================================");
+		console.log("👉 AGUARDANDO QR CODE DO WHATSAPP NO TERMINAL...");
+		console.log("   Abra o WhatsApp no celular -> Aparelhos conectados");
+		console.log("   Toque em 'Conectar um aparelho' e aponte a camera");
+		console.log("=======================================================\n");
 	}
 
 	// `readCapabilities()` é chamado na ABERTURA (não antes de conectar): as duas
@@ -409,94 +461,86 @@ const main = async (): Promise<void> => {
 		}
 	};
 
-	/**
-	 * Recria o socket do Baileys após stream error 515 (restartRequired) recebido
-	 * logo depois de um pareamento bem-sucedido. O servidor WhatsApp pede para
-	 * reiniciar a conexão; o Baileys fecha o socket via end() e não o reabre.
-	 * Como creds.me já está persistido (configureSuccessfulPairing + saveCreds),
-	 * o novo socket faz login (não registro) e abre normalmente.
-	 *
-	 * Declarada como function declaration (hoisted) para ser referenciada em
-	 * aoDesconectar (definida abaixo) antes de `canal` existir (linha ~602).
-	 * Só é chamada após o boot completar, quando canal já está inicializado.
-	 */
-	let reabrindo = false;
+	let cicloVida: CicloVidaSocket | undefined;
 
-	async function reabrirSocket(
-		motivo: string,
-		status: number | null,
-	): Promise<void> {
-		if (reabrindo) {
-			log.warn(
-				{ step: "channel_recreate", motivo },
-				"reabertura ja em andamento; ignorando novo sinal de close",
-			);
-			return;
+	const ligarHandlers = (socket: SocketCicloVida, geracao: number): void => {
+		const handlers = criarHandlersDoCanal({
+			canalSelfJid: () => sock.user?.id,
+			aoQrCode: (qrStr: string) => {
+				if (geracao !== cicloVida?.geracao) return;
+				if (fasePareamentoInicial && env.PAIRING_MODE === "qr") {
+					console.log(
+						"\n=======================================================",
+					);
+					console.log("📲 ESCANEIE O QR CODE ABAIXO NO SEU WHATSAPP:");
+					console.log(
+						"=======================================================\n",
+					);
+					qrcode.generate(qrStr, { small: true });
+					console.log(
+						"\n(Abra o WhatsApp -> Aparelhos conectados -> Conectar um aparelho)\n",
+					);
+				}
+			},
+			aoConectar: () => cicloVida?.aoConectar(geracao),
+			aoDesconectar: (status) => {
+				if (geracao !== cicloVida?.geracao) return;
+				const sinal = translateDisconnect(status ?? 0);
+				canalEstado = sinal.event === "logged_out" ? "logged_out" : "close";
+				cicloVida.aoDesconectar(status, geracao);
+			},
+			aoEventoInbound: (evt) => {
+				if (geracao !== cicloVida?.geracao) return;
+				if (evt.fromMe === true) {
+					log.info(
+						{
+							event: "inbound_fromme",
+							provider_msg_id: evt.providerMsgId ?? null,
+						},
+						"mensagem fromMe do numero dedicado recebida",
+					);
+				}
+				void barramento.emit("inbound", evt).catch((erro: unknown) => {
+					log.error(
+						{ event: "inbound_emit_falhou" },
+						`handler de inbound falhou: ${erro instanceof Error ? erro.message : String(erro)}`,
+					);
+				});
+			},
+		});
+		socket.ev.on(
+			"connection.update",
+			handlers.onBaileysConnectionUpdate as unknown as (
+				...args: unknown[]
+			) => void,
+		);
+		socket.ev.on(
+			"messages.upsert",
+			handlers.onBaileysMessage as unknown as (...args: unknown[]) => void,
+		);
+		if (fasePareamentoInicial && env.PAIRING_MODE === "code") {
+			pedirCodigoUmaVez(socket);
 		}
-		reabrindo = true;
-		try {
-			const tentativa = ++tentativasReabertura;
-			const espera = backoffComJitter(tentativa);
-			log.info(
-				{
-					step: "channel_recreate",
-					motivo,
-					status,
-					tentativa,
-					espera_ms: espera,
-				},
-				"reabrindo socket do canal",
-			);
-			await new Promise((resolve) => setTimeout(resolve, espera));
-			const novoSock = await abrirSocketDoCanal(sessao);
-			await aguardarSocketAberto(novoSock, SOCKET_OPEN_TIMEOUT_MS);
+	};
 
-			referenciaSocket.trocar(novoSock);
-
-			sock.ev.on("connection.update", onBaileysConnectionUpdate);
-			sock.ev.on("messages.upsert", onBaileysMessage);
-
-			void lerCapacidades();
-
-			log.info(
-				{ step: "channel_recreated", motivo, tentativa },
-				"socket recriado com sucesso",
-			);
-		} finally {
-			reabrindo = false;
-		}
-	}
-
-	// Registro explícito dos handlers nomeados do contrato do checkpoint.
-	const { onBaileysConnectionUpdate, onBaileysMessage } = criarHandlersDoCanal({
-		// `sock.user` só existe após o registro, por isso um GETTER: o runtime o
-		// reavalia por mensagem para carimbar o emissor do `fromMe` (CR-01). Acesso
-		// a propriedade — nenhum import do pacote Baileys aqui (T-01-12).
-		canalSelfJid: () => sock.user?.id,
-		aoQrCode: (qrStr: string) => {
-			if (fasePareamentoInicial) {
-				console.log(
-					"\n=======================================================",
-				);
-				console.log("📲 ESCANEIE O QR CODE ABAIXO NO SEU WHATSAPP:");
-				console.log(
-					"=======================================================\n",
-				);
-				qrcode.generate(qrStr, { small: true });
-				console.log(
-					"\n(Abra o WhatsApp -> Aparelhos conectados -> Conectar um aparelho)\n",
-				);
-			}
-		},
-		aoConectar: () => {
+	cicloVida = criarCicloVidaSocket({
+		abrirSocket: async () =>
+			(await abrirSocketDoCanal(sessao)) as unknown as SocketCicloVida,
+		ligarHandlers,
+		aguardarAbertura: async (socket) =>
+			aguardarSocketAberto(
+				socket as unknown as Pick<WASocket, "waitForSocketOpen">,
+				SOCKET_OPEN_TIMEOUT_MS,
+			),
+		trocarSocket: (socket) =>
+			referenciaSocket.trocar(socket as unknown as WASocket),
+		dormir: dormirComCancelamento,
+		random: Math.random,
+		log,
+		aoAbrir: () => {
 			canalEstado = "open";
 			sessao.marcarSessaoRestaurada();
 			fasePareamentoInicial = false;
-			tentativasReabertura = 0;
-			// O emissor do número dedicado precisa de E.164 para o Gate 0 (R-001).
-			// Id próprio em forma LID não tem número: o Guard 0 fica fail-closed. UM
-			// warn por abertura de conexão (nunca por mensagem) para o operador ver no
-			// pareamento real (P-004) em vez de a guarda falhar em silêncio.
 			const idProprio = sock.user?.id;
 			if (idProprio && normalizeJid(idProprio).e164 === null) {
 				log.warn(
@@ -506,67 +550,19 @@ const main = async (): Promise<void> => {
 			}
 			void lerCapacidades();
 		},
-		aoDesconectar: (status) => {
-			const estadoDoSocket = translateDisconnect(status ?? 0);
-			canalEstado =
-				estadoDoSocket.event === "logged_out" ? "logged_out" : "close";
-			log.warn(
-				{
-					step: "channel_disconnected",
-					sinal: estadoDoSocket.event,
-					terminal: estadoDoSocket.terminal,
-					retry: estadoDoSocket.retry,
-					severity: estadoDoSocket.severity,
-				},
-				"socket do canal caiu",
-			);
-			if (estadoDoSocket.retry) {
-				void reabrirSocket(estadoDoSocket.event, status).catch(
-					(erro: unknown) => {
-						log.error(
-							{ err: erro, step: "channel_recreate" },
-							"falha ao reabrir socket do canal",
-						);
-					},
-				);
+		aoTerminar: (motivo) => {
+			if (fasePareamentoInicial) {
+				falharPareamento(motivo, mensagemPareamentoInicialTerminal(motivo));
 				return;
 			}
-			if (estadoDoSocket.terminal) {
-				if (fasePareamentoInicial) {
-					log.info(
-						{ step: "channel_disconnected", sinal: estadoDoSocket.event },
-						"socket fechou durante pareamento inicial; aguardando conexao",
-					);
-					return;
-				}
-				void encerra(conn, log, `canal_${estadoDoSocket.event}`).then(() => {
-					flushLogSync();
-					process.exit(1);
-				});
-			}
-		},
-		aoEventoInbound: (evt) => {
-			if (evt.fromMe === true) {
-				// A linha que o passo 5 do checkpoint procura: prova que `emitOwnEvents`
-				// está ligado e que a auto-mensagem do número dedicado chega como `fromMe`.
-				log.info(
-					{
-						event: "inbound_fromme",
-						provider_msg_id: evt.providerMsgId ?? null,
-					},
-					"mensagem fromMe do numero dedicado recebida",
-				);
-			}
-			void barramento.emit("inbound", evt).catch((erro: unknown) => {
-				log.error(
-					{ event: "inbound_emit_falhou" },
-					`handler de inbound falhou: ${erro instanceof Error ? erro.message : String(erro)}`,
-				);
+			void encerra(conn, log, `canal_${motivo}`).then(() => {
+				flushLogSync();
+				process.exit(1);
 			});
 		},
 	});
-	sock.ev.on("connection.update", onBaileysConnectionUpdate);
-	sock.ev.on("messages.upsert", onBaileysMessage);
+	cicloVidaCanal = cicloVida;
+	cicloVida.registrarSocketInicial(sock as unknown as SocketCicloVida);
 	log.info({ step: "channel_ready" }, "canal armado; aguardando eventos");
 
 	// (j) MONITOR DE SAÚDE (R-045, WHS-04). Um cron de 30s: probe do banco com
@@ -674,6 +670,7 @@ const main = async (): Promise<void> => {
 		// `criarNotifier` devolve um objeto sem estado (um `spawn` por chamada);
 		// um segundo exemplar aqui custa nada e mantém o diff da etapa (j) intacto.
 		notifier: criarNotifier(),
+		estaAberto: () => canalEstado === "open",
 	});
 
 	// Feriados: nacionais (D-09, puros — `feriados-br.ts` nunca toca banco) +
@@ -791,6 +788,8 @@ const encerra = async (
 	motivo: string,
 ): Promise<void> => {
 	log.info({ step: "shutdown", motivo }, "encerrando");
+	cicloVidaCanal?.encerrar();
+	cicloVidaCanal = undefined;
 	// Solta o timer ANTES de fechar o pool: enquanto ele existir ref'd, o processo
 	// não sai, e `pool.end()`+%`exit` seriam a única saída.
 	if (keepAlive) {

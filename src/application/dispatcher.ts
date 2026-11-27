@@ -136,6 +136,8 @@ const diaLocal = (agora: Date, tz: string): string =>
  * `('lead','bot','admin','ai_suggestion','system')`, então `followup` e `catchup`
  * viram `bot` — os dois são a automação falando, não o Admin.
  */
+const ATRASO_CANAL_FECHADO_MS = 3 * 60_000;
+
 const ORIGEM_DA_MENSAGEM: Record<OutboxOrigin, "bot" | "admin"> = {
 	bot: "bot",
 	admin: "admin",
@@ -242,6 +244,34 @@ const tratarBloqueio = async (
 	return { action: "blocked", reason: motivo, detail: decisao.detail };
 };
 
+const deferirCanalFechado = async (
+	deps: DispatchDeps,
+	input: DispatchInput,
+	agora: Date,
+): Promise<DispatchResult | null> => {
+	if (deps.channel.isOpen()) return null;
+	const scheduledFor = new Date(agora.getTime() + ATRASO_CANAL_FECHADO_MS);
+	if (input.outboxJobId) {
+		await markDeferred(deps.db, input.outboxJobId, scheduledFor);
+	} else {
+		await enqueue(deps.db, {
+			conversationId: input.conversationId,
+			origin: input.origin ?? "bot",
+			body: input.text,
+			idempotencyKey: input.idempotencyKey ?? input.conversationId,
+			scheduledFor,
+		});
+	}
+	logger.warn(
+		{
+			event: "canal_fechado_deferido",
+			conversation_id: input.conversationId,
+		},
+		`canal fechado; adiado para ${scheduledFor.toISOString()}`,
+	);
+	return { action: "deferred", scheduledFor };
+};
+
 export const dispatch = async (
 	deps: DispatchDeps,
 	input: DispatchInput,
@@ -273,6 +303,9 @@ export const dispatch = async (
 		agora,
 	);
 	if (bloqueioInicial) return bloqueioInicial;
+
+	const canalFechadoInicial = await deferirCanalFechado(deps, input, agora);
+	if (canalFechadoInicial) return canalFechadoInicial;
 
 	// (5) humanização (01-05, achado 12). Ponto NOMEADO entre o gate e a reserva
 	// de cota: a cota só é consumida por mensagem que de fato vai sair. O atraso
@@ -332,6 +365,9 @@ export const dispatch = async (
 		agora,
 	);
 	if (bloqueioFinal) return bloqueioFinal;
+
+	const canalFechadoFinal = await deferirCanalFechado(deps, input, agora);
+	if (canalFechadoFinal) return canalFechadoFinal;
 
 	// Texto longo vira vários pedaços, enviados em ORDEM. Cada pedaço tem sua
 	// própria `idempotency_key` (`chave#n`) para que a unicidade de `messages` não

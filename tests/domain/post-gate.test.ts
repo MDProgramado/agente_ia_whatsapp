@@ -36,11 +36,13 @@ const PROIBIDOS: readonly CasoProibido[] = [
 	{ texto: "desconto de 30%", reason: "ar001_preco" },
 	{ texto: "promoção", reason: "ar001_preco" },
 	{ texto: "é só 250 reais por mês", reason: "ar001_preco" },
+	{ texto: "o investimento começa em 500", reason: "ar001_preco" },
 	// ── documento comercial (AR-002) ────────────────────────────────────────
 	{ texto: "me manda uma proposta", reason: "ar002_proposta" },
 	{ texto: "segue o contrato assinado", reason: "ar002_proposta" },
 	// ── promessa de agenda (AR-003) ─────────────────────────────────────────
 	{ texto: "marquei terça às 14h", reason: "ar003_agendamento" },
+	{ texto: "retornamos às 14h", reason: "ar003_agendamento" },
 	{ texto: "podemos marcar uma reunião amanhã?", reason: "ar003_agendamento" },
 	// ── mídia no outbound (AR-004) ──────────────────────────────────────────
 	{ texto: "PDF", reason: "ar004_midia_saida" },
@@ -61,6 +63,7 @@ const LIBERADOS: readonly string[] = [
 	"Entendo perfeitamente. Cada projeto é único, e a gente gosta de entender o seu momento antes de sugerir qualquer caminho.",
 	// "agenda" (substantivo) não é "agendar" (verbo): não pode bloquear.
 	"Faz sentido. Nossa agenda é cheia, então prefiro entender seu cenário primeiro.",
+	"Atendimento 24h",
 ];
 
 describe("scanPostGate — pós-gate de conteúdo (CONV-07)", () => {

@@ -56,7 +56,7 @@ human_verification:
   - test: "Nomear o encarregado (e substituto) em `docs/lgpd/encarregado-dpo.md`, substituindo os marcadores `<!-- PREENCHER ... -->`."
     expected: "Seção 1 preenchida com nome, cargo, e-mail; SC5 ('Encarregado nomeado com substituto') satisfeito."
     why_human: "COMP-02/SC5 — o executor não conhece o nome/cargo do Admin; os marcadores PREENCHER são intencionais."
-    verified: "2026-10-13 — nomeado Maicon Douglas Alves de Oliveira (Admin/Proprietário, mdprogamacao@outlook.com, +5571989211292 dedicado a LGPD). Seção 6/7 atualizadas."
+    verified: "2026-10-13 — nomeado Administrador Ficticio (Admin/Proprietário, encarregado@example.com, +5511900000001 dedicado a LGPD). Seção 6/7 atualizadas."
   - test: "Realizar o pareamento QR do número dedicado (WHS-05/OPRE-01)."
     expected: "Sessão Baileys pareada; reconexão automática sem duplicar envio."
     why_human: "Requer o telefone físico; bloqueado por CREDS_INVALID (P-004, deferido)."

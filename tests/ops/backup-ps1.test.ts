@@ -24,4 +24,18 @@ describe("backup.ps1 - tokens estaticos", () => {
 	it("tem LogOnly para modo dry-run", () => {
 		expect(script).toContain("LogOnly");
 	});
+	it("copia a sessão de auth quando IncludeAuth é pedido", () => {
+		expect(script).toContain('Join-Path $DataRoot "auth"');
+		expect(script).toContain("Copy-Item");
+	});
+	it("rotaciona por 30 dias usando o timestamp do nome da pasta", () => {
+		expect(script).toContain("RotateOnly");
+		expect(script).toContain("Get-BackupTimestamp");
+		expect(script).toContain("yyyyMMddTHHmmss");
+		expect(script).toContain("AddDays(-30)");
+		expect(script).toContain("backup_rotacionado");
+		expect(script.indexOf("Remove-BackupsExpirados")).toBeLessThan(
+			script.indexOf("SHOW server_version"),
+		);
+	});
 });

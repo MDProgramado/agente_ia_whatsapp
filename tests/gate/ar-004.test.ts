@@ -80,7 +80,7 @@ describe("AR-004 — mídia de saída", () => {
 			validInbound({
 				outbound: {
 					text: "Fala comigo por aqui",
-					parts: [{ kind: "link", href: "https://wa.me/5571989211292" }],
+					parts: [{ kind: "link", href: "https://wa.me/5511900000001" }],
 				},
 			}),
 		);
