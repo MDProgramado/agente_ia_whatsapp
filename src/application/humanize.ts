@@ -110,9 +110,8 @@ export interface TypingOpts extends EsperaDeps {
 /**
  * Simula "digitando…" com passos e pausas determinísticos.
  *
- * O `ChannelPort` **não** tem método de presença: não há como (nem se deve)
- * sinalizar "digitando" ao WhatsApp. Esta função só modela o tempo — os
- * `onProgress` são para a UI local, se houver.
+ * A presença real é sinalizada por `ChannelPort.sendPresenceUpdate` no dispatcher;
+ * esta função só modela o tempo local — os `onProgress` são para a UI, se houver.
  */
 export const simulateTyping = async (
 	text: string,

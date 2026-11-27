@@ -56,9 +56,10 @@ export interface SessionState {
 	readonly statePath: string;
 	/**
 	 * true = não há sessão registrada em disco: o Admin precisa parear (passo
-	 * manual e deliberado, nunca automático).
+	 * manual e deliberado, nunca automático). Vira false no primeiro `open`.
 	 */
-	readonly restoreRequired: boolean;
+	restoreRequired: boolean;
+	readonly marcarSessaoRestaurada: () => void;
 }
 
 /**
@@ -234,12 +235,22 @@ export const createSession = async (): Promise<SessionState> => {
 		);
 	}
 
-	return {
+	const sessao: SessionState = {
 		authState: carregado.state,
 		saveCreds: carregado.saveCreds,
 		statePath,
 		restoreRequired,
+		marcarSessaoRestaurada: () => {
+			if (sessao.restoreRequired) {
+				sessao.restoreRequired = false;
+				log.info(
+					{ step: "session", event: "sessao_restaurada" },
+					"connection open: sessao registrada; restoreRequired false",
+				);
+			}
+		},
 	};
+	return sessao;
 };
 
 /**
@@ -249,10 +260,6 @@ export const createSession = async (): Promise<SessionState> => {
  *   do número dedicado simplesmente não existe, o `app.log` não tem como auditar
  *   por que ele chegou (ou não), e `first_contact_by_human` perde a única fonte
  *   autorizada.
- * - `ack: { auto: "all" }`: especificação do plano. Divergência ADR-001 → SUMMARY
- *   do 01-03: no rc14 `messages` não é chave de `SocketConfig` (`Types/Socket.d.ts`)
- *   e nenhum arquivo do pacote lê `config.messages` — a chave é mantida via cast
- *   único e documentado, inerte em runtime neste pacote.
  * - `browser` controlado por `BAILEYS_BROWSER_MODE` (T2 + T4b do 01-03-DIAG):
  *   `custom` → `Browsers.windows("Chrome")` (`"Chrome (Windows)"`); `default` →
  *   a chave é **omitida**, e o `{ ...DEFAULT_CONNECTION_CONFIG, ...config }` do
@@ -273,9 +280,6 @@ export const socketConfigOverrides = (
 	const overrides: Partial<SocketConfig> = {
 		emitOwnEvents: true,
 		logger,
-		...({
-			messages: { ack: { auto: "all" } },
-		} as unknown as Partial<SocketConfig>),
 	};
 	if (env.BAILEYS_BROWSER_MODE === "custom") {
 		overrides.browser = Browsers.windows("Chrome");

@@ -29,6 +29,7 @@
 		"mode": "tsx src/cli/mode.ts",
 		"status:corrigir": "tsx src/cli/status.ts corrigir",
 		"handoff:ack": "tsx src/cli/handoff.ts ack",
+		"lgpd:apagar": "tsx src/cli/erasure.ts",
 		"shadow:report": "tsx scripts/shadow-report.ts",
 		"bake-off": "tsx scripts/bake-off.ts",
 		"pilot:calibrate": "tsx src/cli/calibrate.ts",

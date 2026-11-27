@@ -34,6 +34,9 @@ export const PERCENT_TERM = /\b\d+\s*%|\bpor\s?cento\b/i;
 export const DISCOUNT_TERM =
 	/\bdesconto\b|\bpromo[çc][ãa]o\b|\bblack\s?friday\b|\bcupom\b/i;
 
+export const PRICE_TERM =
+	/\b(?:investimento|pre[çc]o|mensalidade|assinatura|gr[aá]tis|gra[çc]a)\b|\bcusta\s+(?:uns?\s+)?\d|\bsai\s+por\s+\d|\b\d{1,3}(?:\.\d{3})*x\s+de\s+\d/i;
+
 /** Proposta comercial. AR-002. */
 export const PROPOSAL_TERM = /\bproposta\b|\bor[çc]amento\b/i;
 
@@ -81,7 +84,7 @@ export const MEDIA_LINK_EXT =
  * guard intencionalmente amplo para menções de expediente.)
  */
 export const SCHEDULE_TERM =
-	/\bagend(?:ar|ei|ou|ando|em)\b|\bmarcar\b|\breuni[ãa]o\b|\bchamada\b|\bcall\b|\bhor[áa]rio\b|\b(?:segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)-feira\b/i;
+	/\bagend(?:ar|ei|ou|ando|em|amos)\b|\bmar(?:car|quei|que|quem|cou|cando|camos|cada|cado)\b|\bte\s+ligar\b|\btelefonar\b|\batendimento\s+24\s?h\b|\breuni[ãa]o\b|\bchamada\b|\bcall\b|\bhor[áa]rio\b|\bàs\s+\d{1,2}\b|\b(?:segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)-feira\b/i;
 
 /**
  * AR-006. `\bia\b` é o caso perigoso: sem `\b` ele casaria "dia".
@@ -132,5 +135,22 @@ export const primeiroTermoQueCasa = (
 		const achado = texto.match(t);
 		if (achado) return achado[0];
 	}
+	return null;
+};
+
+export const HANDOFF_PRICE_TERM =
+	/\bquanto\s+custa\b|\bqual\s+é\s+o\s+pre[çc]o\b|\bme\s+passe\s+o\s+pre[çc]o\b|\bquanto\s+sa[ií]\b/i;
+
+export const HANDOFF_SCHEDULE_TERM =
+	/\bagend(?:ar|ei|ou|ando|em|amos)\b|\bmar(?:car|quei|que|quem|cou|cando|camos|cada|cado)\b|\breuni[ãa]o\b|\bchamada\b|\bcall\b/i;
+
+export const HANDOFF_IRRITATION_TERM =
+	/\birritant|\bchatead|\bperdi\s+meu\s+tempo\b|\bn[ãa]o\s+resolve\b/i;
+
+export const detectarGatilhoHandoff = (texto: string): string | null => {
+	if (HANDOFF_PRICE_TERM.test(texto)) return "preco";
+	if (HANDOFF_SCHEDULE_TERM.test(texto)) return "agendamento";
+	if (primeiroTermoQueCasa(texto, AUTOMATION_TERM) !== null) return "bot";
+	if (HANDOFF_IRRITATION_TERM.test(texto)) return "irritacao";
 	return null;
 };

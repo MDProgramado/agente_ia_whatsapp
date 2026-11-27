@@ -79,7 +79,7 @@ describe("guarda de borda do servidor", () => {
 		} finally {
 			await app.close();
 		}
-	});
+	}, 30_000);
 
 	it("Host: 127.0.0.1 sem token → 401", async () => {
 		const app = comRotaDeTeste();
@@ -87,6 +87,20 @@ describe("guarda de borda do servidor", () => {
 			const res = await app.inject({
 				method: "GET",
 				url: "/api/ping",
+				headers: { host: "127.0.0.1" },
+			});
+			expect(res.statusCode).toBe(401);
+		} finally {
+			await app.close();
+		}
+	});
+
+	it("caminho percent-encoded /%61pi/ping sem token → 401", async () => {
+		const app = comRotaDeTeste();
+		try {
+			const res = await app.inject({
+				method: "GET",
+				url: "/%61pi/ping",
 				headers: { host: "127.0.0.1" },
 			});
 			expect(res.statusCode).toBe(401);

@@ -22,7 +22,10 @@ import {
 	type OpenDb,
 	openDb,
 } from "../../src/infra/db/client.js";
-import { readDailyCounter } from "../../src/infra/db/queries/counters.js";
+import {
+	readDailyCounter,
+	reserveMessageQuota,
+} from "../../src/infra/db/queries/counters.js";
 
 /** Data futura e descartável: não colide com o dia real de nenhum teste. */
 const DIA = "2099-01-15";
@@ -88,6 +91,46 @@ describe("readDailyCounter", () => {
 				where day = ${DIA} and kind = 'new_contacts'
 			`);
 			expect(await readDailyCounter(tx, DIA, "new_contacts")).toBe(2);
+		});
+	});
+});
+
+describe("reserveMessageQuota", () => {
+	it("reserva a quantidade inteira de pedacos em uma instrucao", async () => {
+		await emTransacaoRevertida(async (tx) => {
+			await tx.execute(sql`delete from daily_counters where day = ${DIA}`);
+			const reserva = await reserveMessageQuota(tx, DIA, 30, 30, 3);
+
+			expect(reserva).toEqual({ allowed: true, used: 3, limit: 30 });
+			expect(await readDailyCounter(tx, DIA, "sent")).toBe(3);
+		});
+	});
+
+	it("falha fechada quando a quantidade nao cabe no teto", async () => {
+		await emTransacaoRevertida(async (tx) => {
+			await tx.execute(sql`
+				insert into daily_counters (day, kind, count)
+				values (${DIA}, 'sent', 28)
+				on conflict (day, kind) do update set count = excluded.count
+			`);
+			const reserva = await reserveMessageQuota(tx, DIA, 30, 30, 3);
+
+			expect(reserva).toEqual({ allowed: false, used: -1, limit: 30 });
+			expect(await readDailyCounter(tx, DIA, "sent")).toBe(28);
+		});
+	});
+
+	it("aceita a reserva que fecha exatamente no teto", async () => {
+		await emTransacaoRevertida(async (tx) => {
+			await tx.execute(sql`
+				insert into daily_counters (day, kind, count)
+				values (${DIA}, 'sent', 27)
+				on conflict (day, kind) do update set count = excluded.count
+			`);
+			const reserva = await reserveMessageQuota(tx, DIA, 30, 30, 3);
+
+			expect(reserva).toEqual({ allowed: true, used: 30, limit: 30 });
+			expect(await readDailyCounter(tx, DIA, "sent")).toBe(30);
 		});
 	});
 });

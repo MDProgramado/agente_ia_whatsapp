@@ -30,6 +30,7 @@ export const criarFakeChannel = (
 
 	async sendText(conversationId, text, idempotencyKey) {
 		enviados.push({ conversationId, text, idempotencyKey });
+		const resultado = { providerMsgId: null, latencyMs: 0 };
 		// `char_count` e nunca o corpo: o log é o lugar que sobrevive à rotação
 		// (STACK.md §Logging), e o corpo pertence só à tabela `messages` (R-043).
 		logger.info(
@@ -40,6 +41,11 @@ export const criarFakeChannel = (
 			},
 			"envio simulado",
 		);
+		return resultado;
+	},
+
+	async sendPresenceUpdate() {
+		// O fake não tem sessão WhatsApp; presença é no-op por contrato.
 	},
 
 	async readQuota(today) {

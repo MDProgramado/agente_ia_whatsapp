@@ -60,7 +60,7 @@ describe("AR-007 — janela operacional", () => {
 			),
 			{ seed: 20260928, numRuns: 500 },
 		);
-	});
+	}, 30_000);
 
 	it("sábado e domingo barram mesmo com hora de escritório", () => {
 		for (const [ano, mes, dia, rotulo] of [

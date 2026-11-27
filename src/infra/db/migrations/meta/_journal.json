@@ -64,6 +64,27 @@
       "when": 1792502019000,
       "tag": "0008_pipeline_crm",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795700000000,
+      "tag": "0009_outbox_sending",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795700001000,
+      "tag": "0010_retencao_erasure",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795700002000,
+      "tag": "0011_retencao_job",
+      "breakpoints": true
     }
   ]
 }

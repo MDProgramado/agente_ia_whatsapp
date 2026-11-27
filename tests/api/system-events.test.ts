@@ -196,4 +196,3 @@ describe("GET /api/system/events (R-045, 03-07 Task 1)", () => {
 		});
 	});
 });
-

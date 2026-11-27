@@ -17,6 +17,8 @@
  * (`canalSelfJid`, derivado de `sock.user.id`). Sem esse carimbo, o Gate 0
  * compara o número errado e nunca libera o outbound (R-001/CONV-01).
  */
+
+import { writeFileSync } from "node:fs";
 import {
 	type BaileysEventMap,
 	fetchLatestWaWebVersion,
@@ -34,6 +36,81 @@ import { statusHttpDoErro } from "./signals.js";
 /** Payloads de evento direto do `BaileysEventMap` — sem tipar à mão e errar. */
 export type UpdateConexao = BaileysEventMap["connection.update"];
 export type UpsertMensagens = BaileysEventMap["messages.upsert"];
+
+const filasSaveCreds = new WeakMap<object, Promise<void>>();
+const logCreds = childLogger("baileys_creds");
+
+export interface ReferenciaSocket {
+	/** Identidade estável: todos os consumidores guardam ESTE objeto para sempre. */
+	readonly proxy: WASocket;
+	readonly trocar: (novo: WASocket) => void;
+	readonly atual: () => WASocket;
+}
+
+/**
+ * Indireção estável sobre o socket do Baileys. Um `515` troca o socket de baixo
+ * sem trocar a referência que o adapter, o boot e os handlers já seguram — o
+ * `setSock` do adapter vira desnecessário e nenhum consumidor fica com um socket
+ * morto na mão. Methods são ligados ao socket atual para preservar `this`.
+ */
+export const criarReferenciaSocket = (inicial: WASocket): ReferenciaSocket => {
+	let atual = inicial;
+	const proxy = new Proxy({} as WASocket, {
+		get(_alvo, prop) {
+			const valor = Reflect.get(atual, prop, atual);
+			return typeof valor === "function" ? valor.bind(atual) : valor;
+		},
+		set(_alvo, prop, valor) {
+			return Reflect.set(atual, prop, valor, atual);
+		},
+		has(_alvo, prop) {
+			return Reflect.has(atual, prop);
+		},
+		getPrototypeOf() {
+			return Reflect.getPrototypeOf(atual);
+		},
+	});
+	return {
+		proxy,
+		trocar: (novo) => {
+			atual = novo;
+		},
+		atual: () => atual,
+	};
+};
+
+const BACKOFF_BASE_MS = 2_000;
+const BACKOFF_TETO_MS = 120_000;
+
+/** Backoff exponencial com jitter, teto de 2 min (P-008). */
+export const backoffComJitter = (
+	tentativa: number,
+	random: () => number = Math.random,
+): number => {
+	const n = Math.max(1, Math.floor(tentativa));
+	const base = Math.min(BACKOFF_TETO_MS, BACKOFF_BASE_MS * 2 ** (n - 1));
+	const fator = Math.max(0, Math.min(1, random()));
+	return Math.min(BACKOFF_TETO_MS, base + Math.floor(base * 0.2 * fator));
+};
+
+export const registrarPersistenciaCreds = (
+	sock: Pick<WASocket, "ev">,
+	session: Pick<SessionState, "saveCreds">,
+): void => {
+	sock.ev.on("creds.update", () => {
+		const anterior = filasSaveCreds.get(session) ?? Promise.resolve();
+		const proximo = anterior
+			.catch(() => undefined)
+			.then(() => session.saveCreds());
+		filasSaveCreds.set(session, proximo);
+		void proximo.catch((erro: unknown) => {
+			logCreds.error(
+				{ event: "save_creds_falhou" },
+				`nao persisti creds do canal: ${erro instanceof Error ? erro.message : String(erro)}`,
+			);
+		});
+	});
+};
 
 /** Tipos de mídia reconhecidos como RECEBIDA (AR-009). O conteúdo nunca é lido. */
 const TIPOS_MIDIA = [
@@ -84,6 +161,7 @@ export const abrirSocketDoCanal = async (
 		...(version ? { version } : {}),
 		...socketConfigOverrides(logger),
 	});
+	registrarPersistenciaCreds(sock, session);
 	sock.ws.on("CB:failure", (node: unknown) => {
 		const attrs = (
 			node as { attrs?: Record<string, string | undefined> } | null
@@ -118,7 +196,7 @@ export const abrirSocketDoCanal = async (
  * ganha um timeout como backstop para uma rede que nunca completa o handshake.
  */
 export const aguardarSocketAberto = async (
-	sock: WASocket,
+	sock: Pick<WASocket, "waitForSocketOpen">,
 	timeoutMs: number,
 ): Promise<void> => {
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -140,6 +218,18 @@ export const aguardarSocketAberto = async (
 	} finally {
 		if (timer) clearTimeout(timer);
 	}
+};
+
+export const pedirCodigoDoSocket = async (
+	sock: Pick<WASocket, "waitForSocketOpen" | "requestPairingCode">,
+	telefoneE164: string,
+	timeoutMs: number,
+	arquivoCodigo: string,
+): Promise<string> => {
+	await aguardarSocketAberto(sock, timeoutMs);
+	const par = await sock.requestPairingCode(telefoneE164.replace(/^\+/, ""));
+	writeFileSync(arquivoCodigo, String(par), { encoding: "utf8" });
+	return String(par);
 };
 
 /** `messageTimestamp` pode vir como number ou Long; normaliza para number. */

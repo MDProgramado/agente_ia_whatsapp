@@ -42,4 +42,3 @@ Invalido,123,Teste,Curitiba`;
 		expect(res.leads[0]?.legalBasis).toBe("legitimo_interesse");
 	});
 });
-

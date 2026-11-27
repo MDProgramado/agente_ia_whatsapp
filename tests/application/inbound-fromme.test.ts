@@ -95,16 +95,19 @@ describe("inbound-fromme", () => {
 				optOut: over.optOut ?? false,
 			})
 			.returning({ id: schema.leads.id });
+		const lead = l[0];
+		if (!lead) throw new Error("lead fixture não criado");
+		const conta = await tx.query.channelAccounts.findFirst({
+			where: eq(schema.channelAccounts.phoneE164, CANAL),
+		});
+		if (!conta) throw new Error("conta do canal não encontrada");
 		const conv = await tx
 			.insert(schema.conversations)
-			.values({
-				leadId: l[0]!.id,
-				channelAccountId: (await tx.query.channelAccounts.findFirst({
-					where: eq(schema.channelAccounts.phoneE164, CANAL),
-				}))!.id,
-			})
+			.values({ leadId: lead.id, channelAccountId: conta.id })
 			.returning({ id: schema.conversations.id });
-		return { leadId: l[0]!.id, conversationId: conv[0]!.id, phone };
+		const conversa = conv[0];
+		if (!conversa) throw new Error("conversation fixture não criada");
+		return { leadId: lead.id, conversationId: conversa.id, phone };
 	};
 
 	it("behavior 1: fromMe + emissor = canal (chatId = JID do lead) → first_contact=true e novo→aquecimento auditado", async () => {
@@ -371,9 +374,9 @@ describe("inbound-fromme", () => {
 					} as unknown as Parameters<typeof criarEventoInbound>[0],
 					canalSelfJid,
 				);
-				expect(evt).not.toBeNull();
+				if (!evt) throw new Error("evento inbound não criado");
 				await processInboundFromMe(tx as unknown as Db, makeSock(), {
-					...evt!,
+					...evt,
 					phoneNumber: fx.phone,
 				});
 				const ld = await tx.query.leads.findFirst({

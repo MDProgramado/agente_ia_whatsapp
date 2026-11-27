@@ -126,7 +126,13 @@ export const buildServer = (deps: ServerDeps = {}): FastifyInstance => {
 
 		// Státicos (`/`, assets do SPA) ficam isentos de token — são públicos —
 		// mas o Host acima já foi validado. A API (`/api/*`) exige token.
-		const caminho = (req.url.split("?")[0] ?? "").toLowerCase();
+		const cru = (req.url.split("?")[0] ?? "").toLowerCase();
+		let caminho = cru;
+		try {
+			caminho = decodeURIComponent(cru).toLowerCase();
+		} catch {
+			caminho = cru;
+		}
 		if (caminho === "/api" || caminho.startsWith("/api/")) {
 			if (!requireToken(req.headers.authorization, env.PANEL_TOKEN)) {
 				return reply.code(401).send({ erro: "token ausente ou invalido" });

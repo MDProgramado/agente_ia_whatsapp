@@ -46,6 +46,19 @@ describe("AR-003 — agendamento", () => {
 		);
 	});
 
+	it.each([
+		"Posso te ligar amanhã às 14h?",
+		"marquei terça às 14h",
+		"vamos telefonar na quinta",
+		"atendimento 24h",
+	])("bloqueia proposta de ligação com horário: %s", (texto) => {
+		const decisao = evaluatePolicy(validInbound({ outbound: { text: texto } }));
+		expect(decisao).toMatchObject({
+			action: "block",
+			reason: "ar003_agendamento",
+		});
+	});
+
 	it("o limite diário é AR-008, NÃO AR-003", () => {
 		// Texto neutro, cota estourada: a decisão tem de ser a cota, nunca a
 		// agendamento. Se este teste virasse `ar003`, o gate estaria atribuindo a

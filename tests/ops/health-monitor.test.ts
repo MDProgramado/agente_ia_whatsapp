@@ -8,8 +8,8 @@
  * - desconexão do Baileys persistente → `critical` com `urgent: true`;
  * - `warn` repetido a cada 30s vira ruído → uma notificação por TRANSIÇÃO de estado,
  *   revertida quando a saúde volta (T-01-28);
- * - `requestPairingCode` só é chamado com credenciais válidas; sem elas, `critical`
- *   e o monitor PARA (T-01-29, Armadilha 4).
+ * - `logged_out` é terminal: nenhum `requestPairingCode`, `critical` e o monitor
+ *   PARA (T-01-29, Armadilha 4).
  */
 import { afterEach, describe, expect, it } from "vitest";
 import type { NotifyInput } from "../../src/domain/ports/NotifyPort.js";
@@ -114,6 +114,28 @@ describe("startHealthMonitor — máquina de severidade (T-01-28)", () => {
 		expect(c.notificacoes).toHaveLength(1);
 	});
 
+	it("desconexão repetida do Baileys notifica uma vez por transição", async () => {
+		let estado: "open" | "close" = "close";
+		const c = coletor();
+		const monitor = criar({
+			notify: c.notify,
+			baileysState: () => estado,
+			probeDb: async () => {},
+			logFinding: c.logFinding,
+		});
+
+		for (let i = 0; i < 3; i += 1) await monitor.tick();
+		expect(c.achados).toHaveLength(3);
+		expect(c.notificacoes).toHaveLength(1);
+
+		estado = "open";
+		await monitor.tick();
+		estado = "close";
+		await monitor.tick();
+
+		expect(c.notificacoes).toHaveLength(2);
+	});
+
 	it("a notificação é revertida quando a saúde volta — nova queda avisa de novo", async () => {
 		let saudavel = false;
 		const c = coletor();
@@ -135,44 +157,24 @@ describe("startHealthMonitor — máquina de severidade (T-01-28)", () => {
 		expect(c.notificacoes).toHaveLength(2);
 	});
 
-	it("requestPairingCode só com credenciais válidas; sem elas, critical e PARA (T-01-29)", async () => {
-		const chamadas: string[] = [];
-		const comCredenciais = coletor();
-		const m1 = criar({
-			notify: comCredenciais.notify,
+	it("logged_out é terminal: nunca pede par, mesmo com credenciais válidas", async () => {
+		const c = coletor();
+		const monitor = criar({
+			notify: c.notify,
 			baileysState: () => "logged_out",
 			probeDb: async () => {},
-			credsValid: () => true,
-			requestPairingCode: async () => {
-				chamadas.push("pairing");
-			},
-			logFinding: comCredenciais.logFinding,
+			logFinding: c.logFinding,
 		});
 
-		await m1.tick();
-		expect(chamadas).toHaveLength(1);
-		expect(comCredenciais.notificacoes).toHaveLength(0); // info não notifica
+		await monitor.tick();
 
-		const semCredenciais = coletor();
-		const m2 = criar({
-			notify: semCredenciais.notify,
-			baileysState: () => "logged_out",
-			probeDb: async () => {},
-			credsValid: () => false,
-			requestPairingCode: async () => {
-				chamadas.push("pairing2");
-			},
-			logFinding: semCredenciais.logFinding,
-		});
-
-		await m2.tick();
-		expect(chamadas).toHaveLength(1); // NÃO chamou pairing com sessão inválida
+		expect(c.notificacoes).toHaveLength(1);
 		expect(
-			semCredenciais.achados.some(
+			c.achados.some(
 				(a) => a.event === "token_invalido" && a.severity === "critical",
 			),
 		).toBe(true);
-		expect(semCredenciais.notificacoes[0]?.urgent).toBe(true);
-		expect(m2.parado).toBe(true);
+		expect(c.notificacoes[0]?.urgent).toBe(true);
+		expect(monitor.parado).toBe(true);
 	});
 });

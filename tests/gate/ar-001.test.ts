@@ -56,6 +56,23 @@ describe("AR-001 — preço", () => {
 		);
 	});
 
+	it.each([
+		"O investimento fica a partir de 2 mil por mês",
+		"preço começa em 1.500",
+		"custa uns 3k",
+		"sai por 990",
+		"mensalidade é de 499",
+		"10x de 199",
+		"primeiro mês é grátis",
+		"é de graça neste mês",
+	])("bloqueia preço dito sem símbolo de moeda: %s", (texto) => {
+		const decisao = evaluatePolicy(validInbound({ outbound: { text: texto } }));
+		expect(decisao).toMatchObject({
+			action: "block",
+			reason: "ar001_preco",
+		});
+	});
+
 	it("germina: texto sem preço não é bloqueado por AR-001", () => {
 		// Sem este caso, uma guarda que devolvesse `block` sempre passaria no
 		// teste anterior sem provar nada.

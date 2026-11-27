@@ -191,6 +191,7 @@ export const conversations = pgTable(
 		 * abaixo é o que impede um valor inventado por fora do domínio.
 		 */
 		closedReason: text("closed_reason"),
+		closedAt: timestamp("closed_at"),
 		pendingMediaBlock: boolean("pending_media_block").notNull().default(false),
 		/**
 		 * R-028/EQUP-02: responsável pela conversa, **nullable já na Fase 1**. Sob
@@ -309,7 +310,7 @@ export const outbox = pgTable(
 		),
 		check(
 			"outbox_status_check",
-			sql`status IN ('pending', 'reserved', 'sent', 'failed', 'abandoned')`,
+			sql`status IN ('pending', 'reserved', 'sending', 'sent', 'failed', 'abandoned')`,
 		),
 		index("outbox_pending_scheduled_idx")
 			.on(t.scheduledFor, t.id)

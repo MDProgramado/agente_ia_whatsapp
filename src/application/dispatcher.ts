@@ -19,10 +19,12 @@
  *    "deferir" da tabela canônica) → **difere**, sem gravar violação.
  * 4. Se `block` com qualquer outro motivo → `recordBlockedAttempt` e retorna sem
  *    enviar. A negação **não** consome cota (T-01-17).
- * 5. Se `send` → humanização (ponto do 01-05), depois **na mesma transação**:
- *    `reserveMessageQuota` → `sendText` → grava `messages` → `markSent`. A cota é
- *    reservada **depois** do gate (reservar antes gastaria o dia por uma mensagem
- *    bloqueada) e **na mesma transação** do envio (T-01-18).
+ * 5. Se `send` → humanização (ponto do 01-05), depois `reserveMessageQuota` com
+ *    `pedacos.length` → `sendText` → grava `messages` → `markSent`. Cada pedaço
+ *    é uma mensagem no WhatsApp, então cada pedaço consome uma vaga da cota. A
+ *    reserva acontece **depois** do gate (reservar antes gastaria o dia por uma
+ *    mensagem bloqueada) e falha fechada se não houver folga para todos os
+ *    pedaços.
  */
 import { sql } from "drizzle-orm";
 import { nextWindow } from "../domain/business-hours.js";
@@ -48,6 +50,7 @@ import {
 	enqueue,
 	markDeferred,
 	markFailed,
+	markSending,
 	markSent,
 	type OutboxOrigin,
 } from "./outbox.js";
@@ -151,6 +154,94 @@ const buscarMensagem = async (db: Db, chave: string): Promise<string> => {
 	return id;
 };
 
+type Snapshot = NonNullable<Awaited<ReturnType<typeof loadGateSnapshot>>>;
+type Decisao = ReturnType<typeof evaluatePolicy>;
+
+const carregarGate = async (
+	deps: DispatchDeps,
+	conversationId: string,
+	text: string,
+	instante: Date,
+): Promise<{ snapshot: Snapshot | null; decisao: Decisao | null }> => {
+	const { db, channel, ctx } = deps;
+	const dia = diaLocal(instante, ctx.tz);
+	const { sent } = await channel.readQuota(instante);
+	const novosContatos = await readDailyCounter(db, dia, "new_contacts");
+	const snapshot = await loadGateSnapshot(db, conversationId, instante, {
+		...ctx,
+		sentToday: sent,
+		newContactsToday: novosContatos,
+	});
+	if (!snapshot) return { snapshot: null, decisao: null };
+	return {
+		snapshot,
+		decisao: evaluatePolicy({
+			...snapshot,
+			outbound: { text, parts: [{ kind: "text" as const }] },
+		}),
+	};
+};
+
+const tratarBloqueio = async (
+	deps: DispatchDeps,
+	input: DispatchInput,
+	snapshot: Snapshot,
+	decisao: Decisao,
+	instante: Date,
+): Promise<DispatchResult | null> => {
+	if (decisao.action !== "block") return null;
+	const { db, ctx } = deps;
+	const motivo = decisao.reason;
+
+	if (motivo === "ar007_fora_da_janela" || motivo === "ar008_limite_diario") {
+		const scheduledFor = nextWindow(
+			instante,
+			ctx.tz,
+			ctx.windowStartHour,
+			ctx.windowEndHour,
+		);
+		if (input.outboxJobId) {
+			await markDeferred(db, input.outboxJobId, scheduledFor);
+		} else {
+			await enqueue(db, {
+				conversationId: input.conversationId,
+				origin: input.origin ?? "bot",
+				body: input.text,
+				idempotencyKey: input.idempotencyKey ?? input.conversationId,
+				scheduledFor,
+			});
+		}
+		logger.info(
+			{
+				event: "gate_deferido",
+				reason: motivo,
+				conversation_id: input.conversationId,
+			},
+			`mensagem adiada para ${scheduledFor.toISOString()}`,
+		);
+		return { action: "deferred", scheduledFor };
+	}
+
+	await recordBlockedAttempt(db, {
+		conversationId: input.conversationId,
+		leadId: snapshot.lead.id,
+		ruleReference: motivo,
+		detail: decisao.detail,
+		excerpt: input.text,
+		windowAtEvent: instante,
+		createdAt: instante,
+	});
+	logger.info(
+		{
+			event: "gate_bloqueado",
+			reason: motivo,
+			conversation_id: input.conversationId,
+		},
+		decisao.detail,
+	);
+	return { action: "blocked", reason: motivo, detail: decisao.detail };
+};
+
 export const dispatch = async (
 	deps: DispatchDeps,
 	input: DispatchInput,
@@ -164,15 +255,8 @@ export const dispatch = async (
 	// (1) snapshot — o gate lê o estado mais fresco possível. Os DOIS contadores
 	// do dia são lidos AGORA: `sentToday` pelo canal e `newContactsToday` do
 	// banco (`daily_counters`), nunca do boot — leads novos entram o dia todo.
-	const { sent } = await channel.readQuota(agora);
-	const novosContatos = await readDailyCounter(db, dia, "new_contacts");
-	const snapshot = await loadGateSnapshot(db, conversationId, agora, {
-		...ctx,
-		sentToday: sent,
-		newContactsToday: novosContatos,
-	});
-
-	if (!snapshot) {
+	const inicial = await carregarGate(deps, conversationId, text, agora);
+	if (!inicial.snapshot || !inicial.decisao) {
 		const detail = `conversa ${conversationId} nao encontrada ou sem lead vinculado`;
 		logger.warn(
 			{ event: "gate_erro_nao_mapeado", conversation_id: conversationId },
@@ -181,150 +265,149 @@ export const dispatch = async (
 		return { action: "silencio", reason: "erro_nao_mapeado", detail };
 	}
 
-	const entrada = {
-		...snapshot,
-		outbound: { text, parts: [{ kind: "text" as const }] },
-	};
+	const bloqueioInicial = await tratarBloqueio(
+		deps,
+		input,
+		inicial.snapshot,
+		inicial.decisao,
+		agora,
+	);
+	if (bloqueioInicial) return bloqueioInicial;
 
-	// (2) o gate decide — sempre.
-	const decisao = evaluatePolicy(entrada);
-
-	if (decisao.action === "block") {
-		const motivo = decisao.reason;
-
-		// (3) deferimento: não é violação, é "espere a próxima janela/folga".
-		if (motivo === "ar007_fora_da_janela" || motivo === "ar008_limite_diario") {
-			const scheduledFor = nextWindow(
-				agora,
-				ctx.tz,
-				ctx.windowStartHour,
-				ctx.windowEndHour,
-			);
-			if (input.outboxJobId) {
-				await markDeferred(db, input.outboxJobId, scheduledFor);
-			} else {
-				await enqueue(db, {
-					conversationId,
-					origin: input.origin ?? "bot",
-					body: text,
-					idempotencyKey: chave,
-					scheduledFor,
-				});
-			}
-			logger.info(
-				{
-					event: "gate_deferido",
-					reason: motivo,
-					conversation_id: conversationId,
-				},
-				`mensagem adiada para ${scheduledFor.toISOString()}`,
-			);
-			return { action: "deferred", scheduledFor };
-		}
-
-		// (4) negação registrada, sem cota consumida. O `guard` (AR/R) é derivado
-		// pelo trigger `fn_preencher_blocked_attempt` a partir do `rule_reference`
-		// — uma tradução, um lugar só. `excerpt` guarda um trecho para o relatório.
-		await recordBlockedAttempt(db, {
-			conversationId,
-			leadId: snapshot.lead.id,
-			ruleReference: motivo,
-			detail: decisao.detail,
-			excerpt: text,
-			windowAtEvent: agora,
-			createdAt: agora,
-		});
-		logger.info(
-			{
-				event: "gate_bloqueado",
-				reason: motivo,
-				conversation_id: conversationId,
-			},
-			decisao.detail,
-		);
-		return { action: "blocked", reason: motivo, detail: decisao.detail };
-	}
-
-	// (5) humanização (01-05). Ponto NOMEADO entre o gate e a reserva de cota: a
-	// cota só é consumida por mensagem que de fato vai sair. O atraso e o "digitando"
-	// acontecem ANTES de reservar — um atraso que falha não pode queimar cota.
+	// (5) humanização (01-05, achado 12). Ponto NOMEADO entre o gate e a reserva
+	// de cota: a cota só é consumida por mensagem que de fato vai sair. O atraso
+	// usa a CHAVE DO ENVIO como semente (jitter por envio, não só por texto) e a
+	// presença real é sinalizada pelo ChannelPort; falha de presença nunca bloqueia.
 	const humanizer = deps.humanizer ?? humanizadorPadrao;
 	const fila = deps.queue ?? filaPadrao;
 	const genero: HumanKind =
 		input.origin === "followup" || input.origin === "catchup"
 			? "followup"
 			: "first";
-	await humanizer.delay(genero, text);
-	await humanizer.typing(text);
+	await humanizer.delay(genero, chave);
+	await channel
+		.sendPresenceUpdate(conversationId, "composing")
+		.catch((erro: unknown) => {
+			logger.warn(
+				{
+					event: "presence_composing_falhou",
+					conversation_id: conversationId,
+				},
+				`nao sinalizei digitando: ${erro instanceof Error ? erro.message : String(erro)}`,
+			);
+		});
+	try {
+		await humanizer.typing(text);
+	} finally {
+		await channel
+			.sendPresenceUpdate(conversationId, "paused")
+			.catch((erro: unknown) => {
+				logger.warn(
+					{
+						event: "presence_paused_falhou",
+						conversation_id: conversationId,
+					},
+					`nao sinalizei parar de digitar: ${erro instanceof Error ? erro.message : String(erro)}`,
+				);
+			});
+	}
+
+	// (5) re-gate imediatamente antes de reservar/enviar. O delay pode durar
+	// segundos e o opt-out/handoff pode chegar nesse intervalo — o gate de abertura
+	// não autoriza o envio posterior.
+	const final = await carregarGate(deps, conversationId, text, agora);
+	if (!final.snapshot || !final.decisao) {
+		const detail = `conversa ${conversationId} nao encontrada ou sem lead vinculado`;
+		logger.warn(
+			{ event: "gate_erro_nao_mapeado", conversation_id: conversationId },
+			detail,
+		);
+		return { action: "silencio", reason: "erro_nao_mapeado", detail };
+	}
+	const bloqueioFinal = await tratarBloqueio(
+		deps,
+		input,
+		final.snapshot,
+		final.decisao,
+		agora,
+	);
+	if (bloqueioFinal) return bloqueioFinal;
 
 	// Texto longo vira vários pedaços, enviados em ORDEM. Cada pedaço tem sua
 	// própria `idempotency_key` (`chave#n`) para que a unicidade de `messages` não
 	// colapse os pedaços numa linha só.
 	const pedacos = splitLongMessage(text);
 
+	const reserva = await db.transaction(async (txBruto) =>
+		reserveMessageQuota(
+			txBruto as unknown as Db,
+			dia,
+			ctx.dailyMessageLimit,
+			ctx.dailyMessageCap,
+			pedacos.length,
+		),
+	);
+
 	let resultado:
 		| { readonly tipo: "sem_cota" }
 		| { readonly tipo: "enviado"; readonly messageId: string };
 	try {
-		resultado = await db.transaction(async (txBruto) => {
-			const tx = txBruto as unknown as Db;
-			const reserva = await reserveMessageQuota(
-				tx,
-				dia,
-				ctx.dailyMessageLimit,
-				ctx.dailyMessageCap,
-			);
-			if (!reserva.allowed) return { tipo: "sem_cota" as const };
+		if (!reserva.allowed) {
+			resultado = { tipo: "sem_cota" };
+		} else {
+			if (input.outboxJobId) {
+				await markSending(db, input.outboxJobId);
+			}
 
-			// Serializa por lead (R-067). Se um pedaço falhar, a exceção sobe, a
-			// transação reverte (nenhum `messages` fica gravado) e os pedaços
-			// seguintes nunca são enviados.
-			const enviarPedacos = async (): Promise<string> => {
+			const messageId = await fila.run(final.snapshot.lead.id, async () => {
 				let primeiroId: string | undefined;
 				for (const [i, pedaco] of pedacos.entries()) {
 					const chavePedaco =
 						pedacos.length === 1 ? chave : `${chave}#${i + 1}`;
-					await channel.sendText(conversationId, pedaco, chavePedaco);
+					const envio = await channel.sendText(
+						conversationId,
+						pedaco,
+						chavePedaco,
+					);
 
-					// `messages` é append-only (R-043): grava-se com o status FINAL. O
-					// envio já aconteceu acima; se este INSERT falhar, a transação
-					// reverte e nada é registrado — nunca um UPDATE posterior.
-					const inseridos = await tx
-						.insert(messages)
-						.values({
-							conversationId,
-							direction: "out",
-							origin: ORIGEM_DA_MENSAGEM[input.origin ?? "bot"],
-							kind: "text",
-							body: pedaco,
-							status: "sent",
-							idempotencyKey: chavePedaco,
-							createdAt: agora,
-						})
-						.onConflictDoNothing({ target: messages.idempotencyKey })
-						.returning({ id: messages.id });
-
-					const id =
-						inseridos[0]?.id ?? (await buscarMensagem(tx, chavePedaco));
+					const id = await db.transaction(async (txBruto) => {
+						const tx = txBruto as unknown as Db;
+						const inseridos = await tx
+							.insert(messages)
+							.values({
+								conversationId,
+								direction: "out",
+								origin: ORIGEM_DA_MENSAGEM[input.origin ?? "bot"],
+								kind: "text",
+								body: pedaco,
+								status: "sent",
+								providerMsgId: envio.providerMsgId,
+								latencyMs: envio.latencyMs,
+								idempotencyKey: chavePedaco,
+								createdAt: agora,
+							})
+							.onConflictDoNothing({ target: messages.idempotencyKey })
+							.returning({ id: messages.id });
+						return inseridos[0]?.id ?? buscarMensagem(tx, chavePedaco);
+					});
 					primeiroId ??= id;
 				}
 				if (primeiroId === undefined) {
 					throw new Error("dispatch: nenhum pedaco para enviar");
 				}
 				return primeiroId;
-			};
-
-			const messageId = await fila.run(snapshot.lead.id, enviarPedacos);
+			});
 
 			if (input.outboxJobId) {
-				await markSent(tx, input.outboxJobId, messageId);
+				await markSent(db, input.outboxJobId, messageId);
 			}
-			return { tipo: "enviado" as const, messageId };
-		});
+			resultado = { tipo: "enviado", messageId };
+		}
 	} catch (erro) {
-		// Meia mensagem não existe: com a transação revertida, marca o job como
-		// falho NÃO-retentável (repetir cego é o burst que derruba número) e fica
-		// em silêncio. Nunca um fallback de texto.
+		// Meia mensagem não existe: o envio e o INSERT agora são transações
+		// separadas; se qualquer pedaço falhar, marca o job como falho NÃO-retentável
+		// (repetir cego é o burst que derruba número) e fica em silêncio. Nunca um
+		// fallback de texto.
 		const motivo = erro instanceof Error ? erro.message : String(erro);
 		logger.error(
 			{ event: "dispatch_envio_falhou", conversation_id: conversationId },

@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests-db:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: whatsapp_prospect
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d whatsapp_prospect"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/whatsapp_prospect
+      PANEL_TOKEN: ci-token-test-only
+      CHANNEL_PHONE_E164: +5511999999999
+      LLM_PROVIDER: openrouter
+      LLM_MODEL: google/gemma-4-31b-it:free
+      LLM_API_KEY: ""
+      DATA_ROOT: ${{ runner.temp }}/whatsapp_prospecao_ci
+      TZ: America/Sao_Paulo
+      KILL_SWITCH: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Criar .env minimo para testes que leem DATABASE_URL do disco
+        run: printf 'DATABASE_URL=%s\n' "$DATABASE_URL" > .env
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Testes
+        run: npm test
+
+  tests-scripts-windows:
+    runs-on: windows-latest
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/whatsapp_prospect
+      PANEL_TOKEN: ci-token-test-only
+      CHANNEL_PHONE_E164: +5511999999999
+      LLM_PROVIDER: openrouter
+      LLM_MODEL: google/gemma-4-31b-it:free
+      LLM_API_KEY: ""
+      DATA_ROOT: ${{ runner.temp }}\whatsapp_prospecao_ci
+      TZ: America/Sao_Paulo
+      KILL_SWITCH: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Testes dos scripts PowerShell
+        run: npx vitest run tests/ops/notify-ps1.test.ts tests/ops/backup-ps1.test.ts

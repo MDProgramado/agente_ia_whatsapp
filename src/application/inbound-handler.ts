@@ -28,6 +28,7 @@ import { createHash } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { E164_REGEX, resolveE164 } from "../channel/baileys/jid-resolver.js";
 import { env } from "../config/env.js";
+import { detectarGatilhoHandoff } from "../domain/gate/patterns/automation-disclosure.js";
 import {
 	canarioEsperado,
 	type ExtractionEnvelope,
@@ -437,6 +438,25 @@ const rascunharShadow = async (
 		log.info(
 			{ event: "optout_ambiguo", conversation_id: conversa.id },
 			"opt-out AMBIGUO — handoff (nunca vira opt-out sem confirmacao)",
+		);
+		return;
+	}
+
+	const gatilhoDeterministico = detectarGatilhoHandoff(evt.body);
+	if (gatilhoDeterministico !== null) {
+		await dispararHandoff(
+			db,
+			{
+				conversationId: conversa.id,
+				reason: `gatilho determinístico: ${gatilhoDeterministico}`,
+				triggeredBy: "keyword",
+				triggerDetail: gatilhoDeterministico,
+				triggerValue: gatilhoDeterministico,
+				excerpt: evt.body,
+				actor: "bot",
+				agora,
+			},
+			{ notifier: deps.notifier },
 		);
 		return;
 	}

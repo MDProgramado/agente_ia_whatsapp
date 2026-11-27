@@ -34,6 +34,8 @@ import {
 	MEDIA_LINK_EXT,
 	MEDIA_TERM,
 	PERCENT_TERM,
+	PRICE_TERM,
+	SCHEDULE_TERM,
 } from "../gate/patterns/automation-disclosure.js";
 import { ORCAMENTO_TERM, PROPOSAL_TERM } from "../gate/patterns/proposal.js";
 import type { GateReason } from "../gate/types.js";
@@ -68,19 +70,6 @@ export const PREFIXO_DETALHE_POS_GATE = "pós-gate";
  */
 const ANEXO_TERM = /\banex(?:o|os|ad[oa]s?|ar)\b/i;
 
-/**
- * AR-003: promessa de agenda no outbound.
- *
- * `SCHEDULE_TERM` do guard cobre o infinitivo (`agendar`) e as conjugações que
- * ele listou, mas duas formas escapam e são justamente as mais prováveis no
- * texto gerado: **"marquei"** (o passado — "marquei terça às 14h", exatamente o
- * exemplo do plano) e a marcação por **preposição + hora** ("às 14h"). O stem
- * `marq`+sufixo cobre marquei/marcar/marcou/marcando/marcamos sem casar "marco"
- * (substantivo). A classe `[áa]` cobre acento e não-acento.
- */
-const AGENDA_TERM =
-	/\bagend(?:ar|ei|ou|ando|em|amos)\b|\bmarq(?:uei|ue|uem|ar|ou|ando|amos|ada|ado)\b|\breuni[ãa]o\b|\bchamada\b|\bhor[áa]rio\b|\bàs\s+\d{1,2}/i;
-
 /** Algum dos regex da lista casa o texto? (Reusado para as listas `readonly RegExp[]`.) */
 const algumCasa = (texto: string, termos: readonly RegExp[]): boolean =>
 	termos.some((t) => t.test(texto));
@@ -97,7 +86,8 @@ export const scanPostGate = (texto: string): PostGateVeredito => {
 	if (
 		CURRENCY_TERM.test(texto) ||
 		PERCENT_TERM.test(texto) ||
-		DISCOUNT_TERM.test(texto)
+		DISCOUNT_TERM.test(texto) ||
+		PRICE_TERM.test(texto)
 	) {
 		return {
 			allowed: false,
@@ -116,7 +106,7 @@ export const scanPostGate = (texto: string): PostGateVeredito => {
 	}
 
 	// AR-003 — promessa de agendamento sem o Admin.
-	if (AGENDA_TERM.test(texto)) {
+	if (SCHEDULE_TERM.test(texto)) {
 		return {
 			allowed: false,
 			reason: "ar003_agendamento",

@@ -255,6 +255,17 @@ varrer a tabela.
 | Portabilidade | suspender contato | `opt_out` | 5 dias úteis |
 | Anonimização | suspender contato | `erasure_request` | 5 dias úteis |
 
+O atendimento de eliminação é executado pelo Admin com:
+
+```powershell
+npm run lgpd:apagar -- <lead-id> "pedido recebido pelo e-mail do encarregado"
+```
+
+O comando roda numa única transação: `opt_out = true`, anula `name`/`address_line`/`wa_jid`/
+`lid`, encerra as conversas abertas com `closed_reason = 'opt_out'`, grava `erasure_request` em
+`optout_ledger` e a trilha em `event_log`. Ele **não** apaga `leads`, não altera `messages.body`
+e não envia mensagem ao titular — a confirmação é feita pelo canal humano.
+
 A regra de cima da tabela é a que costuma ser esquecida: **qualquer pedido do Art. 18 suspende o
 contato no ato, inclusive o pedido de acesso.** O titular que pergunta "o que vocês têm de mim?"
 não está demonstrations interesse comercial em ouvir a resposta.
