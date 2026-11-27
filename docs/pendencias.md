@@ -426,38 +426,62 @@ Resultados atestados por **humano** (e não por teste automatizado), com data e 
 
 ## Auditoria 27/11 — dados pessoais versionados (item 8) ✅ SANADO NO WORKTREE (2026-11-27)
 
-Telefones reais (`+5571989211292`, `557189211292`, `+5571982166238`), LID `165029924102261`,
-nome/email do encarregado e caminhos `C:\Users\11\...` / `C:/Users/11/...` foram substituídos por
-valores fictícios em `tests/`, `docs/` e `.planning/`. Valores adotados: `+5511900000001`
-(dedicado), `+5511900000002` (descartável), LID `999000000000001`, `Administrador Ficticio`,
-`encarregado@example.com` e `C:/USUARIO/...`.
+Os telefones reais, o LID, o nome/e-mail do encarregado e os caminhos de usuário que existiam
+neste arquivo foram substituídos por valores fictícios em `tests/`, `docs/` e `.planning/`
+(telefones `+5511900000001`/`+5511900000002`, LID `999000000000001`, `Administrador Ficticio`,
+`encarregado@example.com`, `C:/USUARIO/...`).
 
-O histórico do git **não** foi reescrito. Commits que ainda contêm os valores reais, confirmados com
-`git log --all --oneline -S<token>`:
+O mapa real→fictício (com os valores originais) está **fora do Git**, em
+`.planning/local/replace-map.txt` — a pasta `.planning/local/` é ignorada pelo `.gitignore`.
+Nunca copie esse mapa para um arquivo versionado nem para um commit.
+
+O histórico do git **não** foi reescrito. Commits que ainda contêm os valores reais, confirmados
+com `git log --all --oneline -S<token>` (os tokens estão no mapa local):
 
 - `47a80aa`, `648c0d5`, `8044c47`, `cb094d4`, `03ea113`, `4edf8d4` — telefones/LID.
-- `aab6bd2`, `fefcf6b`, `8e8e8a8`, `95b41b3`, `38cc4af` — caminhos `C:/Users/11/...`.
+- `aab6bd2`, `fefcf6b`, `8e8e8a8`, `95b41b3`, `38cc4af` — caminhos de usuário.
 
 Para publicar o repositório, reescrever o histórico **antes do primeiro push**, com autorização
-explícita:
+explícita, a partir do mapa local:
 
 ```powershell
-$map = @'
-5571989211292==>5511900000001
-557189211292==>5511900000001
-5571982166238==>5511900000002
-165029924102261==>999000000000001
-C:/Users/11/==>C:/USUARIO/
-/c/Users/11/==>/c/USUARIO/
-C:\Users\11\==>C:\USUARIO\
-Maicon Douglas Alves de Oliveira==>Administrador Ficticio
-mdprogamacao@outlook.com==>encarregado@example.com
-'@
+$map = Get-Content .planning\local\replace-map.txt -Raw
 [System.IO.File]::WriteAllText("$PWD\replace-text.txt", $map, (New-Object System.Text.UTF8Encoding $false))
 git filter-repo --force --replace-text "$PWD\replace-text.txt"
 ```
 
 `git filter-repo` reescreve todos os refs; não executado nesta auditoria.
+
+---
+
+## Auditoria 27/11b — revisão do merge `3380f3b` (6 itens) ✅ FECHADA (2026-11-27)
+
+Quick task `261127-001`, branch `fix/auditoria-27-11b`. Cada item com teste vermelho antes da
+correção. Plano e decisões em `.planning/quick/261127-001-auditoria-27-11b/`.
+
+| # | Sev. | Item | Commit |
+|---|---|---|---|
+| 1 | CRÍTICO | `lifecycle.ts`: `aoAbrir()` sai de `recuperar()` e roda só no `connection: open` real (`aoConectar` com `g === geracao`); `tentativas = 0` idem. QR continua sendo exibido após 408 no pareamento. | `b189a2d` |
+| 2 | CRÍTICO | CI: `biome.json` com `lineEnding: "lf"` + `.gitattributes` (`* text=auto eol=lf`, CRLF só para `.cmd`/`.bat`/`.ps1`). O índice já estava em LF, então o commit de `npm run format` previsto não teve diff. | `87d7877` |
+| 3 | ALTO | Mapa real→fictício saiu de `docs/pendencias.md` para `.planning/local/replace-map.txt` (gitignored). Histórico **não** reescrito. | `c0e1513` |
+| 4 | ALTO | `backup.ps1`: sessão em `backups\auth\<timestamp>` (fora das pastas datadas, 3 mais recentes); dumps com piso de 3; rotação só depois do `-Verify`/`pg_dump` OK; `-RotateOnly` nunca deixa < 3. | `0240bb4` |
+| 5 | ALTO | Gate de saída (guard + pós-gate, vocabulário único): `custo`, `N parcelas`, `N mil/k`, `N mensais`, `N por mês`, `por R$`/`por N mil|k|reais`; agenda: `ligação`, `te chamo`, `minutinhos`, hora solta (exceto `24h`). | `e3e6e00` |
+| 6 | ALTO | Matcher de entrada (aditivo): `valor(es)`, `preço(s)`, `proposta`, `orçamento`, `cobra(m/r)`, `quanto fica/é/sai/cobra`, `tabela`, `ligar`, `ligação`, `semana que vem`. | `f39e4e2` |
+
+Decisões de fronteira (registradas nos testes):
+
+- **"Sem custo para você" passa a bloquear** (AR-001, fail-closed).
+- **"Respondemos em até 2h." bloqueia** (hora solta, AR-003); só o expediente `24h` passa.
+- **`parcelas` exige número antes** ("12 parcelas"): "o número de parcelas" sem valor continua
+  `ar002_proposta` (condição comercial).
+- **`mil`/`k` com lista negativa** (clientes, empresas, usuários, pessoas, seguidores) e
+  **`por <número>` só com unidade de dinheiro**: "Atendemos mais de 2 mil empresas." e
+  "Estamos no mercado por 10 anos." passam.
+- **Objeção com "orçamento" vira handoff** por palavra; objeção sem pedido segue gerando contorno.
+
+Lacuna anotada, fora do escopo: o pós-gate (`scanPostGate`) não consulta `CONDICAO_COMERCIAL_TERM`;
+"o número de parcelas pode mudar" bloqueia no guard AR-002 mas passa no pós-gate. O gate canônico
+continua barrando no envio; a paridade desse termo fica para um próximo ajuste.
 
 ---
 

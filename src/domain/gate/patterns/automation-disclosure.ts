@@ -34,8 +34,22 @@ export const PERCENT_TERM = /\b\d+\s*%|\bpor\s?cento\b/i;
 export const DISCOUNT_TERM =
 	/\bdesconto\b|\bpromo[çc][ãa]o\b|\bblack\s?friday\b|\bcupom\b/i;
 
+/**
+ * Preço dito sem moeda (AR-001). A auditoria 27/11b acrescentou as formas
+ * coloquiais — "custo", "12 parcelas", "2 mil", "5k", "1.500 mensais",
+ * "800 por mês", "por R$", "por 5k" — com três cuidados contra falso positivo:
+ *
+ * - `mil`/`k` tem lista negativa de quantidades que não são preço ("2 mil
+ *   empresas", "mil clientes"), senão "Atendemos mais de 2 mil empresas." calaria.
+ * - `mensal`/`mensais` exige número logo antes ("1.500 mensais"): "1 entrega
+ *   mensal" passa.
+ * - `parcelas` exige número antes ("12 parcelas"): "o número de parcelas" sem
+ *   valor é condição comercial e continua sendo AR-002 (`CONDICAO_COMERCIAL_TERM`).
+ * - `por <número>` só casa com unidade de dinheiro ("por 5k", "por R$"), para
+ *   "por 10 anos"/"por 3 estados" passarem.
+ */
 export const PRICE_TERM =
-	/\b(?:investimento|pre[çc]o|mensalidade|assinatura|gr[aá]tis|gra[çc]a)\b|\bcusta\s+(?:uns?\s+)?\d|\bsai\s+por\s+\d|\b\d{1,3}(?:\.\d{3})*x\s+de\s+\d/i;
+	/\b(?:investimento|pre[çc]o|mensalidade|assinatura|gr[aá]tis|gra[çc]a)\b|\bcusta\s+(?:uns?\s+)?\d|\bsai\s+por\s+\d|\b\d{1,3}(?:\.\d{3})*x\s+de\s+\d|\bcusto\b|\b\d+\s+parcelas?\b|\d+(?:[.,]\d+)?\s?(?:mil|k)\b(?!\s+(?:clientes|empresas|usu[áa]rios|pessoas|seguidores))|\d\s+mensa(?:l|is)\b|\b\d+(?:[.,]\d+)?\s+por\s+m[êe]s\b|\bpor\s+r\$|\bpor\s+\d+(?:[.,]\d+)?\s?(?:mil|k|reais?)\b/i;
 
 /** Proposta comercial. AR-002. */
 export const PROPOSAL_TERM = /\bproposta\b|\bor[çc]amento\b/i;
@@ -84,9 +98,15 @@ export const MEDIA_LINK_EXT =
  * expediente genérico, não horário de reunião, e precisa continuar passando.
  * A hora usa `(?<!\w)`/`(?!\w)`: `\bàs` nunca casava, porque "à" é não-`\w` em JS,
  * e o sufixo `h`/`horas` é opcional dentro da fronteira final ("às 14h").
+ *
+ * Auditoria 27/11b: convite sem verbo de agenda — "ligação", "te chamo",
+ * "minutinhos" e a hora solta ("15h", "9h30"). A hora solta tem lookahead
+ * negativo para `24h` (o expediente continua liberado); qualquer outra hora
+ * bloqueia, inclusive prazo de resposta ("em até 2h") — fail-closed aceito pelo
+ * usuário.
  */
 export const SCHEDULE_TERM =
-	/\bagend(?:ar|ei|ou|ando|em|amos)\b|\bmar(?:car|quei|que|quem|cou|cando|camos|cada|cado)\b|\bte\s+ligar\b|\btelefonar\b|\breuni[ãa]o\b|\bchamada\b|\bcall\b|\bhor[áa]rio\b|(?<!\w)às\s+\d{1,2}(?:h|horas?)?(?!\w)|\b(?:segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)-feira\b/i;
+	/\bagend(?:ar|ei|ou|ando|em|amos)\b|\bmar(?:car|quei|que|quem|cou|cando|camos|cada|cado)\b|\bte\s+ligar\b|\btelefonar\b|\breuni[ãa]o\b|\bchamada\b|\bcall\b|\bhor[áa]rio\b|(?<!\w)às\s+\d{1,2}(?:h|horas?)?(?!\w)|\b(?:segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)-feira\b|\bliga[çc](?:[ãa]o|[õo]es)\b|\bte\s+chamo\b|(?<!\w)(?!24\s?h)\d{1,2}\s?h(?:\d{2})?(?!\w)|\bminutinhos?\b/i;
 
 /**
  * AR-006. `\bia\b` é o caso perigoso: sem `\b` ele casaria "dia".
@@ -140,11 +160,19 @@ export const primeiroTermoQueCasa = (
 	return null;
 };
 
+/**
+ * Gatilhos de ENTRADA (mensagem do lead) para handoff determinístico. São
+ * aditivos: só podem ACRESCENTAR um handoff, nunca anular o sinal da LLM
+ * (`inbound-handler.ts`). Auditoria 27/11b: valor, preço(s), proposta,
+ * orçamento, cobra(m/r), "quanto fica/é/sai/cobra" e tabela. "Valeu" não casa
+ * `\bvalor`, e "pode mandar mais informações" não tem termo comercial.
+ */
 export const HANDOFF_PRICE_TERM =
-	/\bquanto\s+custa\b|\bqual\s+(?:[ée]\s+)?o\s+pre[çc]o\b|\bme\s+passe\s+o\s+pre[çc]o\b|\bquanto\s+sa[ií]\b|(?<!\w)[ée]\s+quanto\b/i;
+	/\bquanto\s+custa\b|\bqual\s+(?:[ée]\s+)?o\s+pre[çc]o\b|\bme\s+passe\s+o\s+pre[çc]o\b|\bquanto\s+sa[ií]\b|(?<!\w)[ée]\s+quanto\b|\bvalor(?:es)?\b|\bpre[çc]os?\b|\bproposta\b|\bor[çc]amento\b|\bcobra(?:m|r)?\b|\bquanto\s+(?:custa|fica|[ée]|sai|cobra)\b|\btabela\b/i;
 
+/** Auditoria 27/11b: "ligar", "ligação" e "semana que vem" entram como pedido de agenda. */
 export const HANDOFF_SCHEDULE_TERM =
-	/\bagend(?:ar|ei|ou|ando|em|amos)\b|\bmar(?:car|quei|que|quem|cou|cando|camos|cada|cado)\b|\breuni[ãa]o\b|\bchamada\b|\bcall\b/i;
+	/\bagend(?:ar|ei|ou|ando|em|amos)\b|\bmar(?:car|quei|que|quem|cou|cando|camos|cada|cado)\b|\breuni[ãa]o\b|\bchamada\b|\bcall\b|\bligar\b|\bliga[çc][ãa]o\b|\bsemana\s+que\s+vem\b/i;
 
 export const HANDOFF_IRRITATION_TERM =
 	/\birritant|\bchatead|\bperdi\s+meu\s+tempo\b|\bn[ãa]o\s+resolve\b/i;

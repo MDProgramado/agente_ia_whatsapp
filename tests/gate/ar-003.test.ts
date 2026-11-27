@@ -58,6 +58,34 @@ describe("AR-003 — agendamento", () => {
 		});
 	});
 
+	/**
+	 * Auditoria 27/11b, item 5 — convite de agenda sem "agendar"/"reunião":
+	 * "te chamo", ligação, hora solta ("15h") e "minutinhos".
+	 */
+	it.each([
+		"Te chamo amanhã 15h pra gente alinhar?",
+		"Bora uma ligação rápida?",
+		"Tem 5 minutinhos amanhã de manhã?",
+	])("bloqueia convite de agenda coloquial (auditoria 27/11b): %s", (texto) => {
+		const decisao = evaluatePolicy(validInbound({ outbound: { text: texto } }));
+		expect(decisao).toMatchObject({
+			action: "block",
+			reason: "ar003_agendamento",
+		});
+	});
+
+	it("hora solta bloqueia mesmo como prazo de resposta (decisão do usuário, fail-closed)", () => {
+		// "2h" não distingue prazo de compromisso de horário; o usuário aceitou o
+		// falso positivo. Só o expediente "24h" é liberado (teste abaixo).
+		const decisao = evaluatePolicy(
+			validInbound({ outbound: { text: "Respondemos em até 2h." } }),
+		);
+		expect(decisao).toMatchObject({
+			action: "block",
+			reason: "ar003_agendamento",
+		});
+	});
+
 	it("libera expediente genérico sem promessa de horário", () => {
 		const decisao = evaluatePolicy(
 			validInbound({ outbound: { text: "Atendimento 24h" } }),

@@ -347,12 +347,35 @@ describe("qualificação auditável (02-02 Task 3)", () => {
 						nextStateHint: "qualificando",
 					},
 				},
-				{ body: "achei um pouco caro pro meu orçamento, mas me conta mais" },
+				// Sem "orçamento": desde a auditoria 27/11b essa palavra é pedido de
+				// orçamento e dispara handoff por palavra (caso abaixo).
+				{ body: "achei um pouco caro, mas me conta mais" },
 			);
 
 			expect(await contar(tx, "handoff_events", fx.conversationId)).toBe(0);
 			expect(chamadas).toEqual(["extract", "generate"]);
 			expect(await contarAiSuggestion(tx, fx.conversationId)).toBe(1);
+		});
+	});
+
+	it("objeção COM pedido de orçamento → handoff por palavra, mesmo com a LLM dizendo objecao_preco", async () => {
+		await emTransacaoRevertida(async (tx) => {
+			const fx = await semear(tx, { state: "qualificando" });
+			const { chamadas } = await rodar(
+				tx,
+				fx,
+				{
+					extracao: {
+						intent: "objecao_preco",
+						nextStateHint: "qualificando",
+					},
+				},
+				{ body: "achei caro, me passa um orçamento" },
+			);
+
+			expect(await contar(tx, "handoff_events", fx.conversationId)).toBe(1);
+			expect(chamadas).toEqual([]);
+			expect(await contarAiSuggestion(tx, fx.conversationId)).toBe(0);
 		});
 	});
 

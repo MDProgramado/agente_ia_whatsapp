@@ -42,6 +42,17 @@ const ESPERADO_BLOQUEIO: Record<string, boolean> = {
 	"consigo ver com o pessoal e te falo": false,
 	"o investimento começa em 500": true,
 	"retornamos às 14h": true,
+	// pressaoPreco — preço/agenda coloquial (auditoria 27/11b, item 5)
+	"Fica em 2 mil por mês.": true,
+	"Fica 1.500 mensais.": true,
+	"O custo é de 3 mil.": true,
+	"São 12 parcelas de 199.": true,
+	"Fazemos por 5k.": true,
+	"Sai a 1500 por mês.": true,
+	"Uns 800 por mês resolve.": true,
+	"Te chamo amanhã 15h pra gente alinhar?": true,
+	"Bora uma ligação rápida?": true,
+	"Tem 5 minutinhos amanhã de manhã?": true,
 	// midia — anúncio/pedido de mídia (AR-004)
 	"te mandei uma foto, dá uma olhada": true,
 	"segue o pdf com os dados": true,

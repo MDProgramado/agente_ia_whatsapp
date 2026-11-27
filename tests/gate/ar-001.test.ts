@@ -73,6 +73,48 @@ describe("AR-001 — preço", () => {
 		});
 	});
 
+	/**
+	 * Auditoria 27/11b, item 5 — preço sem moeda nem palavra "preço": o número
+	 * vem com "mil"/"k", "mensais", "por mês", "parcelas" ou "custo".
+	 */
+	it.each([
+		"Fica em 2 mil por mês.",
+		"Fica 1.500 mensais.",
+		"O custo é de 3 mil.",
+		"São 12 parcelas de 199.",
+		"Fazemos por 5k.",
+		"Sai a 1500 por mês.",
+		"Uns 800 por mês resolve.",
+	])("bloqueia preço coloquial (auditoria 27/11b): %s", (texto) => {
+		const decisao = evaluatePolicy(validInbound({ outbound: { text: texto } }));
+		expect(decisao).toMatchObject({
+			action: "block",
+			reason: "ar001_preco",
+		});
+	});
+
+	/**
+	 * O outro lado da fronteira: número que NÃO é preço (tempo de mercado,
+	 * quantidade de clientes, entregas) e as frases comuns de apresentação.
+	 * Um termo largo demais calaria a conversa normal — o erro caro do outro lado.
+	 */
+	it.each([
+		"Obrigado, graças ao seu retorno!",
+		"Boa tarde! Posso ajudar em alguma coisa?",
+		"Temos mais de 50 clientes.",
+		"Fazemos sites, apps e automações.",
+		"Trabalhamos com empresas há 10 anos.",
+		"Entendi, faz sentido pra vocês?",
+		"Atendimento 24h",
+		"Estamos no mercado por 10 anos.",
+		"Atendemos por 3 estados.",
+		"Atendemos mais de 2 mil empresas.",
+		"Fazemos 1 entrega mensal.",
+	])("libera frase sem preço (auditoria 27/11b): %s", (texto) => {
+		const decisao = evaluatePolicy(validInbound({ outbound: { text: texto } }));
+		expect(decisao.action).toBe("send");
+	});
+
 	it("germina: texto sem preço não é bloqueado por AR-001", () => {
 		// Sem este caso, uma guarda que devolvesse `block` sempre passaria no
 		// teste anterior sem provar nada.

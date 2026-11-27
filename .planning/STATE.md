@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 04
 status: completed
-last_updated: "2026-11-19T12:35:00.000Z"
+last_updated: "2026-11-27T18:00:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 4
@@ -269,7 +269,15 @@ Nenhum ainda.
 - ⚠️ **`icacls.exe` falha no Scope 2 de `scripts/pg-hba-apply.ps1`** (2026-10-01, Task 3 do plano 01-02): o temporário em `%TEMP%` é deletado antes da chamada, o script aborta e a senha do role teve de ser trocada manualmente via `psql`. Bug de ordenação, não de conceito. Rastreado como **P-002** em `docs/pendencias.md`. Não bloqueia nada — o efeito desejado foi alcançado manualmente.
 - ⚠️ **`Restart-Service postgresql-x64-18` exige PowerShell elevado.** Falha silenciosa como não-admin. Qualquer script futuro que reinicie o serviço precisa checar elevação antes de chamar, em vez de tratar o retorno vazio como sucesso.
 - ⚠️ **O gate `<automated>` da Task 4 dependia de conteúdo, não de existência.** Os 5 documentos LGPD passaram a gate em `77bb7df` com apenas 5 de 12 checks. Um gate que só verifica presença de arquivo não detecta um documento que existe e não diz nada — os 7 checks de conteúdo (`optout_ledger`, `erasure_request`, `listen_addresses`, `PREENCHER`, `pg_dump`, hifen) existem exatamente por isso. Considerar o mesmo padrão nos próximos planos com gate.
-- ✅ **Auditoria 27/11 (item 8) — dados pessoais versionados substituídos no worktree (2026-11-27).** Telefones, LID, nome/email do encarregado e caminhos `C:\Users\11\...` / `C:/Users/11/...` passaram a ser fictícios em `tests/`, `docs/` e `.planning/` (`+5511900000001`, `+5511900000002`, LID `999000000000001`, `Administrador Ficticio`, `encarregado@example.com`, `C:/USUARIO/...`). O histórico do git **não** foi reescrito; commits afetados e o comando `git filter-repo` necessário antes de publicar estão em `docs/pendencias.md`.
+- ✅ **Auditoria 27/11 (item 8) — dados pessoais versionados substituídos no worktree (2026-11-27).** Telefones, LID, nome/email do encarregado e caminhos de usuário (`C:\USUARIO\...` / `C:/USUARIO/...`) passaram a ser fictícios em `tests/`, `docs/` e `.planning/` (`+5511900000001`, `+5511900000002`, LID `999000000000001`, `Administrador Ficticio`, `encarregado@example.com`). O histórico do git **não** foi reescrito; commits afetados e o comando `git filter-repo` necessário antes de publicar estão em `docs/pendencias.md`, e o mapa real→fictício fica fora do Git em `.planning/local/replace-map.txt` (gitignored).
+
+- ✅ **Auditoria 27/11b (revisão do merge `3380f3b`, 6 itens) — fechada em 2026-11-27** na quick task `261127-001` (branch `fix/auditoria-27-11b`): lifecycle `aoAbrir` só no open real, biome/`.gitattributes` em LF, mapa PII fora do Git, rotação de backup com piso 3 e sessão fora das pastas datadas, gate de saída e matcher de entrada com o vocabulário coloquial de preço/agenda. Detalhe em `docs/pendencias.md` (§Auditoria 27/11b). Lacuna anotada: pós-gate sem `CONDICAO_COMERCIAL_TERM`.
+
+### Quick Tasks Concluídas
+
+| ID | Data | Descrição | Commits | Pasta |
+|---|---|---|---|---|
+| 261127-001 | 2026-11-27 | Fechamento dos 6 itens da auditoria 27/11b | `b189a2d` `87d7877` `c0e1513` `0240bb4` `e3e6e00` `f39e4e2` | `.planning/quick/261127-001-auditoria-27-11b/` |
 
 ### Resolvidos em 2026-09-29 (preflight do plano 01-01, Task 1)
 
