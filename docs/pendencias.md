@@ -426,33 +426,26 @@ Resultados atestados por **humano** (e não por teste automatizado), com data e 
 
 ## Auditoria 27/11 — dados pessoais versionados (item 8) ✅ SANADO NO WORKTREE (2026-11-27)
 
-Telefones reais (`+5571989211292`, `557189211292`, `+5571982166238`), LID `165029924102261`,
-nome/email do encarregado e caminhos `C:\Users\11\...` / `C:/Users/11/...` foram substituídos por
-valores fictícios em `tests/`, `docs/` e `.planning/`. Valores adotados: `+5511900000001`
-(dedicado), `+5511900000002` (descartável), LID `999000000000001`, `Administrador Ficticio`,
-`encarregado@example.com` e `C:/USUARIO/...`.
+Os telefones reais, o LID, o nome/e-mail do encarregado e os caminhos de usuário que existiam
+neste arquivo foram substituídos por valores fictícios em `tests/`, `docs/` e `.planning/`
+(telefones `+5511900000001`/`+5511900000002`, LID `999000000000001`, `Administrador Ficticio`,
+`encarregado@example.com`, `C:/USUARIO/...`).
 
-O histórico do git **não** foi reescrito. Commits que ainda contêm os valores reais, confirmados com
-`git log --all --oneline -S<token>`:
+O mapa real→fictício (com os valores originais) está **fora do Git**, em
+`.planning/local/replace-map.txt` — a pasta `.planning/local/` é ignorada pelo `.gitignore`.
+Nunca copie esse mapa para um arquivo versionado nem para um commit.
+
+O histórico do git **não** foi reescrito. Commits que ainda contêm os valores reais, confirmados
+com `git log --all --oneline -S<token>` (os tokens estão no mapa local):
 
 - `47a80aa`, `648c0d5`, `8044c47`, `cb094d4`, `03ea113`, `4edf8d4` — telefones/LID.
-- `aab6bd2`, `fefcf6b`, `8e8e8a8`, `95b41b3`, `38cc4af` — caminhos `C:/Users/11/...`.
+- `aab6bd2`, `fefcf6b`, `8e8e8a8`, `95b41b3`, `38cc4af` — caminhos de usuário.
 
 Para publicar o repositório, reescrever o histórico **antes do primeiro push**, com autorização
-explícita:
+explícita, a partir do mapa local:
 
 ```powershell
-$map = @'
-5571989211292==>5511900000001
-557189211292==>5511900000001
-5571982166238==>5511900000002
-165029924102261==>999000000000001
-C:/Users/11/==>C:/USUARIO/
-/c/Users/11/==>/c/USUARIO/
-C:\Users\11\==>C:\USUARIO\
-Maicon Douglas Alves de Oliveira==>Administrador Ficticio
-mdprogamacao@outlook.com==>encarregado@example.com
-'@
+$map = Get-Content .planning\local\replace-map.txt -Raw
 [System.IO.File]::WriteAllText("$PWD\replace-text.txt", $map, (New-Object System.Text.UTF8Encoding $false))
 git filter-repo --force --replace-text "$PWD\replace-text.txt"
 ```

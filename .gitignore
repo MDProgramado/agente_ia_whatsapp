@@ -17,6 +17,9 @@ config.local.json
 # A fonte de verdade versionada e .ruler/skills/ — versionar os dois duplica as skills
 # e faz a copia distribuida divergir silenciosamente da fonte.
 .opencode/skills/
+# Dados reais (telefones, LID, nome/e-mail, caminhos) usados na sanitizacao
+# do repo. Fora do Git de proposito — nunca versionar.
+.planning/local/
 
 # NAO ignorar src/infra/db/migrations/ — as migrations .sql e o meta/ sao
 # versionados (R-031 exige script/migracao auditavel).
