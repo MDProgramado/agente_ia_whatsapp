@@ -112,13 +112,13 @@ describe("lead-importer", () => {
 				const l = await tx.query.leads.findFirst({
 					where: eq(schema.leads.phoneNumber, phone),
 				});
-				expect(l).toBeDefined();
+				if (!l) throw new Error("lead não encontrado");
 				const conv = await tx.query.conversations.findFirst({
-					where: eq(schema.conversations.leadId, l!.id),
+					where: eq(schema.conversations.leadId, l.id),
 				});
-				expect(conv).toBeDefined();
+				if (!conv) throw new Error("conversa não encontrada");
 				const sh = await tx.query.statusHistory.findFirst({
-					where: eq(schema.statusHistory.conversationId, conv!.id),
+					where: eq(schema.statusHistory.conversationId, conv.id),
 				});
 				expect(sh).toBeDefined();
 				throw sentinel;
@@ -217,12 +217,14 @@ describe("lead-importer", () => {
 					dailyLeadLimit: 10,
 					tz: TZ,
 				});
+				const leadId = l[0]?.id;
+				if (!leadId) throw new Error("lead fixture não criado");
 				const ld = await tx.query.leads.findFirst({
-					where: eq(schema.leads.id, l[0]!.id),
+					where: eq(schema.leads.id, leadId),
 				});
 				expect(ld?.optOut).toBe(true);
 				const ol = await tx.query.optoutLedger.findFirst({
-					where: eq(schema.optoutLedger.leadId, l[0]!.id),
+					where: eq(schema.optoutLedger.leadId, leadId),
 				});
 				expect(ol).toBeDefined();
 				throw sentinel;
@@ -386,8 +388,9 @@ describe("lead-importer", () => {
 					where: eq(schema.leads.phoneNumber, phone),
 				});
 				expect(l?.optOut).toBe(true);
+				if (!l) throw new Error("lead não encontrado");
 				const ol = await tx.query.optoutLedger.findFirst({
-					where: eq(schema.optoutLedger.leadId, l!.id),
+					where: eq(schema.optoutLedger.leadId, l.id),
 				});
 				expect(ol).toBeDefined();
 				throw sentinel;

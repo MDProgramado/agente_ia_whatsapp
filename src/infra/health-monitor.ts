@@ -1,5 +1,5 @@
 /**
- * Monitor de sa�de (R-045, WHS-04, T-01-28).
+ * Monitor de saúde (R-045, WHS-04, T-01-28).
  */
 import { Cron } from "croner";
 import type { NotifyPort } from "../domain/ports/NotifyPort.js";
@@ -24,8 +24,6 @@ export type HealthDeps = {
 	probeDb: () => Promise<void>;
 	logFinding: (a: Achado) => Promise<void>;
 	cronPattern: string;
-	credsValid?: () => boolean;
-	requestPairingCode?: () => Promise<void>;
 };
 
 export type HealthMonitor = {
@@ -36,6 +34,7 @@ export type HealthMonitor = {
 
 export function startHealthMonitor(deps: HealthDeps): HealthMonitor {
 	let warned = false;
+	let baileysAlertado = false;
 	let healthOk = true;
 	let parado = false;
 
@@ -55,31 +54,27 @@ export function startHealthMonitor(deps: HealthDeps): HealthMonitor {
 				urgency: "high",
 			};
 			await deps.logFinding(achado);
-			await deps.notify({
-				title: "Monitor de sa�de",
-				message: achado.message,
-				urgent: true,
-			});
+			if (!baileysAlertado) {
+				await deps.notify({
+					title: "Monitor de saúde",
+					message: achado.message,
+					urgent: true,
+				});
+				baileysAlertado = true;
+			}
 			return;
 		}
+		if (state === "open") baileysAlertado = false;
 		if (state === "logged_out") {
-			if (
-				deps.credsValid &&
-				deps.credsValid() === true &&
-				deps.requestPairingCode
-			) {
-				await deps.requestPairingCode();
-				return;
-			}
 			const achado: Achado = {
 				severity: "critical",
 				event: "token_invalido",
-				message: "Credenciais inv�lidas",
+				message: "Credenciais inválidas",
 				urgency: "high",
 			};
 			await deps.logFinding(achado);
 			await deps.notify({
-				title: "Monitor de sa�de",
+				title: "Monitor de saúde",
 				message: achado.message,
 				urgent: true,
 			});
@@ -102,7 +97,7 @@ export function startHealthMonitor(deps: HealthDeps): HealthMonitor {
 			await deps.logFinding(achado);
 			if (!warned) {
 				await deps.notify({
-					title: "Monitor de sa�de",
+					title: "Monitor de saúde",
 					message: achado.message,
 					urgent: false,
 				});

@@ -15,10 +15,10 @@ foi eliminado**. Uma regra de retenção sem chave de corte é uma intenção.
 | Categoria | Tabela | Prazo | Contagem a partir de | Justificativa |
 |-----------|--------|-------|----------------------|---------------|
 | Lead sem interação | `leads` | **90 dias** | `conversations.last_inbound_at` do lead, ou `leads.created_at` se nunca houve conversa | O contato que não responde não é pipeline, é registro. 90 dias cobrem uma cadência de follow-up inteira (1h, 1d, 3d, 7d) com folga de mais de um mês. Passado isso, o número está muerto e guardá-lo só amplia exposição de dado sem contrapartida comercial. |
-| Conversa encerrada | `conversations` | **180 dias** | o instante do encerramento — `state = 'encerrado'` com `closed_reason` preenchido (ver seção 3 sobre a coluna que falta) | Meio ano. É o prazo mais defensável para dado de contato comercial em B2B: cobre o exercício
+| Conversa encerrada | `conversations` | **180 dias** | o instante do encerramento — `state = 'encerrado'` com `closed_reason` preenchido e `closed_at` gravado por trigger (migração 0010) | Meio ano. É o prazo mais defensável para dado de contato comercial em B2B: cobre o exercício
 regular de direitos pelo titular e permite responder "o que vocês têm de mim?" durante toda a
 janela em que o dado sobrevive. |
-| Histórico da conversa | `messages` | **180 dias** | mesmo corte de `conversations` | Fica alinhado à conversa por desenho: mensagem sem conversa é registro órfão. `messages` é append-only (R-043), e o prazo age sobre a **destruição da linha pela rotina de retenção**, não sobre edição de conteúdo. |
+| Histórico da conversa | `messages` | **180 dias** | mesmo corte de `conversations` | Fica alinhado à conversa por desenho: mensagem sem conversa é registro órfão. `messages` é append-only (R-043), e o prazo age sobre a **destruição da linha pela rotina de retenção**, não sobre edição de conteúdo. A exceção é auditada e disparada só por `fn_aplicar_retencao`. |
 | Ledger de opt-out e eliminação | `optout_ledger` | **INDEFINIDO** | — | É a prova de que o pedido foi atendido. Ver seção 2. |
 | Eventos de handoff | `handoff_events` | **INDEFINIDO** | — | É a prova de que a automação parou no instante certo. Ver seção 2. |
 | Sessão do WhatsApp | pasta `auth_info_baileys` | **Enquanto o número estiver em uso** | — | Não é dado pessoal de terceiro — é a credencial do canal. Enquanto o número dedicado existir, ela precisa existir. Perder a pasta é o WhatsApp ver um "dispositivo novo", que é sinal de banimento por si só (R-059). Ver seção 5. |
@@ -65,13 +65,10 @@ A regra completa, sem abreviatura:
 >   NULL quando nunca houve mensagem do titular; nesse caso o corte é a criação do lead.
 > - `conversations` e `messages` → `GREATEST(conversations.last_inbound_at,
 >   conversations.last_outbound_at, conversations.created_at)`, contada a partir do momento em
->   que `state = 'encerrado'`. **Ressalva real do schema:** hoje existe `conversations.
->   closed_reason` (o *motivo*), mas **não existe** uma coluna `closed_at` com o *instante* do
->   encerramento. A derivação usa, portanto, a última atividade como aproximação, e a
->   migration que adiciona `closed_at` está registrada como pendência aberta em
->   `docs/pendencias.md`. Aproxima, e é honesto chamar de aproximação: uma conversa encerrada há
->   dois anos e parada na véspera do encerramento conta a data errada por até o período de
->   atividade anterior.
+>   que `state = 'encerrado'`. **Chave exata:** a migração 0010 adicionou
+>   `conversations.closed_at` e um `BEFORE UPDATE OF state` que grava `now()` na transição para
+>   `encerrado`. A derivação usa `closed_at` quando presente e mantém a última atividade apenas
+>   para linhas históricas criadas antes da migração.
 > - `optout_ledger`, `handoff_events`, `auth_info_baileys` → sem corte.
 > - Backups → a data/hora no nome da pasta.
 >
@@ -79,8 +76,9 @@ A regra completa, sem abreviatura:
 > esvaziada. `messages` é append-only (R-043) e o `REVOKE UPDATE, DELETE ON messages FROM PUBLIC`
 > nega o privilégio — a eliminação por prazo é a **única** operação de `DELETE` que o sistema
 > executa sobre `messages`, e ela é disparada por relógio, não por pessoa. Depois da eliminação,
-> o que resta é o evento `erasure_request` em `optout_ledger`, que é o que permite responder ao
-> titular "quando eliminamos seus dados?" sem que essa resposta dependa do dado eliminado.
+> o que resta é o evento `retencao_aplicada` em `event_log` (ou `erasure_request` em
+> `optout_ledger` quando houve pedido do titular), que é o que permite responder ao titular
+> "quando eliminamos seus dados?" sem que essa resposta dependa do dado eliminado.
 
 Derivação em SQL:
 
@@ -94,13 +92,13 @@ SELECT l.id, l.phone_number, COALESCE(c.last_inbound_at, l.created_at) AS ultima
 
 -- 2. Conversas encerradas cujo prazo de 180 dias venceu.
 --    `state` usa 'encerrado' (o CHECK é conversations_state_check).
---    A data é a última atividade registrada — aproximação, ver seção 3.
+--    A data é closed_at; o fallback cobre apenas linhas anteriores à migração 0010.
 SELECT c.id, c.lead_id, c.closed_reason,
-       GREATEST(c.last_inbound_at, c.last_outbound_at, c.created_at) AS ultima_atividade
+       COALESCE(c.closed_at, GREATEST(c.last_inbound_at, c.last_outbound_at, c.created_at)) AS encerramento
   FROM conversations c
- WHERE c.state = 'encerrado'
-   AND GREATEST(c.last_inbound_at, c.last_outbound_at, c.created_at)
-       < now() - interval '180 days';
+  WHERE c.state = 'encerrado'
+    AND COALESCE(c.closed_at, GREATEST(c.last_inbound_at, c.last_outbound_at, c.created_at))
+        < now() - interval '180 days';
 
 -- 3. Nunca: o ledger e o handoff não têm corte.
 --    Esta query é a prova de que a eliminação foi feita e por quem.
@@ -109,10 +107,11 @@ SELECT event_type, occurred_at, recorded_at, legal_basis, purpose
 ```
 
 **Sobre a eliminação de `messages`:** ela implica remover as linhas de `messages` das conversas
-que venceram o prazo. Como `messages` é append-only, a rotina de retenção precisa de um caminho
-que o trigger não bloqueie — hoje esse caminho **não está implementado**, e a rotina de retenção
-é trabalho de fase posterior. O que este documento estabelece é o prazo e a chave; a implementação
-do `DELETE` controlado é a pendência, e ela está registrada em `docs/pendencias.md`.
+que venceram o prazo. Como `messages` é append-only, a rotina de retenção usa o caminho
+implementado na migração 0011: `fn_aplicar_retencao` liga `app.retencao_autorizada` apenas dentro
+da própria transação, e `fn_append_only` só permite `DELETE` nas tabelas de prazo vencido enquanto
+essa chave está ligada. O cron diário às 03:37 (`src/application/retention.ts`) chama a função e
+registra `retencao_aplicada` em `event_log`; nenhum outro código tem esse caminho.
 
 ## 4. Eliminação por pedido do titular
 
@@ -163,7 +162,8 @@ com regra própria e ninguém audita o que ele contém.
 
 `blocked_attempts` segue a **mesma retenção de `messages` (180 dias)**. A coluna `excerpt` tem
 no máximo 200 caracteres e passa pelo `redact` do pino quando vai para o log; a mensagem
-completa está em `messages`.
+completa está em `messages`. Ao vencer o prazo, `excerpt` vira `[eliminado]` e `detail`/
+`payload_excerpt` ficam nulos — a linha permanece só como prova de que o gate bloqueou.
 
 `event_log` é a trilha de R-022 e segue **o prazo de `messages` (180 dias)** para os eventos que
 se referem a conversas. A exceção é o evento que registra uma eliminação: ele sobrevive, porque

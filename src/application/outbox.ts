@@ -176,19 +176,22 @@ export const reserveNext = async (
 	});
 };
 
+export const markSending = async (db: Db, id: string): Promise<void> => {
+	await db.execute(sql`
+		UPDATE ${outbox}
+		SET status = 'sending'
+		WHERE id = ${id} AND status = 'reserved'
+	`);
+};
+
 /**
  * Marca o job como enviado e o liga à mensagem gravada.
  *
- * **Não** faz `UPDATE messages.status`. O plano original pedia
- * `UPDATE messages SET status = 'sent', provider_msg_id = $2`, mas `messages` é
- * **append-only** (R-043, `trg_messages_append_only`): um UPDATE ali levanta
- * exceção e derruba a transação inteira. A correção é gravar a mensagem já com
- * `status = 'sent'` na transação do `dispatch` (o envio já aconteceu antes do
- * INSERT; se o INSERT falhar, a transação reverte e a mensagem não é registrada).
+ * **Não** faz `UPDATE messages.status`. `messages` é append-only (R-043,
+ * `trg_messages_append_only`): um UPDATE ali levanta exceção e derruba a
+ * transação inteira. O dispatcher grava a mensagem já com `status = 'sent'`,
+ * `provider_msg_id` e `latency_ms` devolvidos por `ChannelPort.sendText`.
  * Aqui só se fecha o job e se grava o vínculo `outbox.message_id`.
- *
- * `providerMsgId` não existe: `ChannelPort.sendText` devolve `void` (o
- * adaptador Baileys preenche `messages.provider_msg_id` na sua própria trilha).
  */
 export const markSent = async (
 	db: Db,

@@ -102,11 +102,14 @@ describe("migração 0007 — follow_up_index + índice único parcial (openDb/m
 						legalRegisteredAt: sql`now() - interval '1 day'`,
 					})
 					.returning({ id: schema.leads.id });
+				if (!lead) throw new Error("lead fixture não criado");
+				if (!conta) throw new Error("conta fixture não encontrada");
 				const [conv] = await tx
 					.insert(schema.conversations)
-					.values({ leadId: lead!.id, channelAccountId: conta!.id })
+					.values({ leadId: lead.id, channelAccountId: conta.id })
 					.returning({ id: schema.conversations.id });
-				const conversaId = conv!.id;
+				if (!conv) throw new Error("conversa fixture não criada");
+				const conversaId = conv.id;
 
 				// Primeiro pendente do toque 1 (delta de 1d) — aceito.
 				await tx.insert(schema.scheduledTasks).values({

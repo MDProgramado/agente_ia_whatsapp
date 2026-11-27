@@ -7,7 +7,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { generateText, Output } from "ai";
+import { generateText, type LanguageModel, Output } from "ai";
 import { z } from "zod";
 import { env } from "../config/env.js";
 
@@ -35,10 +35,12 @@ const main = async () => {
 		process.exit(1);
 	}
 
-	console.log(`Chave detectada:      ${apiKey.slice(0, 7)}...${apiKey.slice(-4)}\n`);
+	console.log(
+		`Chave detectada:      ${apiKey.slice(0, 7)}...${apiKey.slice(-4)}\n`,
+	);
 	console.log("Enviando requisição de teste para o modelo...");
 
-	let modelInstance;
+	let modelInstance: LanguageModel;
 	if (env.LLM_PROVIDER === "openrouter") {
 		modelInstance = createOpenRouter({ apiKey })(env.LLM_MODEL);
 	} else if (env.LLM_PROVIDER === "google") {
@@ -70,7 +72,9 @@ const main = async () => {
 		console.log("--------------------------------------------------");
 		console.log(JSON.stringify(resultado.output, null, 2));
 		console.log("--------------------------------------------------");
-		console.log("\nSua integração com a OpenRouter/LLM está 100% pronta para uso.");
+		console.log(
+			"\nSua integração com a OpenRouter/LLM está 100% pronta para uso.",
+		);
 	} catch (erro: unknown) {
 		console.error("\n❌ FALHA NA COMUNICAÇÃO COM O PROVEDOR:");
 		console.error(erro instanceof Error ? erro.message : String(erro));

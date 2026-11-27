@@ -11,16 +11,15 @@
  * `dispatcher` é o único choke-point de envio e o adaptador LLM de produção é
  * instanciado aqui e injetado no `inbound-handler` (`deps.llm`).
  */
-import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import qrcode from "qrcode-terminal";
 import { Cron } from "croner";
 import { sql } from "drizzle-orm";
 import { Client } from "pg";
+import qrcode from "qrcode-terminal";
 import { type PanelCore, startPanel } from "./api/server.js";
 import { drenarCatchup } from "./application/catchup-drain.js";
 import { BarramentoEventos } from "./application/event-bus.js";
@@ -30,6 +29,7 @@ import {
 	processInboundFromMe,
 } from "./application/inbound-handler.js";
 import { drainLoop } from "./application/outbox-worker.js";
+import { startRetencaoJob } from "./application/retention.js";
 import { startScheduler } from "./application/scheduler.js";
 import { CAP_MENSAGENS } from "./application/shadow.js";
 import { criarBaileysChannel } from "./channel/baileys/adapter.js";
@@ -38,11 +38,14 @@ import { normalizeJid } from "./channel/baileys/jid-resolver.js";
 import {
 	abrirSocketDoCanal,
 	aguardarSocketAberto,
+	backoffComJitter,
 	criarHandlersDoCanal,
+	criarReferenciaSocket,
+	pedirCodigoDoSocket,
 	type WASocket,
 } from "./channel/baileys/runtime.js";
 import { createSession } from "./channel/baileys/session.js";
-import { isRestartRequired, translateDisconnect } from "./channel/baileys/signals.js";
+import { translateDisconnect } from "./channel/baileys/signals.js";
 import { type Env, ensureDataDirs, env, logsDir } from "./config/env.js";
 import { feriadosNacionais } from "./domain/feriados-br.js";
 import { closeDb, openDb } from "./infra/db/client.js";
@@ -111,6 +114,7 @@ let canalEstado: BaileysState = "unknown";
 /** Handles do "motor" (monitor de saúde + cron do relatório), parados no encerra. */
 let monitorSaude: ReturnType<typeof startHealthMonitor> | undefined;
 let cronRelatorio: Cron | undefined;
+let jobRetencao: ReturnType<typeof startRetencaoJob> | undefined;
 
 /**
  * O "motor" da cadência (03-02): o scheduler é o produtor do `outbox`, e o
@@ -143,6 +147,11 @@ const countOf = async (
 };
 
 const main = async (): Promise<void> => {
+	if (env.KILL_SWITCH) {
+		console.log("[boot] KILL_SWITCH=1 — nenhum servico iniciado");
+		return;
+	}
+
 	// (a) env-check antes de QUALQUER conexão. `checkEnv` compara o major do
 	//     pg_dump com o do servidor e barra DATA_ROOT em link/OneDrive, E.164 fora
 	//     do padrão e janela vazia. Fail-closed: uma única falha aborta o boot, com
@@ -268,7 +277,10 @@ const main = async (): Promise<void> => {
 	//     só é tocado dentro de `src/channel/baileys/**` (T-01-12) — aqui só se
 	//     orquestra, nenhum import do pacote de protocolo.
 	const sessao = await createSession();
-	let sock = await abrirSocketDoCanal(sessao);
+	const referenciaSocket = criarReferenciaSocket(
+		await abrirSocketDoCanal(sessao),
+	);
+	const sock = referenciaSocket.proxy;
 	canalSock = sock;
 	log.info(
 		{
@@ -277,18 +289,6 @@ const main = async (): Promise<void> => {
 		},
 		"sessao do canal carregada",
 	);
-
-	// O `creds.update` PRECISA ser persistido: sem isso a sessão viveria só em
-	// memória até o próximo kill, e o kill destrói a credencial no disco — novo
-	// dispositivo (Armadilha 4).
-	sock.ev.on("creds.update", () => {
-		void sessao.saveCreds().catch((erro: unknown) => {
-			log.error(
-				{ event: "save_creds_falhou" },
-				`nao persisti creds do canal: ${erro instanceof Error ? erro.message : String(erro)}`,
-			);
-		});
-	});
 
 	// O adaptador LLM de PRODUÇÃO (D-08/D-10): o `inbound-handler` só roda o
 	// sanduíche (extração → decisão → geração) quando `deps.llm` está injetado —
@@ -350,19 +350,26 @@ const main = async (): Promise<void> => {
 		});
 	});
 
+	let fasePareamentoInicial = sessao.restoreRequired;
+	let tentativasReabertura = 0;
+
+	const pedirCodigoDePareamento = async (): Promise<void> => {
+		await pedirCodigoDoSocket(
+			sock,
+			env.CHANNEL_PHONE_E164,
+			SOCKET_OPEN_TIMEOUT_MS,
+			join(logsDir(), "qr.txt"),
+		);
+	};
+
 	// Pareamento: só quando não há sessão registrada.
-	if (sessao.restoreRequired) {
+	if (fasePareamentoInicial) {
 		if (env.PAIRING_MODE === "code") {
-			const destino = join(logsDir(), "qr.txt");
-			await aguardarSocketAberto(sock, SOCKET_OPEN_TIMEOUT_MS);
-			const par = await sock.requestPairingCode(
-				env.CHANNEL_PHONE_E164.replace(/^\+/, ""),
-			);
-			writeFileSync(destino, String(par), { encoding: "utf8" });
+			await pedirCodigoDePareamento();
 			log.info(
 				{
 					step: "pairing_code",
-					arquivo: destino,
+					arquivo: join(logsDir(), "qr.txt"),
 					dica: "digite o par de 8 digitos no celular",
 				},
 				"par de codigo gravado; aguardando connection === open",
@@ -413,34 +420,51 @@ const main = async (): Promise<void> => {
 	 * aoDesconectar (definida abaixo) antes de `canal` existir (linha ~602).
 	 * Só é chamada após o boot completar, quando canal já está inicializado.
 	 */
-	async function recriarSocketAposPareamento(): Promise<void> {
-		log.info(
-			{ step: "channel_recreate" },
-			"recriando socket apos stream error 515 (restart required) apos pareamento",
-		);
-		const novoSock = await abrirSocketDoCanal(sessao);
-		await aguardarSocketAberto(novoSock, SOCKET_OPEN_TIMEOUT_MS);
+	let reabrindo = false;
 
-		// Atualiza referências de nível de módulo
-		sock = novoSock;
-		canalSock = novoSock;
-
-		// Re-registra handlers no novo socket
-		novoSock.ev.on("connection.update", onBaileysConnectionUpdate);
-		novoSock.ev.on("messages.upsert", onBaileysMessage);
-
-		// Atualiza o BaileysChannel (drainLoop, dispatcher, painel usam a mesma instância)
-		if (canal) {
-			canal.setSock(novoSock);
+	async function reabrirSocket(
+		motivo: string,
+		status: number | null,
+	): Promise<void> {
+		if (reabrindo) {
+			log.warn(
+				{ step: "channel_recreate", motivo },
+				"reabertura ja em andamento; ignorando novo sinal de close",
+			);
+			return;
 		}
+		reabrindo = true;
+		try {
+			const tentativa = ++tentativasReabertura;
+			const espera = backoffComJitter(tentativa);
+			log.info(
+				{
+					step: "channel_recreate",
+					motivo,
+					status,
+					tentativa,
+					espera_ms: espera,
+				},
+				"reabrindo socket do canal",
+			);
+			await new Promise((resolve) => setTimeout(resolve, espera));
+			const novoSock = await abrirSocketDoCanal(sessao);
+			await aguardarSocketAberto(novoSock, SOCKET_OPEN_TIMEOUT_MS);
 
-		// Lê capabilities na nova conexão
-		void lerCapacidades();
+			referenciaSocket.trocar(novoSock);
 
-		log.info(
-			{ step: "channel_recreated" },
-			"socket recriado com sucesso apos 515",
-		);
+			sock.ev.on("connection.update", onBaileysConnectionUpdate);
+			sock.ev.on("messages.upsert", onBaileysMessage);
+
+			void lerCapacidades();
+
+			log.info(
+				{ step: "channel_recreated", motivo, tentativa },
+				"socket recriado com sucesso",
+			);
+		} finally {
+			reabrindo = false;
+		}
 	}
 
 	// Registro explícito dos handlers nomeados do contrato do checkpoint.
@@ -450,16 +474,25 @@ const main = async (): Promise<void> => {
 		// a propriedade — nenhum import do pacote Baileys aqui (T-01-12).
 		canalSelfJid: () => sock.user?.id,
 		aoQrCode: (qrStr: string) => {
-			if (sessao.restoreRequired) {
-				console.log("\n=======================================================");
+			if (fasePareamentoInicial) {
+				console.log(
+					"\n=======================================================",
+				);
 				console.log("📲 ESCANEIE O QR CODE ABAIXO NO SEU WHATSAPP:");
-				console.log("=======================================================\n");
+				console.log(
+					"=======================================================\n",
+				);
 				qrcode.generate(qrStr, { small: true });
-				console.log("\n(Abra o WhatsApp -> Aparelhos conectados -> Conectar um aparelho)\n");
+				console.log(
+					"\n(Abra o WhatsApp -> Aparelhos conectados -> Conectar um aparelho)\n",
+				);
 			}
 		},
 		aoConectar: () => {
 			canalEstado = "open";
+			sessao.marcarSessaoRestaurada();
+			fasePareamentoInicial = false;
+			tentativasReabertura = 0;
 			// O emissor do número dedicado precisa de E.164 para o Gate 0 (R-001).
 			// Id próprio em forma LID não tem número: o Guard 0 fica fail-closed. UM
 			// warn por abertura de conexão (nunca por mensagem) para o operador ver no
@@ -474,24 +507,6 @@ const main = async (): Promise<void> => {
 			void lerCapacidades();
 		},
 		aoDesconectar: (status) => {
-			// 515 (restartRequired) após pareamento bem-sucedido: o servidor WA pede
-			// para reiniciar a conexão. O Baileys já fechou o socket via end();
-			// precisamos recriá-lo. creds.me já está persistido, então o novo
-			// socket faz login e abre normalmente.
-			if (isRestartRequired(status) && sessao.restoreRequired) {
-				log.info(
-					{ step: "channel_disconnected", status },
-					"stream error 515 (restart required) apos pareamento; recriando socket",
-				);
-				void recriarSocketAposPareamento().catch((erro: unknown) => {
-					log.error(
-						{ err: erro },
-						"falha ao recriar socket apos 515",
-					);
-				});
-				return;
-			}
-
 			const estadoDoSocket = translateDisconnect(status ?? 0);
 			canalEstado =
 				estadoDoSocket.event === "logged_out" ? "logged_out" : "close";
@@ -500,22 +515,30 @@ const main = async (): Promise<void> => {
 					step: "channel_disconnected",
 					sinal: estadoDoSocket.event,
 					terminal: estadoDoSocket.terminal,
+					retry: estadoDoSocket.retry,
 					severity: estadoDoSocket.severity,
 				},
 				"socket do canal caiu",
 			);
+			if (estadoDoSocket.retry) {
+				void reabrirSocket(estadoDoSocket.event, status).catch(
+					(erro: unknown) => {
+						log.error(
+							{ err: erro, step: "channel_recreate" },
+							"falha ao reabrir socket do canal",
+						);
+					},
+				);
+				return;
+			}
 			if (estadoDoSocket.terminal) {
-				// Durante o primeiro pareamento (quando restoreRequired = true), o WhatsApp fecha
-				// o socket com 401 temporario antes do scan. Nao devemos derrubar o processo nesse caso!
-				if (sessao.restoreRequired) {
+				if (fasePareamentoInicial) {
 					log.info(
 						{ step: "channel_disconnected", sinal: estadoDoSocket.event },
 						"socket fechou durante pareamento inicial; aguardando conexao",
 					);
 					return;
 				}
-				// Reconectar num número deslogado/bloqueado é o pior cenário (T-01-14):
-				// fecha e sai em erro em vez de entrar em loop de reconexão.
 				void encerra(conn, log, `canal_${estadoDoSocket.event}`).then(() => {
 					flushLogSync();
 					process.exit(1);
@@ -586,25 +609,6 @@ const main = async (): Promise<void> => {
 			}
 		},
 		cronPattern: "*/30 * * * * *",
-		// Reconexão silenciosa (T-01-29): só re-pareia se a sessão carregou com
-		// credenciais válidas. Sessão inválida → o monitor para com `critical`, sem
-		// pedir par (pedir par com sessão corrompida conta como dispositivo novo).
-		credsValid: () => !sessao.restoreRequired,
-		requestPairingCode: async () => {
-			// Mesma guarda do pareamento inicial (P-004): o socket pode ter caído e
-			// reaberto; só se pede par com o WS aberto, senão o `sendRawMessage` lança.
-			await aguardarSocketAberto(sock, SOCKET_OPEN_TIMEOUT_MS);
-			const par = await sock.requestPairingCode(
-				env.CHANNEL_PHONE_E164.replace(/^\+/, ""),
-			);
-			writeFileSync(join(logsDir(), "qr.txt"), String(par), {
-				encoding: "utf8",
-			});
-			log.info(
-				{ step: "reconnect_pairing_code" },
-				"reconexao silenciosa: novo par gravado em qr.txt",
-			);
-		},
 	});
 	log.info({ step: "health_monitor", cron: "30s" }, "monitor de saude armado");
 
@@ -651,6 +655,12 @@ const main = async (): Promise<void> => {
 	log.info(
 		{ step: "daily_report_cron", at: "23:55", tz: env.TZ },
 		"cron do relatorio diario armado",
+	);
+
+	jobRetencao = startRetencaoJob({ db: conn.db, timezone: env.TZ });
+	log.info(
+		{ step: "retencao_cron", at: "03:37", tz: env.TZ },
+		"cron de retencao de 180 dias armado",
 	);
 
 	// (l) MOTOR DA CADÊNCIA (03-02) — dreno de catch-up + `drainLoop` + scheduler.
@@ -793,6 +803,10 @@ const encerra = async (
 	if (motorScheduler) {
 		motorScheduler.stop();
 		motorScheduler = undefined;
+	}
+	if (jobRetencao) {
+		jobRetencao.stop();
+		jobRetencao = undefined;
 	}
 	if (motorDreno) {
 		// Aborta o sinal: o laço termina a espera atual e não pega um job novo.

@@ -2,6 +2,7 @@ import {
 	CURRENCY_TERM,
 	DISCOUNT_TERM,
 	PERCENT_TERM,
+	PRICE_TERM,
 	primeiroTermoQueCasa,
 } from "../patterns/automation-disclosure.js";
 import type { GateInput } from "../types.js";
@@ -16,7 +17,11 @@ import type { GateInput } from "../types.js";
 export const evaluate = (input: GateInput) => {
 	const { text } = input.outbound;
 	const achado =
-		primeiroTermoQueCasa(text, [CURRENCY_TERM, PERCENT_TERM, DISCOUNT_TERM]) ??
-		null;
+		primeiroTermoQueCasa(text, [
+			CURRENCY_TERM,
+			PERCENT_TERM,
+			DISCOUNT_TERM,
+			PRICE_TERM,
+		]) ?? null;
 	return achado === null ? null : ("ar001_preco" as const);
 };

@@ -208,6 +208,42 @@ describe("reserveNext — SKIP LOCKED (T-01-16)", () => {
 	});
 });
 
+describe("sending — janela de envio sem retry automático", () => {
+	it("job em sending não é recuperado por requeueStale", async () => {
+		await emTransacaoRevertida(async (tx) => {
+			const contaId = await inserirConta(tx);
+			const leadId = await inserirLead(tx, telefoneAleatorio(), false);
+			const conversaId = await inserirConversa(tx, leadId, contaId);
+			const chave = `sending-${randomUUID()}`;
+			const id = await enqueue(tx, {
+				conversationId: conversaId,
+				origin: "followup",
+				body: "mensagem em envio",
+				idempotencyKey: chave,
+				scheduledFor: DENTRO_DA_JANELA,
+			});
+			if (!id) throw new Error("enqueue nao devolveu id");
+
+			await tx.execute(
+				sql`UPDATE outbox SET status = 'sending', reserved_at = now() WHERE id = ${id}`,
+			);
+			const recuperados = await requeueStale(tx, {
+				olderThanMs: 0,
+				now: new Date(Date.now() + 10 * 60_000),
+				conversationId: conversaId,
+			});
+
+			expect(recuperados).toBe(0);
+			const status = primeiro(
+				rows<{ status: string }>(
+					await tx.execute(sql`SELECT status FROM outbox WHERE id = ${id}`),
+				),
+			);
+			expect(status.status).toBe("sending");
+		});
+	});
+});
+
 describe("drainOnce — caminho feliz (cota no envio, R-023)", () => {
 	it("job dentro da janela → envia, messages=sent, outbox=sent, cota=1", async () => {
 		await emTransacaoRevertida(async (tx) => {

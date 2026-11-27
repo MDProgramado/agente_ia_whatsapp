@@ -2,17 +2,23 @@
  * Cotas diárias reservadas atomicamente (AR-008 / R-023, e a trava de novos contatos
  * de D-04/D-05).
  *
- * **A operação é uma só.** `INSERT … ON CONFLICT DO UPDATE … WHERE count < teto
- * RETURNING count` faz checar-e-reservar em uma única instrução atômica. A
- * alternativa ingênua — `SELECT count`, depois `UPDATE` — é um TOCTOU: dois
- * workers leem 24, ambos veem espaço, ambos escrevem, e o dia fecha em 26. Com a
- * versão de uma instrução, o segundo `INSERT` serializa atrás do primeiro e a
- * cláusula `WHERE count < teto` falha, devolvendo `allowed: false`.
+ * **A operação é uma só.** `INSERT … ON CONFLICT DO UPDATE … WHERE count +
+ * quantidade <= teto RETURNING count` faz checar-e-reservar em uma única
+ * instrução atômica. A alternativa ingênua — `SELECT count`, depois `UPDATE` —
+ * é um TOCTOU: dois workers leem 24, ambos veem espaço, ambos escrevem, e o dia
+ * fecha em 26. Com a versão de uma instrução, o segundo `INSERT` serializa atrás
+ * do primeiro e a cláusula `WHERE` falha, devolvendo `allowed: false`.
+ *
+ * `quantidade` existe porque um texto longo vira vários pedaços: cada pedaço é
+ * uma mensagem no WhatsApp e, portanto, consume uma vaga da cota diária. Reservar
+ * `1` e enviar `N` subcontaria o dia — o mecanismo que impede burst.
  *
  * **`WHERE` fica no `DO UPDATE`, não no `WHERE` do `SELECT`.** Isso é o que faz a
  * reserva ser condicional: um `ON CONFLICT DO UPDATE` sem `WHERE` engoliria a
  * tentativa e devolveria a linha com o contador antigo, e o gate acreditaria que a
- * cota foi reservada quando nada foi reservado.
+ * cota foi reservada quando nada foi reservado. O `WHERE` compara `count +
+ * quantidade` com o teto, não só `count`: uma reserva de 3 com 2 vagas não pode
+ * passar.
  *
  * `teto = min(configuredLimit, cap)` implementa D-04/D-05. O `cap` vem do
  * servidor (`fetchNewChatMessageCap`); quando ele vem `0` — feature desativada
@@ -82,18 +88,23 @@ async function reservar(
 	day: string,
 	configuredLimit: number,
 	cap: number,
+	quantidade: number,
 ): Promise<Reserva> {
 	// `cap` negativo seria lixo de config; normalizar para 0 mantém a semântica
 	// fail-closed de "cap = 0 significa parado" em vez de um teto negativo que
 	// passaria qualquer comparison.
 	const limit = Math.min(configuredLimit, Math.max(cap, 0));
 
+	if (!Number.isInteger(quantidade) || quantidade < 1) {
+		throw new Error(`reserva de cota: quantidade invalida (${quantidade})`);
+	}
+
 	const resultado = await db.execute(sql`
 		insert into ${dailyCounters} (day, kind, count)
-		values (${day}, ${kind}, 1)
+		values (${day}, ${kind}, ${quantidade})
 		on conflict (day, kind) do update
-			set count = ${dailyCounters.count} + 1
-			where ${dailyCounters.count} < ${limit}
+			set count = ${dailyCounters.count} + ${quantidade}
+			where ${dailyCounters.count} + ${quantidade} <= ${limit}
 		returning count
 	`);
 
@@ -107,13 +118,19 @@ async function reservar(
 	return { allowed: true, used: primeira.count, limit };
 }
 
-/** Cota de mensagens enviadas (R-023: 20–30/dia, no piloto 25 operacional, 30 teto). */
+/**
+ * Cota de mensagens enviadas (R-023: 20–30/dia, no piloto 25 operacional, 30
+ * teto). `quantidade` é o número de pedaços que vão sair; o padrão `1` cobre o
+ * chamador de um único envio.
+ */
 export const reserveMessageQuota = (
 	db: Db,
 	day: string,
 	configuredLimit: number,
 	cap: number,
-): Promise<Reserva> => reservar(db, kinds.mensagem, day, configuredLimit, cap);
+	quantidade = 1,
+): Promise<Reserva> =>
+	reservar(db, kinds.mensagem, day, configuredLimit, cap, quantidade);
 
 /** Cota de contatos novos iniciados pela automação (D-04/D-05). */
 export const reserveNewContactQuota = (
@@ -122,4 +139,4 @@ export const reserveNewContactQuota = (
 	configuredLimit: number,
 	cap: number,
 ): Promise<Reserva> =>
-	reservar(db, kinds.novo_contato, day, configuredLimit, cap);
+	reservar(db, kinds.novo_contato, day, configuredLimit, cap, 1);

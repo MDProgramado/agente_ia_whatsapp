@@ -210,6 +210,69 @@ describe("contrato do conjunto INTENCOES_HANDOFF (FLUP-09/R-065)", () => {
 	});
 });
 
+describe("handoff determinístico aditivo (R-012/R-025/R-057/R-065)", () => {
+	it.each([
+		["preço", "quanto custa esse serviço?"],
+		["agendamento", "podemos agendar uma conversa amanhã?"],
+		["bot", "você é um bot?"],
+		["irritação", "que irritante, isso não resolve nada"],
+	])("gatilho %s → handoff sem chamar a LLM", async (_rotulo, body) => {
+		await emTransacaoRevertida(async (tx) => {
+			const fx = await semear(tx);
+			const llm = scriptedLlmAdapter();
+			const { notifier, chamadas: notificacoes } = notifierEspiao();
+			const evt = evento(fx);
+
+			await processInboundFromMe(
+				tx,
+				makeSock(),
+				{ ...evt, body },
+				{ llm, notifier, agora: AGORA },
+			);
+
+			expect(await contar(tx, "handoff_events", fx.conversationId)).toBe(1);
+			const he = primeiro(
+				rows<{ triggered_by: string }>(
+					await tx.execute(sql`
+							select triggered_by from handoff_events
+							where conversation_id = ${fx.conversationId}
+						`),
+				),
+			);
+			expect(he.triggered_by).toBe("keyword");
+			expect(llm.chamadas).toEqual([]);
+			expect(notificacoes.length).toBeGreaterThanOrEqual(1);
+		});
+	});
+
+	it("opt-out determinístico vence extração neutra e não chama a LLM", async () => {
+		await emTransacaoRevertida(async (tx) => {
+			const fx = await semear(tx);
+			const llm = scriptedLlmAdapter();
+			const { notifier } = notifierEspiao();
+			const evt = evento(fx);
+
+			await processInboundFromMe(
+				tx,
+				makeSock(),
+				{ ...evt, body: "não me mande mais mensagem" },
+				{ llm, notifier, agora: AGORA },
+			);
+
+			const optOut = primeiro(
+				rows<{ opt_out: boolean }>(
+					await tx.execute(sql`
+						select opt_out from leads where id = ${fx.leadId}
+					`),
+				),
+			);
+			expect(optOut.opt_out).toBe(true);
+			expect(await contar(tx, "handoff_events", fx.conversationId)).toBe(1);
+			expect(llm.chamadas).toEqual([]);
+		});
+	});
+});
+
 describe("CR-02 — duvida_complexa dispara handoff (R-065/FLUP-09)", () => {
 	it("intent duvida_complexa → handoff atômico + silêncio total (generate nunca chamado)", async () => {
 		await emTransacaoRevertida(async (tx) => {

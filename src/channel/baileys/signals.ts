@@ -10,10 +10,11 @@
  *   é não-retryável por construção, e 463 é o caso que não pode nem parecer que
  *   será retentado.
  *
- * O 463 (número inválido/inacessível) NÃO é um `DisconnectReason` — ele chega
- * como ACK de mensagem no handler interno de `messages-recv.js`, assíncrono e
- * invisível para o `sendMessage` (01-PATTERNS §5.6). Duas consequências
- * registradas aqui de propósito:
+ * O 463 (`SenderReachoutTimelocked`) NÃO é número inválido: no rc14 ele é
+ * `MessageAccountRestriction` — a conta está impedida de iniciar chats novas
+ * porque falta tctoken (decode-wa-message.js). Ele chega como ACK de mensagem no
+ * handler interno de `messages-recv.js`, assíncrono e invisível para o
+ * `sendMessage`. Duas consequências registradas aqui de propósito:
  *
  * 1. Um `try/catch` no envio esperando 463 dá falso negativo — a detecção
  *    primária é leitura de sinais (HealthMonitor), não este catch. Este catch é a
@@ -21,7 +22,8 @@
  *    com o código.
  * 2. O que a biblioteca faz com 463 interno é EMISSÃO DE TOKEN DE PRIVACIDADE
  *    (recuperação), deduplicada por JID — **não** é reenvio. Tem cara de retry para
- *    quem lê depressa; não é. Nenhum retry nosso, nenhum reagendamento.
+ *    quem lê depressa; não é. Nenhum retry nosso, nenhum reagendamento, e
+ *    nenhuma marcação de lead inválido: isso pertence ao `onWhatsApp()`.
  */
 import { DisconnectReason } from "@whiskeysockets/baileys";
 
@@ -43,8 +45,8 @@ export interface Sinal {
 	readonly severity: "critical" | "warn" | "info";
 	/** true SÓ para 429 e 5xx. Nunca para 463, nunca para outros 4xx. */
 	readonly retry: boolean;
-	/** Presente exatamente quando o erro é sinal de número inválido. */
-	readonly reason?: "invalid_number";
+	/** Presente exatamente quando o erro é restrição de reach-out da conta. */
+	readonly reason?: "account_restricted";
 }
 
 /**
@@ -67,6 +69,9 @@ const DESCONHECIDO: Sinal = {
  */
 export const isRestartRequired = (status: number | null): boolean =>
 	status === DisconnectReason.restartRequired;
+
+export const isReconectavel = (status: number | null): boolean =>
+	translateDisconnect(status ?? 0).retry;
 
 /**
  * `DisconnectReason` → evento. Os literais do enum vêm do rc14
@@ -175,8 +180,8 @@ export const statusHttpDoErro = (erro: unknown): number | null => {
 /**
  * Falha de `sendMessage` → sinal.
  *
- * - **463** → `unreachable` + `reason: 'invalid_number'`, NUNCA retry (T-01-01).
- *   O caminho certo é `markNumberInvalid` + notificação, não reagendar.
+ * - **463** → `unreachable` + `reason: 'account_restricted'`, NUNCA retry. O
+ *   caminho certo é notificar o Admin: a conta não pode iniciar chats novas.
  * - **429** → `rate_limited`, retry com backoff.
  * - **401/403** → `unreachable` crítico e terminal: o envio falhou porque a CONTA
  *   está em problema, não o destinatário — parar.
@@ -189,15 +194,15 @@ export const statusHttpDoErro = (erro: unknown): number | null => {
 export const translateSendError = (erro: unknown): Sinal => {
 	const status = statusHttpDoErro(erro);
 
-	// 463: número inválido ou inacessível. Não transitório, sem retry, sem
-	// reagendamento (LEAD-03, R-019, Armadilha 1).
+	// 463: restrição de reach-out da conta (tctoken). Não transitório por decisão
+	// nossa, sem retry e sem reagendamento; o lead NÃO é marcado como inválido.
 	if (status === 463) {
 		return {
 			event: "unreachable",
 			terminal: false,
 			severity: "critical",
 			retry: false,
-			reason: "invalid_number",
+			reason: "account_restricted",
 		};
 	}
 	if (status === 429) {

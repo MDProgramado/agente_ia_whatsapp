@@ -78,11 +78,14 @@ describe("migração 0006 — engagement_mode aceita 'shadow' (openDb/migrate)",
 						legalRegisteredAt: sql`now() - interval '1 day'`,
 					})
 					.returning({ id: schema.leads.id });
+				if (!lead) throw new Error("lead fixture não criado");
+				if (!conta) throw new Error("conta fixture não encontrada");
 				const [conv] = await tx
 					.insert(schema.conversations)
-					.values({ leadId: lead!.id, channelAccountId: conta!.id })
+					.values({ leadId: lead.id, channelAccountId: conta.id })
 					.returning({ id: schema.conversations.id });
-				const conversaId = conv!.id;
+				if (!conv) throw new Error("conversa fixture não criada");
+				const conversaId = conv.id;
 
 				// (a) 'shadow' é aceito — este é o ponto do 0006 (Pitfall 2).
 				await tx.execute(

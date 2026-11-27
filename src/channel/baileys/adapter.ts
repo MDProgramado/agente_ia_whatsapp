@@ -11,8 +11,9 @@
  * - **Retry só em 429 e 5xx**, com backoff exponencial e teto de 3 tentativas.
  *   Nenhum retry em outros 4xx e, em especial, **nenhum em 463** — o bloco do 463
  *   não contém chamada de retry nem de espera, de propósito.
- * - **463 = número inválido** (T-01-01): `markNumberInvalid` + notificação local,
- *   sem reagendamento. Número morto não recebe segunda tentativa nossa.
+ * - **463 = restrição de reach-out da conta** (`MessageAccountRestriction`):
+ *   notificação local crítica, sem reagendamento e sem `markNumberInvalid`. O
+ *   número inválido é determinado por `onWhatsApp()`, não por ACK de envio.
  *
  * `readQuota` NÃO pergunta ao WhatsApp: conta `daily_counters` do dia e usa o cap
  * lido por `capabilities.ts` (cache de 15 min — T-01-11).
@@ -34,7 +35,10 @@ const log = childLogger("channel_baileys");
 /** Só o que o adaptador usa do socket — e nada além disso entra no tipo. */
 export type SocketDoCanal = Pick<
 	WASocket,
-	"sendMessage" | "fetchNewChatMessageCap" | "fetchAccountReachoutTimelock"
+	| "sendMessage"
+	| "sendPresenceUpdate"
+	| "fetchNewChatMessageCap"
+	| "fetchAccountReachoutTimelock"
 >;
 
 export interface DepsCanal {
@@ -71,7 +75,7 @@ const diaLocal = (agora: Date): string =>
 
 export class BaileysChannel implements ChannelPort {
 	private readonly db: Db;
-	private sock: SocketDoCanal;
+	private readonly sock: SocketDoCanal;
 	private readonly notifier: NotifyPort;
 	private readonly dormir: (ms: number) => Promise<void>;
 
@@ -80,16 +84,6 @@ export class BaileysChannel implements ChannelPort {
 		this.sock = deps.sock;
 		this.notifier = deps.notifier;
 		this.dormir = deps.dormir ?? dormirPadrao;
-	}
-
-	/**
-	 * Substitui a referência do socket internamente. Usado após recriação do
-	 * socket do Baileys (ex.: stream error 515 / restartRequired após pareamento).
-	 * Todos os consumidores (drainLoop, dispatcher via dispatchDeps, painel) que
-	 * seguram a mesma instância de BaileysChannel passam a usar o novo socket.
-	 */
-	setSock(sock: SocketDoCanal): void {
-		this.sock = sock;
 	}
 
 	/**
@@ -109,7 +103,7 @@ export class BaileysChannel implements ChannelPort {
 		conversationId: string,
 		text: string,
 		idempotencyKey: string,
-	): Promise<void> {
+	): Promise<{ providerMsgId: string | null; latencyMs: number }> {
 		const repetida = await this.db.execute(
 			sql`select id from messages where idempotency_key = ${idempotencyKey}`,
 		);
@@ -122,7 +116,7 @@ export class BaileysChannel implements ChannelPort {
 				},
 				"idempotencia: a chave ja existe em messages, nada a enviar",
 			);
-			return;
+			return { providerMsgId: null, latencyMs: 0 };
 		}
 
 		const alvo = await this.db.execute(sql`
@@ -152,18 +146,6 @@ export class BaileysChannel implements ChannelPort {
 				const latencyMs = Date.now() - inicio;
 				const providerMsgId = resposta?.key?.id ?? null;
 
-				await this.db.execute(sql`
-					insert into messages (
-						conversation_id, direction, origin, kind, body,
-						status, provider_msg_id, idempotency_key, latency_ms
-					)
-					values (
-						${conversationId}, 'out', 'bot', 'text', ${text},
-						'sent', ${providerMsgId}, ${idempotencyKey}, ${latencyMs}
-					)
-					on conflict (idempotency_key) do nothing
-				`);
-
 				// `char_count` e id, nunca o corpo (R-043/T-01-13): o corpo pertence
 				// só à tabela `messages`, que sobrevive sob controle de retenção.
 				log.info(
@@ -177,30 +159,29 @@ export class BaileysChannel implements ChannelPort {
 					},
 					"mensagem enviada",
 				);
-				return;
+				return { providerMsgId, latencyMs };
 			} catch (erro) {
 				const sinal = translateSendError(erro);
 				const motivo = erro instanceof Error ? erro.message : String(erro);
 
-				// (c) 463: número inválido/inacessível. Este bloco NÃO tem retry,
-				// não tem espera e não tem reagendamento — marca, notifica e
+				// (c) 463: restrição de reach-out da conta. Este bloco NÃO tem
+				// retry, não tem espera e não tem reagendamento — notifica e
 				// propaga (o envio NÃO aconteceu; engolir o erro faria o dispatcher
 				// registrar sucesso de um envio que falhou).
-				if (sinal.reason === "invalid_number") {
-					await this.markNumberInvalid(lead.phone_number, "unreachable");
+				if (sinal.reason === "account_restricted") {
 					await this.notifier.notify({
-						title: "Numero invalido ou inacessivel (463)",
-						message: `Envio recusado na conversa ${conversationId}. Lead marcado como NUMERO_INVALIDO (LEAD-03); sem retry e sem reagendamento.`,
+						title: "Restricao de conta no WhatsApp (463)",
+						message: `Envio recusado na conversa ${conversationId}. A conta esta impedida de iniciar chats novos (tctoken/reachout); sem retry, sem reagendamento e sem marcar o lead como invalido.`,
 						urgent: true,
 						sound: true,
 					});
 					log.error(
 						{
-							event: "channel_463_numero_invalido",
+							event: "channel_463_restricao_conta",
 							conversation_id: conversationId,
 							severity: sinal.severity,
 						},
-						"463: numero invalido — sem retry, sem reagendamento",
+						"463: conta restrita — sem retry, lead nao marcado como invalido",
 					);
 					throw erro;
 				}
@@ -239,6 +220,26 @@ export class BaileysChannel implements ChannelPort {
 		// Inalcançável: cada `try` retorna ou lança. Falhar aqui em silêncio seria
 		// pior que qualquer caminho acima.
 		throw new Error(`sendText: esgotadas as ${TENTATIVAS_MAX} tentativas`);
+	}
+
+	/**
+	 * Sinaliza "digitando…"/"parou" ao WhatsApp (R-067, achado 12). Não é mídia,
+	 * não carrega conteúdo e não tem retry: presença é cosmética, o dispatcher
+	 * engole falha localmente para não transformar sinal em silêncio/bloqueio.
+	 */
+	async sendPresenceUpdate(
+		conversationId: string,
+		presence: "composing" | "paused",
+	): Promise<void> {
+		const alvo = await this.db.execute(sql`
+			select l.phone_number
+			from conversations c
+			join leads l on l.id = c.lead_id
+			where c.id = ${conversationId}
+		`);
+		const lead = linhasDe<{ phone_number: string }>(alvo)[0];
+		if (!lead) return;
+		await this.sock.sendPresenceUpdate(presence, jidDeEnvio(lead.phone_number));
 	}
 
 	/**
