@@ -160,11 +160,19 @@ export const primeiroTermoQueCasa = (
 	return null;
 };
 
+/**
+ * Gatilhos de ENTRADA (mensagem do lead) para handoff determinístico. São
+ * aditivos: só podem ACRESCENTAR um handoff, nunca anular o sinal da LLM
+ * (`inbound-handler.ts`). Auditoria 27/11b: valor, preço(s), proposta,
+ * orçamento, cobra(m/r), "quanto fica/é/sai/cobra" e tabela. "Valeu" não casa
+ * `\bvalor`, e "pode mandar mais informações" não tem termo comercial.
+ */
 export const HANDOFF_PRICE_TERM =
-	/\bquanto\s+custa\b|\bqual\s+(?:[ée]\s+)?o\s+pre[çc]o\b|\bme\s+passe\s+o\s+pre[çc]o\b|\bquanto\s+sa[ií]\b|(?<!\w)[ée]\s+quanto\b/i;
+	/\bquanto\s+custa\b|\bqual\s+(?:[ée]\s+)?o\s+pre[çc]o\b|\bme\s+passe\s+o\s+pre[çc]o\b|\bquanto\s+sa[ií]\b|(?<!\w)[ée]\s+quanto\b|\bvalor(?:es)?\b|\bpre[çc]os?\b|\bproposta\b|\bor[çc]amento\b|\bcobra(?:m|r)?\b|\bquanto\s+(?:custa|fica|[ée]|sai|cobra)\b|\btabela\b/i;
 
+/** Auditoria 27/11b: "ligar", "ligação" e "semana que vem" entram como pedido de agenda. */
 export const HANDOFF_SCHEDULE_TERM =
-	/\bagend(?:ar|ei|ou|ando|em|amos)\b|\bmar(?:car|quei|que|quem|cou|cando|camos|cada|cado)\b|\breuni[ãa]o\b|\bchamada\b|\bcall\b/i;
+	/\bagend(?:ar|ei|ou|ando|em|amos)\b|\bmar(?:car|quei|que|quem|cou|cando|camos|cada|cado)\b|\breuni[ãa]o\b|\bchamada\b|\bcall\b|\bligar\b|\bliga[çc][ãa]o\b|\bsemana\s+que\s+vem\b/i;
 
 export const HANDOFF_IRRITATION_TERM =
 	/\birritant|\bchatead|\bperdi\s+meu\s+tempo\b|\bn[ãa]o\s+resolve\b/i;

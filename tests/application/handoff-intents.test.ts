@@ -21,6 +21,7 @@ import {
 	processInboundFromMe,
 } from "../../src/application/inbound-handler.js";
 import { env } from "../../src/config/env.js";
+import { detectarGatilhoHandoff } from "../../src/domain/gate/patterns/automation-disclosure.js";
 import type {
 	NotifyInput,
 	NotifyPort,
@@ -210,6 +211,37 @@ describe("contrato do conjunto INTENCOES_HANDOFF (FLUP-09/R-065)", () => {
 	});
 });
 
+/** Auditoria 27/11b, item 6 — pedidos que o matcher de entrada tem de pegar. */
+const DISPARAM_27_11B = [
+	"Qual o valor?",
+	"Me manda uma proposta",
+	"Tem tabela de preços?",
+	"Quanto fica?",
+	"Quanto vocês cobram?",
+	"Vcs cobram quanto?",
+	"Me passa um orçamento",
+	"Pode me ligar amanhã?",
+	"Bora conversar semana que vem?",
+] as const;
+
+/** … e as frases comuns que NÃO podem virar handoff. */
+const NAO_DISPARAM_27_11B = [
+	"Valeu, obrigado!",
+	"Qual a sua empresa?",
+	"Vocês atendem Salvador?",
+	"Ok, pode mandar mais informações",
+] as const;
+
+describe("detectarGatilhoHandoff — vocabulário de entrada (auditoria 27/11b)", () => {
+	it.each(DISPARAM_27_11B)("dispara: %s", (texto) => {
+		expect(detectarGatilhoHandoff(texto)).not.toBeNull();
+	});
+
+	it.each(NAO_DISPARAM_27_11B)("não dispara: %s", (texto) => {
+		expect(detectarGatilhoHandoff(texto)).toBeNull();
+	});
+});
+
 describe("handoff determinístico aditivo (R-012/R-025/R-057/R-065)", () => {
 	it.each([
 		["preço", "quanto custa esse serviço?"],
@@ -269,6 +301,75 @@ describe("handoff determinístico aditivo (R-012/R-025/R-057/R-065)", () => {
 			expect(llm.chamadas).toEqual([]);
 		});
 	});
+
+	it.each([
+		["LLM neutra", () => scriptedLlmAdapter()],
+		[
+			"LLM falhando",
+			() =>
+				scriptedLlmAdapter({
+					falhaExtracao: {
+						kind: "provider_indisponivel",
+						detail: "api fora do ar",
+					},
+				}),
+		],
+	] as const)(
+		"auditoria 27/11b — pedidos de valor/proposta/ligação disparam handoff (%s)",
+		async (_rotulo, criarLlm) => {
+			for (const body of DISPARAM_27_11B) {
+				await emTransacaoRevertida(async (tx) => {
+					const fx = await semear(tx);
+					const llm = criarLlm();
+					const { notifier } = notifierEspiao();
+
+					await processInboundFromMe(
+						tx,
+						makeSock(),
+						{ ...evento(fx), body },
+						{ llm, notifier, agora: AGORA },
+					);
+
+					expect(
+						await contar(tx, "handoff_events", fx.conversationId),
+						body,
+					).toBe(1);
+					const he = primeiro(
+						rows<{ triggered_by: string }>(
+							await tx.execute(sql`
+								select triggered_by from handoff_events
+								where conversation_id = ${fx.conversationId}
+							`),
+						),
+					);
+					expect(he.triggered_by, body).toBe("keyword");
+					expect(llm.chamadas, body).toEqual([]);
+				});
+			}
+		},
+	);
+
+	it.each(NAO_DISPARAM_27_11B)(
+		"auditoria 27/11b — frase neutra NÃO dispara handoff e a LLM é consultada: %s",
+		async (body) => {
+			await emTransacaoRevertida(async (tx) => {
+				const fx = await semear(tx);
+				const llm = scriptedLlmAdapter();
+				const { notifier } = notifierEspiao();
+
+				await processInboundFromMe(
+					tx,
+					makeSock(),
+					{ ...evento(fx), body },
+					{ llm, notifier, agora: AGORA },
+				);
+
+				expect(await contar(tx, "handoff_events", fx.conversationId)).toBe(0);
+				// Aditivo: sem gatilho de palavra, a decisão continua com a LLM.
+				expect(llm.chamadas[0]).toBe("extract");
+			});
+		},
+	);
 
 	it("opt-out determinístico vence extração neutra e não chama a LLM", async () => {
 		await emTransacaoRevertida(async (tx) => {
