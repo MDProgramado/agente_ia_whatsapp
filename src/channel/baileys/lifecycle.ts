@@ -125,8 +125,6 @@ export const criarCicloVidaSocket = (
 				try {
 					const candidato = await abrirComHandlers();
 					deps.trocarSocket(candidato);
-					tentativas = 0;
-					deps.aoAbrir();
 					deps.log.info(
 						{ step: "channel_recreated", motivo, tentativa },
 						"socket recriado com sucesso",
@@ -162,7 +160,7 @@ export const criarCicloVidaSocket = (
 		aoConectar(g) {
 			if (g !== geracao || abort.signal.aborted) return;
 			tentativas = 0;
-			if (!emRecuperacao) deps.aoAbrir();
+			deps.aoAbrir();
 			resolverAbertura?.();
 		},
 		aoDesconectar(status, g) {

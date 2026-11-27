@@ -94,6 +94,62 @@ describe("ciclo de vida do socket do canal", () => {
 		expect(deps.dormir).toHaveBeenCalledTimes(2);
 	});
 
+	it("recuperação com WS aberto não chama aoAbrir sem connection: open", async () => {
+		const deps = criarDeps({
+			aguardarAbertura: vi.fn(async () => undefined),
+		});
+		const gestor = criarCicloVidaSocket(deps);
+		gestor.registrarSocketInicial(criarSocket("inicial"));
+
+		gestor.aoDesconectar(408, 0);
+		await vi.waitFor(() => expect(deps.trocarSocket).toHaveBeenCalledTimes(1));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(deps.aoAbrir).not.toHaveBeenCalled();
+	});
+
+	it("connection: open durante a recuperação chama aoAbrir exatamente uma vez", async () => {
+		const deps = criarDeps({
+			aguardarAbertura: vi.fn(() => new Promise<void>(() => undefined)),
+		});
+		const gestor = criarCicloVidaSocket(deps);
+		gestor.registrarSocketInicial(criarSocket("inicial"));
+
+		gestor.aoDesconectar(408, 0);
+		await vi.waitFor(() => expect(deps.abrirSocket).toHaveBeenCalledTimes(1));
+
+		gestor.aoConectar(gestor.geracao);
+		await vi.waitFor(() => expect(deps.trocarSocket).toHaveBeenCalledTimes(1));
+
+		expect(deps.aoAbrir).toHaveBeenCalledTimes(1);
+		expect(deps.dormir).toHaveBeenCalledTimes(1);
+	});
+
+	it("mantém o pareamento visível até o connection: open real chegar", async () => {
+		let fasePareamentoInicial = true;
+		const deps = criarDeps({
+			aguardarAbertura: vi.fn(() => new Promise<void>(() => undefined)),
+			aoAbrir: vi.fn(() => {
+				fasePareamentoInicial = false;
+			}),
+		});
+		const gestor = criarCicloVidaSocket(deps);
+		gestor.registrarSocketInicial(criarSocket("inicial"));
+
+		gestor.aoDesconectar(408, 0);
+		await vi.waitFor(() => expect(deps.abrirSocket).toHaveBeenCalledTimes(1));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(deps.aoAbrir).not.toHaveBeenCalled();
+		expect(fasePareamentoInicial).toBe(true);
+
+		gestor.aoConectar(gestor.geracao);
+		await vi.waitFor(() => expect(deps.trocarSocket).toHaveBeenCalledTimes(1));
+
+		expect(deps.aoAbrir).toHaveBeenCalledTimes(1);
+		expect(fasePareamentoInicial).toBe(false);
+	});
+
 	it("zera o backoff quando open chega e volta ao primeiro atraso na queda seguinte", async () => {
 		const resolvers: Array<(erro?: Error) => void> = [];
 		const dormir = vi.fn(async (_ms: number, _sinal: AbortSignal) => undefined);
